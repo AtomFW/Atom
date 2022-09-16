@@ -15,8 +15,8 @@
 
     <?php
     
-        $atom = new Atom();
-        var_dump($atom);
+        // $atom = new Atom();
+        // var_dump($atom);
 
     ?>
 

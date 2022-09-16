@@ -2,14 +2,8 @@
 
 namespace Atom\core;
 
-use thecodeholic\phpmvc\exception\NotFoundException;
+use Atom\core\exception\NotFoundException;
 
-/**
- * Class Router
- *
- * @author  Zura Sekhniashvili <zurasekhniashvili@gmail.com>
- * @package thecodeholic\mvc
- */
 class Router
 {
     private Request $request;
@@ -104,7 +98,7 @@ class Router
         }
         if (is_array($callback)) {
             /**
-             * @var $controller \thecodeholic\phpmvc\Controller
+             * @var $controller \Atom\core\Controller
              */
             $controller = new $callback[0];
             $controller->action = $callback[1];

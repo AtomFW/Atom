@@ -1,4 +1,7 @@
 <?php
+namespace Atom\core;
+
+use Atom\core\db\Database;
 
 class Application
 {
@@ -50,7 +53,7 @@ class Application
         $this->user = $user;
         $className = get_class($user);
         $primaryKey = $className::primaryKey();
-        $value = $user->{ $primaryKey};
+        $value = $user->{$primaryKey};
         Application::$app->session->set('user', $value);
 
         return true;
@@ -67,8 +70,7 @@ class Application
         $this->triggerEvent(self::EVENT_BEFORE_REQUEST);
         try {
             echo $this->router->resolve();
-        }
-        catch (\Exception $e) {
+        } catch (\Exception $e) {
             echo $this->router->renderView('_error', [
                 'exception' => $e,
             ]);

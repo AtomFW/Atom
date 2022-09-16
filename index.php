@@ -1,3 +1,7 @@
+<?php 
+    use Atom\core\Atom;
+?>
+<!DOCTYPE html>
 <html lang="pl">
 <head>
     <meta charset="UTF-8">

@@ -2,7 +2,7 @@
 
 namespace Atom\core\exception;
 
-use Atom\core\Application;
+use Atom\core\Atom;
 
 class ForbiddenException extends \Exception
 {

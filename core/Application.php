@@ -1,32 +1,33 @@
 <?php
 namespace Atom\core;
 
-use Atom\core\db\Database;
+use Atom\core\DataBase\Database;
+use Atom\core\DataBase\Migrations;
+use Atom\core\HttpFoundation\Request;
+use Atom\core\HttpFoundation\Response;
+use Exception;
 
 class Application
 {
-    const EVENT_BEFORE_REQUEST = 'beforeRequest';
-    const EVENT_AFTER_REQUEST = 'afterRequest';
 
-    protected array $eventListeners = [];
+    const INSTALL_MOD_CONTROLLERS = 'controllers';
+    const INSTALL_MOD_MIGRATIONS = 'migrations';
+    const INSTALL_MOD_MODELS = 'models';
+    const INSTALL_MOD_PUBLIC = 'public';
+    const INSTALL_MOD_RUNTIME = 'runtime';
+    const INSTALL_MOD_VIEWS = 'views';
 
     public static Application $app;
     public static string $ROOT_DIR;
-    public string $userClass;
-    public string $layout = 'main';
     public Router $router;
     public Request $request;
     public Response $response;
-    public ?Controller $controller = null;
     public Database $db;
     public Session $session;
     public View $view;
-    public ?UserModel $user;
 
     public function __construct($rootDir, $config)
     {
-        $this->user = null;
-        $this->userClass = $config['userClass'];
         self::$ROOT_DIR = $rootDir;
         self::$app = $this;
         $this->request = new Request();
@@ -36,57 +37,78 @@ class Application
         $this->session = new Session();
         $this->view = new View();
 
-        $userId = Application::$app->session->get('user');
-        if ($userId) {
-            $key = $this->userClass::primaryKey();
-            $this->user = $this->userClass::findOne([$key => $userId]);
+    }
+
+    public function install($path)
+    {
+        $counter = 0;
+        foreach ($path as $key => $value) {
+            if (file_exists($value)) {
+                $counter++;
+            }
         }
-    }
 
-    public static function isGuest()
-    {
-        return !self::$app->user;
-    }
-
-    public function login(UserModel $user)
-    {
-        $this->user = $user;
-        $className = get_class($user);
-        $primaryKey = $className::primaryKey();
-        $value = $user->{$primaryKey};
-        Application::$app->session->set('user', $value);
-
-        return true;
-    }
-
-    public function logout()
-    {
-        $this->user = null;
-        self::$app->session->remove('user');
-    }
-
-    public function run()
-    {
-        $this->triggerEvent(self::EVENT_BEFORE_REQUEST);
-        try {
-            echo $this->router->resolve();
-        } catch (\Exception $e) {
-            echo $this->router->renderView('_error', [
-                'exception' => $e,
-            ]);
+        if ($counter !== 0) {
+            return "Atom Aplication is exists";
         }
+
+        return $this->exec($path);
     }
 
-    public function triggerEvent($eventName)
+    private function exec(array $path)
     {
-        $callbacks = $this->eventListeners[$eventName] ?? [];
-        foreach ($callbacks as $callback) {
-            call_user_func($callback);
+        foreach ($path as $key => $value) {
+            copy($value, $this->ROOT_DIR);
         }
+
+        return "New Atom Aplication is created!";
     }
 
-    public function on($eventName, $callback)
-    {
-        $this->eventListeners[$eventName][] = $callback;
+    public function newAplication (array $exec = []) {
+
+        $dataSRC = [];
+
+        if (count($exec) !== 0) {
+        foreach ($exec as $key => $value) {
+            if ($value === Application::INSTALL_MOD_CONTROLLERS) {
+                array_push($dataSRC, $this->getPath(Application::INSTALL_MOD_CONTROLLERS));
+            }
+            if ($value === Application::INSTALL_MOD_MIGRATIONS) {
+                array_push($dataSRC, $this->getPath(Application::INSTALL_MOD_MIGRATIONS));
+            }
+            if ($value === Application::INSTALL_MOD_MODELS) {
+                array_push($dataSRC, $this->getPath(Application::INSTALL_MOD_MODELS));
+            }
+            if ($value === Application::INSTALL_MOD_PUBLIC) {
+                array_push($dataSRC, $this->getPath(Application::INSTALL_MOD_PUBLIC));
+            }
+            if ($value === Application::INSTALL_MOD_RUNTIME) {
+                array_push($dataSRC, $this->getPath(Application::INSTALL_MOD_RUNTIME));
+            }
+            if ($value === Application::INSTALL_MOD_VIEWS) {
+                array_push($dataSRC, $this->getPath(Application::INSTALL_MOD_VIEWS));
+            }
+        }
+        return $dataSRC;
     }
+
+        array_push($dataSRC, $this->getPath(Application::INSTALL_MOD_CONTROLLERS));
+        array_push($dataSRC, $this->getPath(Application::INSTALL_MOD_MIGRATIONS));
+        array_push($dataSRC, $this->getPath(Application::INSTALL_MOD_MODELS));
+        array_push($dataSRC, $this->getPath(Application::INSTALL_MOD_PUBLIC));
+        array_push($dataSRC, $this->getPath(Application::INSTALL_MOD_RUNTIME));
+        array_push($dataSRC, $this->getPath(Application::INSTALL_MOD_VIEWS));
+
+        return $dataSRC;
+    }
+
+    private function getPath(string $namedPath)
+    {
+        if (file_exists($this->ROOT_DIR . $namedPath . DIRECTORY_SEPARATOR)) {
+           return $this->ROOT_DIR . $namedPath . DIRECTORY_SEPARATOR;
+        }
+
+        throw new Exception("ATOM '$namedPath' Not Exist");
+    }
+
 }

@@ -2,7 +2,7 @@
 
 namespace Atom\core;
 
-use Atom\core\db\DbModel;
+use Atom\core\DataBase\DbModel;
 
 abstract class UserModel extends DbModel
 {

@@ -19,14 +19,24 @@ Install Atom with gh repo
 
 A Download this reposytory to your computer and runing in PHP server(interpreter)!
 
-
 ## Usage/Examples
+
+Params
+```php 
+    Atom\core\Application::INSTALL_MOD_CONTROLLERS
+    Atom\core\Application::INSTALL_MOD_MIGRATIONS
+    Atom\core\Application::INSTALL_MOD_MODELS
+    Atom\core\Application::INSTALL_MOD_PUBLIC
+    Atom\core\Application::INSTALL_MOD_RUNTIME
+    Atom\core\Application::INSTALL_MOD_VIEWS
+```
+
+Add params to $params array
 
 ```php
 <?php
 
     $config = [
-        'userClass' => \Atom\models\User::class,
         'db' => [
             'dsn' => "mysql:host=localhost;port=3306;dbname=atom",
             'user' => "root",
@@ -34,8 +44,10 @@ A Download this reposytory to your computer and runing in PHP server(interpreter
         ]
     ];
 
+    $params = [];
+
     $App = new Atom(dirname(__DIR__), $config);
-    $App->newAplication()->run();
+    $App->newAplication($params)->install();
 ?>
 ```
 

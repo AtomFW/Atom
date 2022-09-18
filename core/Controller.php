@@ -10,7 +10,7 @@ class Controller
     public string $action = '';
 
     /**
-     * @var \Atom\core\BaseMiddleware[]
+     * @var \Atom\core\middlewares\BaseMiddleware[]
      */
     protected array $middlewares = [];
 
@@ -21,7 +21,7 @@ class Controller
 
     public function render($view, $params = []): string
     {
-        return Application::$app->router->renderView($view, $params);
+        return Atom::$app->router->renderView($view, $params);
     }
 
     public function registerMiddleware(BaseMiddleware $middleware)

@@ -2,15 +2,9 @@
 
 namespace Atom\core\middlewares;
 
-use Atom\core\Application;
+use Atom\core\Atom;
 use Atom\core\exception\ForbiddenException;
 
-/**
- * Class AuthMiddleware
- *
- * @author  Zura Sekhniashvili <zurasekhniashvili@gmail.com>
- * @package thecodeholic\phpmvc
- */
 class AuthMiddleware extends BaseMiddleware
 {
     protected array $actions = [];
@@ -22,8 +16,8 @@ class AuthMiddleware extends BaseMiddleware
 
     public function execute()
     {
-        if (Application::isGuest()) {
-            if (empty($this->actions) || in_array(Application::$app->controller->action, $this->actions)) {
+        if (Atom::isGuest()) {
+            if (empty($this->actions) || in_array(Atom::$app->controller->action, $this->actions)) {
                 throw new ForbiddenException();
             }
         }

@@ -1,8 +1,8 @@
 <?php
 
-namespace Atom\core\db;
+namespace Atom\core\DataBase;
 
-use Atom\core\Application;
+use Atom\core\Atom;
 use Atom\core\Model;
 
 abstract class DbModel extends Model
@@ -30,7 +30,7 @@ abstract class DbModel extends Model
 
     public static function prepare($sql): \PDOStatement
     {
-        return Application::$app->db->prepare($sql);
+        return Atom::$app->db->prepare($sql);
     }
 
     public static function findOne($where)

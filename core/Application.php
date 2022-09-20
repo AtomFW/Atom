@@ -25,6 +25,8 @@ class Application
     public Database $db;
     public Session $session;
     public View $view;
+	
+	private array $AppPath = [];
 
     public function __construct($rootDir, $config)
     {
@@ -39,29 +41,74 @@ class Application
 
     }
 
-    public function install($path)
+    public function install()
     {
         $counter = 0;
-        foreach ($path as $key => $value) {
-            if (file_exists($value)) {
+        foreach ($this->AppPath as $key => $value) {
+            if (file_exists(self::$ROOT_DIR . DIRECTORY_SEPARATOR . str_replace(__dir__ . DIRECTORY_SEPARATOR . ".." . DIRECTORY_SEPARATOR, "", $value))) {
                 $counter++;
             }
         }
 
         if ($counter !== 0) {
-            return "Atom Aplication is exists";
+            echo "Atom Aplication is exists";
+			return false;
         }
 
-        return $this->exec($path);
+        if ( $this->exec($this->AppPath) ) {
+			$counter = 0;
+			foreach ($this->AppPath as $key => $value) {
+				if (file_exists(self::$ROOT_DIR . DIRECTORY_SEPARATOR . str_replace(__dir__ . DIRECTORY_SEPARATOR . ".." . DIRECTORY_SEPARATOR, "", $value))) {
+					$counter++;
+				}
+			}
+			 if ($counter !== count($this->AppPath)) {
+				throw new Exception("Atom Aplication is Error Constuct", 1);
+			}
+			echo "New Atom Aplication is created!";
+			return;
+		}
+		
+		throw new Exception("Atom Aplication is Error Constuct", 1);
     }
 
     private function exec(array $path)
     {
-        foreach ($path as $key => $value) {
-            copy($value, $this->ROOT_DIR);
-        }
+		try {
+			foreach ($path as $key => $value) {
+				
+				if (($value === ".") || ($value === "..")) {
+					continue;
+				}
+				if (is_dir($value)) {
+					if (!file_exists(self::$ROOT_DIR . DIRECTORY_SEPARATOR . str_replace(__dir__ . DIRECTORY_SEPARATOR . ".." . DIRECTORY_SEPARATOR, "", $value))) {
+						mkdir (self::$ROOT_DIR . DIRECTORY_SEPARATOR . str_replace(__dir__ . DIRECTORY_SEPARATOR . ".." . DIRECTORY_SEPARATOR, "", $value));
+					}
+					$scan = scandir($value);
+					
+					foreach ($scan as $key => $val) {
+						if (($val === ".") || ($val === "..")) {
+							unset($scan[$key]);
+							continue;
+						}
+						$scan[$key] = str_replace(DIRECTORY_SEPARATOR.DIRECTORY_SEPARATOR, DIRECTORY_SEPARATOR, $value . DIRECTORY_SEPARATOR . $val);
+					}
+					sort($scan);
+					$this->exec($scan);
+					continue;
+				}
+				if (is_file($value)) {
+					if(!copy($value, self::$ROOT_DIR . DIRECTORY_SEPARATOR . str_replace(__dir__ . DIRECTORY_SEPARATOR . ".." . DIRECTORY_SEPARATOR, "", $value))) {
+						throw new Exception("Am ERROR accurredd while copying data", 4);
+					}
+				}
+			}
+        
+		} catch (\Throwable $th) {
+			throw new Exception($th, 1);
+		}
 
-        return "New Atom Aplication is created!";
+        return true;
     }
 
     public function newAplication (array $exec = []) {
@@ -89,7 +136,8 @@ class Application
                 array_push($dataSRC, $this->getPath(Application::INSTALL_MOD_VIEWS));
             }
         }
-        return $dataSRC;
+        $this->AppPath = $dataSRC;
+		return $this;
     }
 
         array_push($dataSRC, $this->getPath(Application::INSTALL_MOD_CONTROLLERS));
@@ -99,13 +147,14 @@ class Application
         array_push($dataSRC, $this->getPath(Application::INSTALL_MOD_RUNTIME));
         array_push($dataSRC, $this->getPath(Application::INSTALL_MOD_VIEWS));
 
-        return $dataSRC;
+        $this->AppPath =  $dataSRC;
+		return $this;
     }
 
     private function getPath(string $namedPath)
     {
-        if (file_exists($this->ROOT_DIR . $namedPath . DIRECTORY_SEPARATOR)) {
-           return $this->ROOT_DIR . $namedPath . DIRECTORY_SEPARATOR;
+        if (file_exists(__dir__ . DIRECTORY_SEPARATOR . ".." . DIRECTORY_SEPARATOR . $namedPath . DIRECTORY_SEPARATOR)) {
+           return __dir__ . DIRECTORY_SEPARATOR . ".." . DIRECTORY_SEPARATOR . $namedPath . DIRECTORY_SEPARATOR;
         }
 
         throw new Exception("ATOM '$namedPath' Not Exist");

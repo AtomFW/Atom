@@ -2,7 +2,7 @@
 
 spl_autoload_register(function ($class_name) {
     try {
-        $autoloads = __DIR__ . "/../" . str_replace("\\", DIRECTORY_SEPARATOR, $class_name) . ".php";
+        $autoloads = __DIR__ . DIRECTORY_SEPARATOR . ".." . DIRECTORY_SEPARATOR . str_replace("\\", DIRECTORY_SEPARATOR, $class_name) . ".php";
         if (file_exists( $autoloads )) {
             require_once ( $autoloads );
             return true;

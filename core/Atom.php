@@ -4,6 +4,7 @@ namespace Atom\core;
 use Atom\core\DataBase\Database;
 use Atom\core\HttpFoundation\Request;
 use Atom\core\HttpFoundation\Response;
+use Atom\core\Log\T4LOG;
 
 class Atom
 {
@@ -24,6 +25,7 @@ class Atom
     public Session $session;
     public View $view;
     public ?UserModel $user;
+    public T4LOG $log;
 
     public function __construct($rootDir, $config)
     {
@@ -31,9 +33,10 @@ class Atom
         $this->userClass = $config['userClass'];
         self::$ROOT_DIR = $rootDir;
         self::$app = $this;
+        $this->log = new T4LOG(["logRootDir" => array_key_exists("logPath", $config) ? $config["logPath"] : self::$ROOT_DIR . DIRECTORY_SEPARATOR . "log" . DIRECTORY_SEPARATOR]);
         $this->request = new Request();
         $this->response = new Response();
-        $this->router = new Router($this->request, $this->response);
+        $this->router = new Router($this->request, $this->response, $this->log);
         $this->db = new Database($config['db']);
         $this->session = new Session();
         $this->view = new View();

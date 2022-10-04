@@ -260,8 +260,6 @@ final class T4LOG
 
             return true;
         } catch (\Throwable $th) {
-            //throw $th;
-            var_dump($th);
             return false;
         }
     }

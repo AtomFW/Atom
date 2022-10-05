@@ -66,21 +66,10 @@ Add params to $params array
 In Progress
 
 
-## Used By
-
-This project is used by the following project:
-
-- BlackMinCMS
-
-
-
 ## License
 
 [MIT](https://choosealicense.com/licenses/mit/) 
 
-
-# Hi, I'm Timonix! 👋
-Am Creating this framework to BlackMinCMS
 
 ## Authors
 

@@ -12,13 +12,11 @@ class Router
     private Request $request;
     private Response $response;
     private array $routeMap = [];
-    private T4LOG $log;
 
-    public function __construct(Request $request, Response $response, T4LOG $log)
+    public function __construct(Request $request, Response $response)
     {
         $this->request = $request;
         $this->response = $response;
-        $this->log = $log;
     }
 
     public function get(string $url, $callback)

@@ -1,0 +1,16 @@
+{
+    "atomName": "Atom",
+    "atomFullName": "AtomFW",
+    "atomVersjon": 1.0,
+    "atomCRT": "aoewnjfoejofsdjnfosjdnfosjdnfosjdnmfo;sjdoijdsfojdsfosjdfolsjdfosjdfosjdfosjdfolss;dfsdjfoijoodsoiljdsfoij",
+    "description": "Atom Is Simple FrameWork To PHP",
+    "PHP": 8.1,
+
+    "report": {
+        "Execute": true,
+        "Logger": true,
+        "Debug": true
+    },
+    
+    "debug": true
+}

@@ -14,14 +14,15 @@ doctum.phar
 .env.test.local
 .env.production.local
 config/*
+!config/app.json
 
 ### --- Logi i pliki tymczasowe --- ###
 *.log
 *.t4log
 /runtime/cache/*
 /runtime/temp/*
-/storage/public/*
-/storage/private/*
+/storage/public/**/
+/storage/private/**/
 *.tt
 
 ### --- Systemowe i IDE --- ###
@@ -42,7 +43,7 @@ Desktop.ini
 ### --- atom  --- ###
 autoload.php
 doctum.config.php
-/runtime/docs/
+/runtime/docs/*
 /Atom/Report/report_function.php
 /Atom/Report/AutoReport.php
 

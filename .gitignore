@@ -1,4 +1,53 @@
-# AtomFW 1
+# AtomFW 2
+### --- PHP & Composer --- ###
+# Ignorujemy cały folder z bibliotekami zewnętrznymi
+/vendor/
+# Ignorujemy plik phar (jeśli trzymasz go w projekcie)
+composer.phar
+doctum.phar
 
-/vendor/*
-/config/app.php
+### --- Bezpieczeństwo (Wrażliwe dane) --- ###
+# Nigdy nie wysyłaj plików z hasłami do bazy danych!
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+config/*
+
+### --- Logi i pliki tymczasowe --- ###
+*.log
+*.t4log
+/runtime/cache/*
+/runtime/temp/*
+/storage/public/*
+/storage/private/*
+*.tt
+
+### --- Systemowe i IDE --- ###
+# Pliki specyficzne dla Windowsa
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+
+# Konfiguracja VS Code
+.vscode/
+
+# Konfiguracja PHPStorm
+.idea/
+
+# si agent
+.qodo/
+
+### --- atom  --- ###
+autoload.php
+doctum.config.php
+/runtime/docs/
+/Atom/Report/report_function.php
+/Atom/Report/AutoReport.php
+
+# Możemy pójść o krok dalej – czy chcesz, abym pokazał Ci, jak zautomatyzować to tak, aby Git nie pozwolił Ci zrobić commit, dopóki composer check nie przejdzie bez błędów?
+
+
+
+# zrób to co wcześniej napisałeś

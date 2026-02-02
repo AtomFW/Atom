@@ -1,0 +1,9 @@
+parameters:
+    level: 5 # Poziom rygoru (0-9)
+    paths:
+        - Atom
+        - app
+    excludePaths:
+        - vendor
+        - logs
+        - Atom/Dom/SimpleHtmlDom

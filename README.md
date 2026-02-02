@@ -23,12 +23,12 @@ A Download this reposytory to your computer and runing in PHP server(interpreter
 
 Params
 ```php 
-    Atom\core\Application::INSTALL_MOD_CONTROLLERS
-    Atom\core\Application::INSTALL_MOD_MIGRATIONS
-    Atom\core\Application::INSTALL_MOD_MODELS
-    Atom\core\Application::INSTALL_MOD_PUBLIC
-    Atom\core\Application::INSTALL_MOD_RUNTIME
-    Atom\core\Application::INSTALL_MOD_VIEWS
+    Atom\Application::INSTALL_MOD_CONTROLLERS
+    Atom\Application::INSTALL_MOD_MIGRATIONS
+    Atom\Application::INSTALL_MOD_MODELS
+    Atom\Application::INSTALL_MOD_PUBLIC
+    Atom\Application::INSTALL_MOD_RUNTIME
+    Atom\Application::INSTALL_MOD_VIEWS
 ```
 
 Add params to $params array
@@ -38,7 +38,7 @@ Add params to $params array
 
 	require_once("autoload.php");
 	
-	use Atom\core\Application;
+	use Atom\Application;
 
     $config = [
         'db' => [

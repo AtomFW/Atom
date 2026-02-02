@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<phpunit bootstrap="vendor/autoload.php" colors="true">
+    <testsuites>
+        <testsuite name="Atop Test Suite">
+            <directory>tests/Atom</directory>
+        </testsuite>
+        <testsuite name="App Test Suite">
+            <directory>tests/App</directory>
+        </testsuite>
+    </testsuites>
+    <php>
+        <env name="APP_ENV" value="test"/>
+        <env name="DB_NAME" value="test_db"/>
+    </php>
+</phpunit>

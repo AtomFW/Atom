@@ -1,0 +1,1 @@
+główny plik konsoli opsługojący połączenia api

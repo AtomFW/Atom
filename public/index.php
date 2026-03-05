@@ -10,15 +10,6 @@ ini_set('display_errors', 1);
 // Register the Composer autoloader...
 require_once __DIR__ . '/../vendor/autoload.php';
 
-$config = [
-    // 'userClass' => \App\models\User::class,
-    // 'db' => [
-    //     'dsn' => "mysql:host=localhost;port=3306;dbname=newatom",
-    //     'user' => "root",
-    //     'password' => "",
-    // ]
-];
-var_dump ($config);
 $app = new Atom(dirname(__DIR__));
 
 $app->on(Atom::EVENT_BEFORE_REQUEST, function(){
@@ -43,6 +34,5 @@ $app->router->get('/newatom/public/profile/{id:\d+}/{username}', [SiteController
 
 // /profile/{id}/zura
 // /profile/12/zura
-var_dump(env('APP_URL', 'http://localhost/newatom/public/'));
 // /{id}
 $app->run();

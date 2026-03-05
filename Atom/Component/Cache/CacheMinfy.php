@@ -1,0 +1,1 @@
+// TODO dodać klasę aby automatycznie zamienić pliki z config do jednego usunąć niepotrzebne spacjie i tp i zapisać w jednym śćieżce

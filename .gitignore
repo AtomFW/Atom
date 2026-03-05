@@ -13,8 +13,6 @@ doctum.phar
 .env.development.local
 .env.test.local
 .env.production.local
-config/*
-!config/app.json
 
 ### --- Logi i pliki tymczasowe --- ###
 *.log
@@ -23,6 +21,7 @@ config/*
 /runtime/temp/*
 /storage/public/**/
 /storage/private/**/
+*.cache
 *.tt
 
 ### --- Systemowe i IDE --- ###
@@ -37,7 +36,7 @@ Desktop.ini
 # Konfiguracja PHPStorm
 .idea/
 
-# si agent
+# agent
 .qodo/
 
 ### --- atom  --- ###
@@ -46,9 +45,3 @@ doctum.config.php
 /runtime/docs/*
 /Atom/Report/report_function.php
 /Atom/Report/AutoReport.php
-
-# Możemy pójść o krok dalej – czy chcesz, abym pokazał Ci, jak zautomatyzować to tak, aby Git nie pozwolił Ci zrobić commit, dopóki composer check nie przejdzie bez błędów?
-
-
-
-# zrób to co wcześniej napisałeś

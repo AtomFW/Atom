@@ -1,5 +1,6 @@
 <?php
-/* 
+
+/*
     the user error / not validation form
 */
 
@@ -7,12 +8,17 @@ namespace Atom;
 
 use Atom\Report\Report;
 
+/**
+ * Class UserReport
+ * @package Atom
+ * @deprecated UserReport
+ */
 class UserReport
 {
 
     private Report $report;
 
-    function __construct(Report $report, ?string $message = null, ?int $code = null)
+    public function __construct(Report $report, ?string $message = null, ?int $code = null)
     {
         $this->report = $report;
 

@@ -11,15 +11,15 @@ ini_set('display_errors', 1);
 require_once __DIR__ . '/../vendor/autoload.php';
 
 $config = [
-    'userClass' => \App\models\User::class,
-    'db' => [
-        'dsn' => "mysql:host=localhost;port=3306;dbname=newatom",
-        'user' => "root",
-        'password' => "",
-    ]
+    // 'userClass' => \App\models\User::class,
+    // 'db' => [
+    //     'dsn' => "mysql:host=localhost;port=3306;dbname=newatom",
+    //     'user' => "root",
+    //     'password' => "",
+    // ]
 ];
-
-$app = new Atom(dirname(__DIR__), $config);
+var_dump ($config);
+$app = new Atom(dirname(__DIR__));
 
 $app->on(Atom::EVENT_BEFORE_REQUEST, function(){
     // echo "Before request from second installation";
@@ -43,6 +43,6 @@ $app->router->get('/newatom/public/profile/{id:\d+}/{username}', [SiteController
 
 // /profile/{id}/zura
 // /profile/12/zura
-
+var_dump(env('APP_URL', 'http://localhost/newatom/public/'));
 // /{id}
 $app->run();

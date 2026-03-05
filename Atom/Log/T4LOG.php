@@ -11,8 +11,9 @@ use Atom\Exception\Exception;
 use Countable;
 use ErrorException;
 use TypeError;
+use Psr\Log\LoggerInterface;
 
-final class T4LOG
+final class T4LOG implements LoggerInterface
 {
     /**
      * @readonly
@@ -86,10 +87,12 @@ final class T4LOG
     // int(0) int(1) int(2) int(4) int(5) int(6) int(44) int(1) int(6) int(3) int(40)
 
     private string $datetime = DATE_ATOM;
+    private string $datetimeFile = "d_m_Y";
     private int $priority = self::PRIORITY_DEFAULT;
     public static string $LOG_ROOT_DIR =
         __DIR__ .
-        "..{DIRECTORY_SEPARATOR}..{DIRECTORY_SEPARATOR}runtime{DIRECTORY_SEPARATOR}log";
+        "..{{DIRECTORY_SEPARATOR}}..{{DIRECTORY_SEPARATOR}}runtime{{DIRECTORY_SEPARATOR}}log{{DIRECTORY_SEPARATOR}}";
+    public static string $LOG_ROOT_DEV_DIR = "dev{{DIRECTORY_SEPARATOR}}";
     protected string $after = "";
     protected string $before = "";
     protected string $message = "APP:LOG >>";
@@ -97,7 +100,8 @@ final class T4LOG
     protected string $logScheme =
         "{{datetime}} {{sepparator}} [{{prefix}}] {{before}} {{message}} {{after}} {{sepparator}} {{file}}::{{line}}" .
         " |{{ip}}| {{sepparator}} {{php_version}} {{sepparator}} {{system_user}}/{{os}}/{{os_family}}";
-    protected string $logFileScheme = "{{date}}_{{os}}_{{php_version}}.log";
+    protected string $logFileScheme = "{{date_file}}_{{php_version}}.log";
+    protected string $logFileDevScheme = "{{date_file}}_{{php_version}}.t4log";
     protected string $startScheme =
         "{{datetime}} {{sepparator}} [{{prefix}}][START:APP] {{before}} {{message}} {{after}} {{sepparator}} " .
         "{{php_version}}::{{php_version_id}} {{sepparator}} {{system_user}}/{{os}}/{{os_family}} {{sepparator}} " .
@@ -107,55 +111,69 @@ final class T4LOG
         "{{php_version}}::{{php_version_id}} {{sepparator}} {{system_user}}/{{os}}/{{os_family}} {{sepparator}} " .
         "{{php_config_file_path}} {{pear_install_dir}}";
     private array $params = [];
-    private string $nameLogFile = "log.log";
+    private string $nameLogFile;
     private string $nameLogFileT4LOG;
     private bool|string $systemLog = false;
     private $systemLogSocket;
 
-    public function __construct(?array $params = null)
+    public function __construct(array $params = [])
     {
-
-        $this->params[] = $params;
-
-        if ($params !== null) {
-            if (\array_key_exists("systemLog", $params)) {
-                $this->systemLog = $params["systemLog"];
-            }
-
-            if (\array_key_exists("priority", $params)) {
-                $this->priority = $params["priority"];
-            }
-
-            if (\array_key_exists("logRootDir", $params)) {
-                self::$LOG_ROOT_DIR = $params["logRootDir"];
-            }
-
-            if (\array_key_exists("message", $params)) {
-                $this->message = $params["message"];
-            }
-
-            // crate a new log file name
-            if (\array_key_exists("logfilescheme", $params)) {
-                $this->nameLogFile = $this->logFileScheme;
-            } else {
-                $this->nameLogFile = date("d_m_Y") . ".log";
-            }
-        }
-
-
-        if ($this->systemLog === true) {
+        if (\array_key_exists("systemLog", $params)) {
+            $this->systemLog = $params["systemLog"];
             $this->systemLogSocket = openlog($this->message, LOG_ODELAY | LOG_CONS | LOG_PID, LOG_USER);
         }
 
-        $this->nameLogFileT4LOG = self::$LOG_ROOT_DIR .
-                                "{DIRECTORY_SEPARATOR}dev{DIRECTORY_SEPARATOR}" .
-                                date("d_m_Y") .
-                                ".t4log";
-        // call a T4LOG looger;
-        $this->t4LOGLooger("START");
+        if (\array_key_exists("priority", $params)) {
+            $this->priority = $params["priority"];
+        }
+
+        if (\array_key_exists("logRootDir", $params)) {
+            self::$LOG_ROOT_DIR = $params["logRootDir"];
+        }
+
+        if (\array_key_exists("logRootDevDir", $params)) {
+            self::$LOG_ROOT_DEV_DIR = $params["logRootDevDir"];
+        }
+
+        if (\array_key_exists("message", $params)) {
+            $this->message = $params["message"];
+        }
+
+        // $datetimeFile normalize
+        $this->datetimeFile = self::santanizeFileName(date($this->datetimeFile));
+
+        // crate a new log file name
+        if (\array_key_exists("logFileScheme", $params)) {
+            $this->nameLogFile = $params["logFileScheme"];
+        } else {
+            $this->nameLogFile = $this->paramParse($this->logFileScheme);
+        }
+
+        if (\array_key_exists("logFilesDevCheme", $params)) {
+            $this->nameLogFileT4LOG = $params["logFilesDevCheme"];
+        } else {
+            $this->nameLogFileT4LOG = $this->paramParse($this->logFileDevScheme);
+        }
+
+        self::$LOG_ROOT_DEV_DIR =
+            self::$LOG_ROOT_DIR .
+            $this->paramParse(self::$LOG_ROOT_DEV_DIR) .
+        self::filterFillName(
+            $this->nameLogFileT4LOG
+        );
+        self::$LOG_ROOT_DIR =
+            self::$LOG_ROOT_DIR .
+        self::filterFillName(
+            $this->nameLogFile
+        );
+
+        if (isset($params["autoLogStartStopConnection"]) && $params["autoLogStartStopConnection"] === true) {
+            // call a T4LOG looger;
+            $this->t4LOGLooger("START");
+        }
 
         // run startScheme
-        $this->saveLog(self::PRIORITY_INFO, null, $this->startScheme);
+        $this->saveLog(self::PRIORITY_INFO, "", [], $this->startScheme);
     }
 
     /**
@@ -171,149 +189,215 @@ final class T4LOG
     /**
      * @param int $priority
      * @param string $message
-     * @return T4LOG
+     * @param mixed[] $context
      */
-    public function on(int $priority, string $message)
+    public function on($priority, string $message, array $context = []): void
     {
-        $this->saveLog($priority, $message);
-        return $this;
+        $this->saveLog($priority, $message, $context);
+    }
+
+    /**
+     * Logs with an arbitrary level.
+     *
+     * @param int $level
+     * @param string $message
+     * @param mixed[] $context
+     *
+     */
+    public function log($level, string|\Stringable $message, array $context = []): void
+    {
+        $this->on(self::PRIORITY_NORMAL, $message, $context);
     }
     /**
+     * Logs with an arbitrary level.
+     *
      * @param string $message
-     * @return T4LOG
+     * @param mixed[] $context
+     *
      */
-    public function log(string $message)
+    public function info(string|\Stringable $message, array $context = []): void
     {
-        $this->saveLog(self::PRIORITY_NORMAL, $message);
-        return $this;
+        $this->on(self::PRIORITY_INFO, $message, $context);
     }
     /**
+     * Logs with an arbitrary level.
+     *
      * @param string $message
-     * @return T4LOG
+     * @param mixed[] $context
+     *
      */
-    public function info(string $message)
+    public function error(string|\Stringable $message, array $context = []): void
     {
-        $this->saveLog(self::PRIORITY_INFO, $message);
-        return $this;
+        $this->on(self::PRIORITY_ERR, $message, $context);
     }
     /**
+     * Logs with an arbitrary level.
+     *
+     * @param int $facility
      * @param string $message
-     * @return T4LOG
+     * @param mixed[] $context
+     *
+     * The `facility` argument is used to specify what type of program is logging the message.
+     * This lets the configuration file specify that messages from different facilities will be handled differently.
+     * Must be one of the following constants:
+     * - `LOG_AUTH`
+     * - `LOG_AUTHPRIV`
+     * - `LOG_CRON`
+     * - `LOG_DAEMON`
+     * - `LOG_KERN`
+     * - `LOG_LOCAL[0-7]`
+     * - `LOG_LPR`
+     * - `LOG_MAIL`
+     * - `LOG_NEWS`
+     * - `LOG_SYSLOG`
+     * - `LOG_USER`
+     * - `LOG_UUCP` Note : This parameter is ignored on Windows.
+     *
      */
-    public function error(string $message)
-    {
-        $this->saveLog(self::PRIORITY_ERR, $message);
-        return $this;
-    }
-    /**
-     * @param int $priority
-     * @param string $message
-     * @return T4LOG
-     */
-    public function sys(string $message, int|null $priority = null)
+    public function sys(int $facility, string|\Stringable $message, array $context = []): void
     {
 
         if (!$this->systemLog && \is_bool($this->systemLog)) {
-            $this->systemLogSocket = openlog($this->message, LOG_ODELAY | LOG_CONS | LOG_PID, LOG_USER);
+            $this->systemLogSocket = openlog($this->message, LOG_ODELAY | LOG_CONS | LOG_PID, $facility);
         }
 
-        $this->saveLog($priority, $message);
-        return $this;
+        $this->saveLog($facility, $message, $context, nativeSystemLog: true);
     }
     /**
+     * Logs with an arbitrary level.
+     *
      * @param string $message
-     * @return T4LOG
+     * @param mixed[] $context
+     *
      */
-    public function debug(string $message)
+    public function debug(string|\Stringable $message, array $context = []): void
     {
-        $this->saveLog(self::PRIORITY_DEBUG, $message);
-        return $this;
+        $this->on(self::PRIORITY_DEBUG, $message, $context);
     }
     /**
+     * Logs with an arbitrary level.
+     *
      * @param string $message
-     * @return T4LOG
+     * @param mixed[] $context
+     *
      */
-    public function emerg(string $message)
+    public function emergency(string|\Stringable $message, array $context = []): void
     {
-        $this->saveLog(self::PRIORITY_EMERG, $message);
-        return $this;
+        $this->on(self::PRIORITY_EMERG, $message, $context);
     }
     /**
+     * Logs with an arbitrary level.
+     *
      * @param string $message
-     * @return T4LOG
+     * @param mixed[] $context
+     *
      */
-    public function alert(string $message)
+    public function emerg(string|\Stringable $message, array $context = []): void
     {
-        $this->saveLog(self::PRIORITY_ALERT, $message);
-        return $this;
+        $this->emergency($message, $context);
     }
     /**
+     * Logs with an arbitrary level.
+     *
      * @param string $message
-     * @return T4LOG
+     * @param mixed[] $context
+     *
      */
-    public function crit(string $message)
+    public function alert(string|\Stringable $message, array $context = []): void
     {
-        $this->saveLog(self::PRIORITY_CRIT, $message);
-        return $this;
+        $this->on(self::PRIORITY_ALERT, $message, $context);
     }
     /**
+     * Logs with an arbitrary level.
+     *
      * @param string $message
-     * @return T4LOG
+     * @param mixed[] $context
+     *
      */
-    public function err(string $message)
+    public function critical(string|\Stringable $message, array $context = []): void
     {
-        $this->saveLog(self::PRIORITY_ERR, $message);
-        return $this;
+        $this->critical($message, $context);
     }
     /**
+     * Logs with an arbitrary level.
+     *
      * @param string $message
-     * @return T4LOG
+     * @param mixed[] $context
+     *
      */
-    public function warning(string $message)
+    public function crit(string|\Stringable $message, array $context = []): void
     {
-        $this->saveLog(self::PRIORITY_WARNING, $message);
-        return $this;
+        $this->critical($message, $context);
     }
     /**
+     * Logs with an arbitrary level.
+     *
      * @param string $message
-     * @return T4LOG
+     * @param mixed[] $context
+     *
      */
-    public function notice(string $message)
+    public function err(string|\Stringable $message, array $context = []): void
     {
-        $this->saveLog(self::PRIORITY_NOTICE, $message);
-        return $this;
+        $this->error($message, $context);
     }
     /**
+     * Logs with an arbitrary level.
+     *
      * @param string $message
-     * @return T4LOG
+     * @param mixed[] $context
+     *
      */
-    public function dev(string $message)
+    public function warning(string|\Stringable $message, array $context = []): void
     {
-        $this->saveLog(self::PRIORITY_DEV, $message);
-        return $this;
+        $this->on(self::PRIORITY_WARNING, $message, $context);
+    }
+    /**
+     * Logs with an arbitrary level.
+     *
+     * @param string $message
+     * @param mixed[] $context
+     *
+     */
+    public function notice(string|\Stringable $message, array $context = []): void
+    {
+        $this->on(self::PRIORITY_NOTICE, $message, $context);
+    }
+    /**
+     * Logs with an arbitrary level.
+     *
+     * @param string $message
+     * @param mixed[] $context
+     *
+     */
+    public function dev(string|\Stringable $message, array $context = []): void
+    {
+        $this->on(self::PRIORITY_DEV, $message, $context);
     }
 
     protected function saveLog(
-        ?int $priority = null,
-        ?string $message = null,
+        int $priority,
+        string $message,
+        array $context = [],
         ?string $scheme = null,
-        ?bool $stering = null
+        ?bool $stering = null,
+        bool $nativeSystemLog = false
     ): bool {
 
         try {
             $schemes = $scheme === null ? $this->logScheme : $scheme;
-            $messages  = $message === null ? null : $message;
 
-            $scheme = $this->paramParse($schemes, $priority, $messages);
+            $scheme = $this->paramParse($schemes, $priority, $message);
+
             if ($scheme === false) {
                 throw new ErrorException("paramParse method return false", 1);
             }
 
-            $path = !\is_bool($stering) ? $this->nameLogFile : $this->nameLogFileT4LOG;
-            $path = $this->filterFillName($path);
-            $path = !\is_bool($stering) ? self::$LOG_ROOT_DIR . $this->nameLogFile : $this->nameLogFileT4LOG;
+            $scheme = self::contextParse($scheme, $context);
 
-            if (\is_string($this->systemLog)) {
+            $path = !\is_bool($stering) ? self::$LOG_ROOT_DIR : self::$LOG_ROOT_DEV_DIR;
+            $path = $this->filterFillName($path);
+
+            if ($nativeSystemLog && \is_string($this->systemLog)) {
                 if (!self::validatePriority($priority)) {
                     throw new TypeError("Priority type is not valid", 1);
                 }
@@ -323,7 +407,8 @@ final class T4LOG
                 return true;
             }
 
-            $save = file_put_contents($path, "$scheme" . PHP_EOL, FILE_APPEND);
+            // TODO dodać zapisaywanie logów na raz w register_shutdown_function
+            $save = file_put_contents($path, $scheme . PHP_EOL, FILE_APPEND);
 
             if ($save === false) {
                 throw new ErrorException("file_put_contents method return false", 1);
@@ -338,7 +423,7 @@ final class T4LOG
     protected function paramParse($log, int|null $priority = null, string|null $message = null): string|bool
     {
         try {
-            $debugTrace = count(debug_backtrace(DEBUG_BACKTRACE_IGNORE_ARGS, 3)) > 2 ?
+            $debugTrace = \count(debug_backtrace(DEBUG_BACKTRACE_IGNORE_ARGS, 3)) > 2 ?
                         debug_backtrace(DEBUG_BACKTRACE_IGNORE_ARGS, 3)[2] :
                         debug_backtrace(DEBUG_BACKTRACE_IGNORE_ARGS, 3)[1];
             $paramTry = str_replace(
@@ -383,14 +468,17 @@ final class T4LOG
                     '{{server}}',
                     "{{getallheaders}}",
                     "{{ip}}",
-                    "{{date}}"
+                    "{{date}}",
+                    "{{timezone}}",
+                    "{{DIRECTORY_SEPARATOR}}",
+                    "{{date_file}}",
                 ],
                 [
                     date($this->datetime),
                     $this->sepparator,
                     $this->after,
                     $this->before,
-                    \is_null($message) ? $this->message : $message,
+                    $message === null ? $this->message : $message,
                     $debugTrace["function"],
                     \array_key_exists("line", $debugTrace) ? $debugTrace["line"] : "null",
                     \array_key_exists("file", $debugTrace) ? $debugTrace["file"] : "null",
@@ -426,7 +514,10 @@ final class T4LOG
                     json_encode($_SERVER),
                     json_encode(getallheaders()),
                     $_SERVER['REMOTE_ADDR'],
-                    date("Y_m_d")
+                    date("d_m_Y"),
+                    date_default_timezone_get(),
+                    DIRECTORY_SEPARATOR,
+                    $this->datetimeFile
                 ],
                 $log
             );
@@ -435,6 +526,23 @@ final class T4LOG
         } catch (\Throwable $th) {
             return false;
         }
+    }
+
+    protected function contextParse(string $scheme, array|object $context): string
+    {
+        if (empty($context)) {
+            return $scheme;
+        }
+
+        $contextJsonEncode = json_encode($context);
+
+        if (\is_object($context)) {
+            foreach ($context as $key => $value) {
+                $scheme = str_replace("{{{$key}}}", $value, $scheme);
+            }
+        }
+
+        return \sprintf('%s %s %s', $scheme, $this->sepparator, $contextJsonEncode);
     }
 
     protected function priorityParse(?int $priority = null): string
@@ -480,8 +588,32 @@ final class T4LOG
         ]);
     }
 
+    private function santanizeFileName(string $raw): string
+    {
+        return str_replace(
+            [
+                "\x22", // "
+                "\x2A", // *
+                "\x2F", // /
+                "\x3A", // :
+                "\x3C", // <
+                "\x3E", // >
+                "\x3F", // ?
+                "\x5C", // \
+                "\x7C"  // |
+            ],
+            '-',
+            $raw
+        );
+    }
+
     private function filterFillName(string $raw): string
     {
+        $raw = str_replace(array(
+            "\x00", "\x01", "\x02", "\x03", "\x04", "\x05", "\x06", "\x07", "\x08", "\x0B", "\x0C", "\x0E", "\x0F",
+            "\x10", "\x11", "\x12", "\x13", "\x14", "\x15", "\x16", "\x17", "\x18", "\x19", "\x1A", "\x1B", "\x1C",
+            "\x1D", "\x1E", "\x1F",
+        ), '', $raw);
         return addslashes($raw);
     }
 
@@ -569,6 +701,7 @@ final class T4LOG
         return $this->saveLog(
             self::PRIORITY_INFO,
             date(DATE_ATOM) . " - APLICATION is [$EGV]",
+            [],
             "{{message}} | {{php_version}}|{{os}}|{{os_family}}|::|{{system_user}}|{{pid}}|{{gid}}|{{uid}}|{{node}}",
             true
         );
@@ -576,8 +709,11 @@ final class T4LOG
 
     public function __destruct()
     {
+        // TODO poprawić zapisywanie logów na dysk przy użyciu register_shutdown_function i dodać opługę
+        // register_shutdown_function w klasie statycznej aby wszysstkie calbacki do niego się wykonywały
+        // przychowywać w tablicy i wykonywać przy wywołaniu register_shutdown_function
         // run startScheme
-        $this->saveLog(self::PRIORITY_INFO, null, $this->stopScheme);
+        $this->saveLog(self::PRIORITY_INFO, "", [], $this->stopScheme);
 
         // call a T4LOG looger;
         $this->t4LOGLooger("STOP");

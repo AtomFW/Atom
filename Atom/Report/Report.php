@@ -10,6 +10,11 @@ use Atom\Exception\ForbiddenException;
 use Atom\Exception\NotFoundException;
 use Atom\Log\T4LOG;
 
+/**
+ * Class Report
+ * @package Atom\Report
+ * @deprecated Report
+ */
 class Report extends \Exception implements \Stringable, \Throwable
 {
     /**

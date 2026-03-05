@@ -6,4 +6,5 @@ parameters:
     excludePaths:
         - vendor
         - logs
-        - Atom/Dom/SimpleHtmlDom
+        - Atom/Lib
+        - Atom/Lib/SimpleHtmlDom

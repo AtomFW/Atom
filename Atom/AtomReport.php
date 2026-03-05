@@ -9,6 +9,11 @@ namespace Atom;
 use Atom\Report\Report;
 use Atom\Report\Interface\ReportableInterface;
 
+/**
+ * Class AtomReport
+ * @package Atom
+ * @deprecated AtomReport
+ */
 class AtomReport implements ReportableInterface
 {
     private Report $report;

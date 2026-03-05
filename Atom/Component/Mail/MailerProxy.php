@@ -4,231 +4,592 @@ declare(strict_types=1);
 
 namespace Atom\Component\Mail;
 
-use Throwable;
-use Atom\Mail\MailerDriverInterface;
-use Atom\Mail\Driver\PHPMailerDriver;
-use Atom\Mail\Driver\SymfonyMailerDriver;
 use PHPMailer\PHPMailer\PHPMailer;
 use PHPMailer\PHPMailer\Exception as PHPMailerException;
-use Symfony\Component\Messenger\MessageBusInterface;
-use Symfony\Component\Messenger\Envelope;
 use Psr\Log\LoggerInterface;
+use Psr\Log\NullLogger;
 
 /**
- * AdvancedMailer
+ * PHPMailerWrapper
  *
- * Features:
- * - Primary SMTP sending via PHPMailer (with SMTPKeepAlive support)
- * - Native mail() fallback
- * - SMTP connection pool (per-process, reused PHPMailer instances)
- * - Rate limiting (per-second / per-minute)
- * - Async batch via Symfony Messenger (dispatch MailSendJob messages) if MessageBusInterface provided
- * - Retry on failure with exponential backoff
- * - DKIM auto configuration (for PHPMailer)
- * - Test mode (simulate send = true)
+ * - Subclass of PHPMailer to keep a single instantiation and extend with helpers.
+ * - Constructor accepts options (array|object) and an optional PSR-3 logger.
+ * - Provides convenient methods: configureSMTP, setDKIM, sendHtml, sendText, sendLoop, sendOnce (test mode aware), etc.
  *
- * Notes:
- * - This class is optimized for reusing PHPMailer instances in long-running processes (workers).
- * - For huge scale use with concurrency, combine with a queue system (Symfony Messenger workers).
  */
-final class MailerProxy
+final class MailerProxy extends PHPMailer
 {
-    /** @var array<int, PHPMailer> SMTP pool (reusable PHPMailer instances) */
-    private static array $smtpPool = [];
+    /** @var LoggerInterface */
+    protected LoggerInterface $logger;
 
-    /** @var array statistics */
-    private array $stats = [
-        'sent' => 0,
-        'failed' => 0,
-        'retried' => 0,
-        'dispatched' => 0,
-    ];
+    /** @var array Normalized options */
+    protected array $opts = [];
 
-    /** MessageBus (Symfony Messenger) optional — if provided, we dispatch MailSendJob for async sends */
-    private ?MessageBusInterface $bus;
+    /** @var bool If true, do not actually call network send; used for testing. */
+    protected bool $testMode = false;
 
-    /** PSR-3 logger optional */
-    private ?LoggerInterface $logger;
+    /** @var string|null last error message */
+    protected ?string $lastError = null;
 
-    /** config */
-    private array $options = [
-        // SMTP defaults
-        'smtp_host' => '127.0.0.1',
-        'smtp_port' => 1025, // 25,
-        'smtp_user' => null,
-        'smtp_pass' => null,
-        'smtp_encryption' => 'ssl', // 'ssl'|'tls' or null
-        'smtp_auth' => false,
-        'smtp_timeout' => 60,
-        'smtp_keepalive' => false,
+    /** @var array|null from address and name */
+    protected ?array $from = null;
 
-        // pool size (for reuse in-process)
-        'pool_size' => 1,
+    /**
+     * @param array|object|null $options SMTP / behavior options (see configureSMTP)
+     * @param LoggerInterface|null $logger PSR-3 logger; if null, NullLogger is used
+     * @param bool $exceptions pass to PHPMailer constructor (enable exceptions)
+     */
+    public function __construct(
+        array|object|null $options = null,
+        ?LoggerInterface $logger = null,
+        bool $exceptions = true
+    ) {
+        // Call parent constructor once; $exceptions toggles PHPMailer exceptions mode
+        parent::__construct($exceptions);
 
-        // rate limiter defaults
-        'max_per_second' => 20,
-        'max_per_minute' => 1000,
+        $this->logger = $logger ?? new NullLogger();
+        $this->opts = $this->normalizeOptions($options);
 
-        // retry defaults
-        'max_retries' => 3,
-        'retry_backoff_seconds' => 2,
+        // sensible defaults
+        $this->CharSet = $this->opts['charset'] ?? 'UTF-8';
+        $this->Timeout = (int)($this->opts['timeout'] ?? 60);
+        $this->SMTPKeepAlive = (bool)($this->opts['smtp_keepalive'] ?? true);
 
-        // DKIM
-        'dkim' => null, // ['domain'=>..,'selector'=>..,'private_key_file'=>..,'passphrase'=>..]
+        // configure transport if requested in options
+        if (!empty($this->opts['mailer'])) {
+            $this->setTransport($this->opts['mailer']);
+        }
+
+        if (!empty($this->opts['smtp']) && \is_array($this->opts['smtp'])) {
+            $this->configureSMTP($this->opts['smtp']);
+        }
+
+        // set DKIM if present
+        if (!empty($this->opts['dkim']) && \is_array($this->opts['dkim'])) {
+            $this->setDKIM($this->opts['dkim']);
+        }
 
         // test mode
-        'test_mode' => false,
+        if (!empty($this->opts['testMode'])) {
+            $this->setTestMode(true);
+        }
 
-        // native fallback header From
-        'force_native_return_path' => false,
-    ];
+        if (!empty($this->opts['from'])) {
+            $this->from = $this->opts['from'];
+        }
 
-    /** Rate limiter state (in-memory). Structure: ['second' => [ts => count], 'minute' => [minuteKey => count]] */
-    private static array $rateState = [
-        'second_ts' => 0,
-        'second_count' => 0,
-        'minute_key' => 0,
-        'minute_count' => 0,
-    ];
+        $this->logger->debug('PHPMailerWrapper initialized', ['opts' => $this->opts]);
+    }
 
+    // -------------------------
+    // Options normalization
+    // -------------------------
+    protected function normalizeOptions(array|object|null $options): array
+    {
+        if ($options === null) {
+            return [];
+        }
 
-    private MailerDriverInterface $driver;
-    private string $backend;
-    private array $driverOptions = [];
-    private ?string $lastError = null;
+        if (\is_object($options)) {
+            $options = (array)$options;
+        }
+
+        // allowed / common keys with defaults
+        $allowed = [
+            'mailer', // 'smtp'|'mail'|'sendmail'
+            'charset',
+            'timeout',
+            'smtp' => [], // nested smtp config
+            'dkim' => [], // nested dkim config
+            'smtp_keepalive' => true,
+            'smtp_options' => [], // SMTPOptions
+            'test_mode' => false,
+        ];
+        // merge without strict filtering — keep user keys
+        return array_replace_recursive([
+            'mailer' => $options['mailer'] ?? $options['transport'] ?? null,
+            'charset' => $options['charset'] ?? 'UTF-8',
+            'timeout' => $options['timeout'] ?? 60,
+            'smtp' => $options['smtp'] ?? ($options['smtp_config'] ?? []),
+            'dkim' => $options['dkim'] ?? [],
+            'smtp_keepalive' => $options['smtp_keepalive'] ?? true,
+            'smtp_options' => $options['smtp_options'] ?? [],
+            'test_mode' => $options['test_mode'] ?? false,
+        ], (array)$options);
+    }
+
+    // -------------------------
+    // Transport helpers
+    // -------------------------
 
     /**
-     * Constructor
+     * Set transport: 'smtp'|'mail'|'sendmail'
+     */
+    public function setTransport(string $mode): void
+    {
+        $mode = strtolower($mode);
+        switch ($mode) {
+            case 'smtp':
+                $this->isSMTP();
+                break;
+            case 'sendmail':
+                $this->isSendmail();
+                break;
+            case 'mail':
+            default:
+                $this->isMail();
+                break;
+        }
+        $this->logger->info('Transport set', ['transport' => $mode]);
+    }
+
+    /**
+     * Configure SMTP options.
      *
-     * @param MessageBusInterface|null $bus if provided, used for async dispatching (Symfony Messenger)
-     * @param LoggerInterface|null $logger optional logger
-     * @param array $opts optional overrides for options
+     * Expected keys in $cfg:
+     *   host, port, username, password, encryption ('ssl'|'tls'), smtp_auth (bool), timeout (int),
+     *   keepalive (bool), smtp_options (array for PHPMailer's SMTPOptions)
+     *
+     * @param array|object $cfg
      */
-    public function __construct(?MessageBusInterface $bus = null, ?LoggerInterface $logger = null, array $opts = [])
+    public function configureSMTP(array|object $cfg): void
     {
-        $this->bus = $bus;
-        $this->logger = $logger;
-        $this->options = \array_merge($this->options, $opts);
-
-        // initialize pool up to pool_size
-        $this->ensurePoolSize((int)$this->options['pool_size']);
-    }
-
-    /**
-     * Switch driver backend. Allowed: 'phpmailer'|'symfony'
-     */
-    public function setBackend(string $backend): void
-    {
-        $backend = strtolower($backend);
-        $this->backend = $backend;
-        if ($backend === 'phpmailer') {
-            $this->driver = new PHPMailerDriver();
-        } elseif ($backend === 'symfony') {
-            $this->driver = new SymfonyMailerDriver($this->driverOptions);
-        } else {
-            throw new \InvalidArgumentException("Unsupported mail backend: {$backend}");
+        if (\is_object($cfg)) {
+            $cfg = (array)$cfg;
         }
-    }
 
-    // --- PHPMailer-like API methods (delegating to driver)
-    public function setCharSet(string $charset): void { $this->driver->setCharSet($charset); }
-    public function setFrom(string $address, string $name = ''): void { $this->driver->setFrom($address, $name); }
-    public function addAddress(string $address, string $name = ''): void { $this->driver->addAddress($address, $name); }
-    public function addReplyTo(string $address, string $name = ''): void { $this->driver->addReplyTo($address, $name); }
-    public function addCC(string $address, string $name = ''): void { $this->driver->addCC($address, $name); }
-    public function addBCC(string $address, string $name = ''): void { $this->driver->addBCC($address, $name); }
-    public function setSubject(string $subject): void { $this->driver->setSubject($subject); }
-    public function setBody(string $body): void { $this->driver->setBody($body); }
-    public function setAltBody(string $alt): void { $this->driver->setAltBody($alt); }
-    public function setIsHtml(bool $isHtml): void { $this->driver->setIsHtml($isHtml); }
-    public function addAttachment(string $path, ?string $name = null): void { $this->driver->addAttachment($path, $name); }
-    public function clearAddresses(): void { $this->driver->clearAddresses(); }
-    public function clearAttachments(): void { $this->driver->clearAttachments(); }
-    public function addCustomHeader(string $name, string $value): void { $this->driver->addCustomHeader($name, $value); }
-    public function setPriority(int $priority): void { $this->driver->setPriority($priority); }
-    public function setReturnPath(string $address): void { $this->driver->setReturnPath($address); }
-    public function setDKIM(array $options): void { $this->driver->setDKIM($options); }
-    public function setMailerOptions(array $options): void { $this->driver->setMailerOptions($options); }
+        $this->isSMTP();
+        $this->Host = $cfg['host'] ?? $cfg['smtpHost'] ?? $this->Host;
+        $this->Port = (int)($cfg['port'] ?? $cfg['smtpPort'] ?? $this->Port);
+        $this->SMTPAuth = isset($cfg['smtpAuth']) ? (bool)$cfg['smtpAuth'] : $this->SMTPAuth;
 
-    /**
-     * Convenience: configure SMTP using array keys (host, username, password, port, encryption, smtpAuth, dsn)
-     * For PHPMailer driver maps to ->isSMTP() and other props.
-     * For Symfony driver builds DSN or uses provided 'dsn'.
-     */
-    public function configureSMTP(array $config): void
-    {
-        if ($this->backend === 'phpmailer') {
-            $this->driver->setMailerOptions(array_merge($config, ['isSMTP' => true]));
-        } else {
-            // build DSN when possible: smtp://user:pass@host:port?encryption=ssl|tls
-            if (!empty($config['dsn'])) {
-                $this->driver->setMailerOptions(['dsn' => $config['dsn']]);
-                return;
+        if (!empty($cfg['username'] ?? $cfg['user'] ?? null)) {
+            $this->Username = $cfg['username'] ?? $cfg['user'];
+        }
+
+        if (!empty($cfg['password'] ?? null)) {
+            $this->Password = $cfg['password'];
+        }
+
+        if (!empty($cfg['encryption'] ?? null)) {
+            $enc = strtolower((string)$cfg['encryption']);
+            if ($enc === 'ssl' || $enc === 'tls') {
+                $this->SMTPSecure = $enc;
             }
-            $user = $config['username'] ?? $config['user'] ?? null;
-            $pass = $config['password'] ?? null;
-            $host = $config['host'] ?? 'localhost';
-            $port = $config['port'] ?? 25;
-            $enc = $config['encryption'] ?? null;
-            $auth = isset($config['smtpAuth']) ? (bool)$config['smtpAuth'] : ($user !== null);
-            // build dsn
-            $creds = $user !== null ? rawurlencode((string)$user) . ':' . rawurlencode((string)$pass) . '@' : '';
-            $scheme = $enc === 'ssl' ? 'smtps' : 'smtp';
-            $dsn = "{$scheme}://{$creds}{$host}:{$port}";
-            $this->driver->setMailerOptions(['dsn' => $dsn]);
         }
+
+        if (isset($cfg['timeout'])) {
+            $this->Timeout = (int)$cfg['timeout'];
+        }
+
+        if (isset($cfg['keepalive'])) {
+            $this->SMTPKeepAlive = (bool)$cfg['keepalive'];
+        }
+
+        if (!empty($cfg['smtpOptions']) && is_array($cfg['smtpOptions'])) {
+            $this->SMTPOptions = $cfg['smtpOptions'];
+        }
+
+        if (isset($cfg["localDomain"]) || isset($cfg["hostname"])) {
+            $this->Hostname = $cfg['localDomain'] ?? $cfg['hostname'] ?? $this->Hostname;
+        }
+
+        if (isset($cfg['charset'])) {
+            $this->CharSet = $cfg['charset'];
+        }
+
+        // save to opts
+        $this->opts['smtp'] = $cfg;
+
+        $this->logger->info(
+            'SMTP configured',
+            [
+                        'host' => $this->Host,
+                        'port' => $this->Port,
+                        'auth' => $this->SMTPAuth
+                ]
+        );
     }
 
+    // -------------------------
+    // DKIM
+    // -------------------------
+
+    /**
+     * Set DKIM options for PHPMailer.
+     *
+     * $opts should include: domain, selector, private_key_file, passphrase (optional)
+     */
+    public function setDKIM(array $opts): void
+    {
+        // minimal validation and assignment to PHPMailer properties
+        if (empty($opts['domain']) || empty($opts['selector']) || empty($opts['private_key_file'])) {
+            $this->logger->warning('DKIM options incomplete; skipping DKIM configuration', ['opts' => $opts]);
+            return;
+        }
+        $this->DKIM_domain = $opts['domain'];
+        $this->DKIM_selector = $opts['selector'];
+        $this->DKIM_private = $opts['private_key_file'];
+        if (!empty($opts['passphrase'])) {
+            $this->DKIM_passphrase = $opts['passphrase'];
+        }
+        if (!empty($opts['identity'])) {
+            $this->DKIM_identity = $opts['identity'];
+        }
+        $this->opts['dkim'] = $opts;
+        $this->logger->info('DKIM configured', ['domain' => $opts['domain'], 'selector' => $opts['selector']]);
+    }
+
+    // -------------------------
+    // Test mode
+    // -------------------------
+
+    /**
+     * Enable / disable test mode.
+     * When enabled, send() will not call network and will return true (after logging).
+     */
+    public function setTestMode(bool $on = true): void
+    {
+        $this->testMode = $on;
+        $this->SMTPDebug = $on ? 2 : 0;
+        $this->opts['test_mode'] = $on;
+        $this->logger->info('Test mode ' . ($on ? 'enabled' : 'disabled'));
+    }
+
+    public function isTestMode(): bool
+    {
+        return $this->testMode;
+    }
+
+    // -------------------------
+    // Sending overrides & helpers
+    // -------------------------
+
+    /**
+     * Override send() to support test mode and consistent logging.
+     *
+     * @return bool
+     */
     public function send(): bool
     {
         $this->lastError = null;
-        $ok = $this->driver->send();
-        if (!$ok) {
-            $this->lastError = $this->driver->getErrorInfo();
+
+        // If test mode, simulate success but go through the motions
+        if ($this->testMode) {
+            $this->logger->debug('Test mode: send simulated', [
+                'from' => $this->From,
+                'to' => self::getToAddresses(),
+                'subject' => $this->Subject,
+            ]);
+            return true;
         }
-        return $ok;
+
+        try {
+            $ok = parent::send();
+            if ($ok) {
+                $this->logger->info('Email sent', ['subject' => $this->Subject, 'to' => self::getToAddresses()]);
+            } else {
+                $this->lastError = $this->ErrorInfo;
+                $this->logger->warning('Email not sent', ['error' => $this->lastError]);
+            }
+            return (bool)$ok;
+        } catch (PHPMailerException $e) {
+            $this->lastError = $e->getMessage();
+            $this->logger->error('PHPMailer exception on send', ['exception' => $e]);
+            return false;
+        } catch (\Throwable $e) {
+            $this->lastError = $e->getMessage();
+            $this->logger->error('Unexpected exception on send', ['exception' => $e]);
+            return false;
+        }
     }
 
-    public function getErrorInfo(): ?string
+    /**
+     * Return last error message (if any).
+     */
+    public function getLastError(): ?string
     {
-        return $this->lastError ?? $this->driver->getErrorInfo();
+        return $this->lastError ?? ($this->ErrorInfo);
     }
 
-    // --- helper sugar methods (common)
-    public function sendHtml(string $to, string $subject, string $html, string $from = '', array $cc = [], array $bcc = []): bool
-    {
-        if ($from !== '') {
+    // -------------------------
+    // Convenience send helpers
+    // -------------------------
+
+    /**
+     * Send HTML email to single recipient (quick helper).
+     *
+     * @param string $to email or "Name <email>"
+     * @param string $subject
+     * @param string $html
+     * @param string|null $from optional from "Name <email>"
+     * @return bool
+     */
+    public function sendHtml(
+        string $to,
+        string $subject,
+        string $html,
+        ?string $from = null,
+        ?string $alt = null,
+        ?string $addReplyTo = null,
+        ?array $addStringAttachments = null,
+        ?array $addEmbeddedImage = null
+    ): bool {
+        $this->clearAddresses();
+        $this->clearAttachments();
+
+        if ($from !== null) {
             [$addr, $name] = $this->splitAddressAndName($from);
             $this->setFrom($addr, $name);
+        } else {
+            $this->setFrom($this->from["address"], $this->from["name"]);
         }
-        [$taddr, $tname] = $this->splitAddressAndName($to);
-        $this->addAddress($taddr, $tname);
-        foreach ($cc as $c) { [$a,$n] = $this->splitAddressAndName($c); $this->addCC($a,$n); }
-        foreach ($bcc as $b) { [$a,$n] = $this->splitAddressAndName($b); $this->addBCC($a,$n); }
-        $this->setIsHtml(true);
-        $this->setSubject($subject);
-        $this->setBody($html);
+
+        [$addr, $name] = $this->splitAddressAndName($to);
+        $this->addAddress($addr, $name);
+
+        $this->isHTML(true);
+        $this->Subject = $subject;
+        $this->Body = $html;
+
+        if ($alt !== null) {
+            $this->AltBody = $alt;
+        }
+
+        if ($addReplyTo !== null) {
+            $this->addReplyTo($addReplyTo);
+        }
+
+        if ($addStringAttachments !== null) {
+            foreach ($addStringAttachments as $attachment) {
+                $this->addStringAttachment(
+                    $attachment['filename'],
+                    $attachment['content'],
+                    $attachment['encoding'],
+                    $attachment['type'] ?? null,
+                    $attachment['disposition'] ?? null
+                );
+            }
+        }
+
+        if ($addEmbeddedImage !== null) {
+            foreach ($addEmbeddedImage as $attachment) {
+                $this->addEmbeddedImage(
+                    $attachment['filename'],
+                    $attachment['content'],
+                    $attachment['cid'],
+                    $attachment['type'] ?? null,
+                    $attachment['disposition'] ?? null
+                );
+            }
+        }
+
+        $this->XMailer = ' ';
+        $this->addCustomHeader('X-Priority', '3 (Normal)');
+        $this->addCustomHeader('X-Atom', "true");
+        $this->addCustomHeader('X-Mailer', 'With Atom Framework');
+        $this->addCustomHeader('X-Identity', (string)mt_rand(40000, 44444));
+        $this->addCustomHeader('T-Attechment', "true");
+
         return $this->send();
     }
 
-    public function sendText(string $to, string $subject, string $text, string $from = ''): bool
-    {
-        if ($from !== '') {
+    /**
+     * Send plain text email to single recipient (quick helper).
+     */
+    public function sendText(
+        string $to,
+        string $subject,
+        string $text,
+        ?string $from = null,
+        ?string $alt = null,
+        ?string $addReplyTo = null,
+        ?array $addStringAttachments = null,
+        ?array $addEmbeddedImage = null
+    ): bool {
+        $this->clearAddresses();
+        $this->clearAttachments();
+
+        if ($from !== null) {
             [$addr, $name] = $this->splitAddressAndName($from);
             $this->setFrom($addr, $name);
+        } else {
+            $this->setFrom($this->from["address"], $this->from["name"]);
         }
-        [$taddr, $tname] = $this->splitAddressAndName($to);
-        $this->addAddress($taddr, $tname);
-        $this->setIsHtml(false);
-        $this->setSubject($subject);
-        $this->setBody($text);
+
+        [$addr, $name] = $this->splitAddressAndName($to);
+        $this->addAddress($addr, $name);
+
+        $this->isHTML(false);
+        $this->Subject = $subject;
+        $this->Body = $text;
+
+        if ($alt !== null) {
+            $this->AltBody = $alt;
+        }
+
+        if ($addReplyTo !== null) {
+            $this->addReplyTo($addReplyTo);
+        }
+
+        if ($addStringAttachments !== null) {
+            foreach ($addStringAttachments as $attachment) {
+                $this->addStringAttachment(
+                    $attachment['filename'],
+                    $attachment['content'],
+                    $attachment['encoding'],
+                    $attachment['type'] ?? null,
+                    $attachment['disposition'] ?? null
+                );
+            }
+        }
+
+        if ($addEmbeddedImage !== null) {
+            foreach ($addEmbeddedImage as $attachment) {
+                $this->addEmbeddedImage(
+                    $attachment['filename'],
+                    $attachment['content'],
+                    $attachment['cid'],
+                    $attachment['type'] ?? null,
+                    $attachment['disposition'] ?? null
+                );
+            }
+        }
+
+        $this->XMailer = ' ';
+        $this->addCustomHeader('X-Priority', '3 (Normal)');
+        $this->addCustomHeader('X-Atom', "true");
+        $this->addCustomHeader('X-Mailer', 'With Atom Framework');
+        $this->addCustomHeader('X-Identity', (string)mt_rand(40000, 44444));
+        $this->addCustomHeader('T-Attechment', "true");
+
         return $this->send();
     }
 
-    private function splitAddressAndName(string $input): array
+    /**
+     * Send multiple envelopes reusing the same PHPMailer instance (no internal new() per message).
+     *
+     * Each envelope: [
+     *   'to' => ['email' or 'Name <email>' or ['email','name'], ...],
+     *   'subject' => string,
+     *   'body' => string,
+     *   'is_html' => bool (optional),
+     *   'from' => 'Name <email>' or ['email','name'] (optional),
+     *   'attachments' => [ ['path','name'] , ... ],
+     *   'headers' => ['X-Header' => 'value', ...]
+     * ]
+     *
+     * Returns array ['ok'=>int,'failed'=>int]
+     */
+    public function sendLoop(array $envelopes): array
     {
-        // Accept "Name <email@dom>" or "email@dom"
-        if (preg_match('/(.*)<(.+?)>/', $input, $m)) {
+        $ok = 0;
+        $failed = 0;
+
+        // Keep SMTP connection alive across loop if SMTPKeepAlive true
+        $keepAlive = $this->SMTPKeepAlive;
+
+        foreach ($envelopes as $env) {
+            // reset recipients/attachments
+            try {
+                $this->clearAddresses();
+                $this->clearCCs();
+                $this->clearBCCs();
+                $this->clearReplyTos();
+                $this->clearAllRecipients();
+                $this->clearAttachments();
+            } catch (\Throwable $e) {
+                $this->logger->warning('clear* failed on resetForNext', [ 'exception' => $e]);
+            }
+
+            // from
+            if (!empty($env['from'])) {
+                if (\is_array($env['from'])) {
+                    $this->setFrom($env['from'][0] ?? '', $env['from'][1] ?? '');
+                } else {
+                    [$addr,$name] = $this->splitAddressAndName((string)$env['from']);
+                    $this->setFrom($addr, $name);
+                }
+            }
+
+            // to
+            $tos = $env['to'] ?? [];
+
+            if (!\is_array($tos)) {
+                $tos = [$tos];
+            }
+
+            foreach ($tos as $t) {
+                if (\is_array($t)) {
+                    $this->addAddress($t[0] ?? '', $t[1] ?? '');
+                } else {
+                    [$addr,$name] = $this->splitAddressAndName((string)$t);
+                    $this->addAddress($addr, $name);
+                }
+            }
+
+            // headers
+            if (!empty($env['headers']) && \is_array($env['headers'])) {
+                foreach ($env['headers'] as $hn => $hv) {
+                    $this->addCustomHeader($hn, (string)$hv);
+                }
+            }
+
+            // subject/body
+            $this->Subject = (string)($env['subject'] ?? '');
+            $isHtml = isset($env['is_html']) ? (bool)$env['is_html'] : false;
+            $this->isHTML($isHtml);
+            $this->Body = (string)($env['body'] ?? '');
+
+            // attachments
+            if (!empty($env['attachments']) && \is_array($env['attachments'])) {
+                foreach ($env['attachments'] as $att) {
+                    if (!empty($att[0])) {
+                        $this->addAttachment($att[0], $att[1] ?? '');
+                    }
+                }
+            }
+
+            // send
+            $sent = $this->send();
+            if ($sent) {
+                $ok++;
+            } else {
+                $failed++;
+            }
+
+            // If keepAlive disabled, close SMTP between messages
+            if (!$keepAlive) {
+                try {
+                    $this->smtpClose();
+                } catch (\Throwable $e) {
+                    $this->logger->warning('smtpClose failed', ['exception' => $e]);
+                }
+            }
+        }
+
+        // If we kept alive, optionally close at the end (user can call closeSmtp manually)
+        if ($keepAlive) {
+            try {
+                $this->smtpClose();
+            } catch (\Throwable $e) {
+                $this->logger->warning('smtpClose failed', ['exception' => $e]);
+            }
+        }
+
+        return ['ok' => $ok, 'failed' => $failed];
+    }
+
+    // -------------------------
+    // Utility methods
+    // -------------------------
+
+    /**
+     * Split "Name <email>" or "email" into [email,name]
+     */
+    protected function splitAddressAndName(string $input): array
+    {
+        if (preg_match('/^(.*)<(.+?)>$/', $input, $m)) {
             $name = trim($m[1], "\" ' ");
             $email = trim($m[2]);
             return [$email, $name];
@@ -236,516 +597,67 @@ final class MailerProxy
         return [trim($input), ''];
     }
 
-    //// 
-
-    // ---------------------------
-    // Configuration helpers
-    // ---------------------------
-
-    public function setOption(string $key, mixed $value): void
-    {
-        $this->options[$key] = $value;
-    }
-
-    public function setSMTPConfig(array $config): void
-    {
-        foreach (['smtp_host','smtp_port','smtp_user','smtp_pass','smtp_encryption','smtp_auth','smtp_timeout','smtp_keepalive'] as $k) {
-            if (array_key_exists($k, $config)) $this->options[$k] = $config[$k];
-        }
-    }
-
-    public function setRateLimit(int $perSecond, int $perMinute): void
-    {
-        $this->options['max_per_second'] = $perSecond;
-        $this->options['max_per_minute'] = $perMinute;
-    }
-
-    public function setRetries(int $maxRetries, int $backoffSeconds = 2): void
-    {
-        $this->options['max_retries'] = $maxRetries;
-        $this->options['retry_backoff_seconds'] = $backoffSeconds;
-    }
-
-    public function setOptionDKIM(array $dkimOptions): void
-    {
-        // validate keys minimally
-        $this->options['dkim'] = $dkimOptions;
-    }
-
-    public function setTestMode(bool $on = true): void
-    {
-        $this->options['test_mode'] = $on;
-    }
-
-    // ---------------------------
-    // Pool management
-    // ---------------------------
-
-    private function ensurePoolSize(int $size): void
-    {
-        $size = max(1, $size);
-        $current = \count(self::$smtpPool);
-        for ($i = $current; $i < $size; $i++) {
-            $mailer = $this->createPHPMailer();
-            if ($mailer !== null) {
-                self::$smtpPool[] = $mailer;
-            }
-        }
-    }
-
-    private function createPHPMailer(): ?PHPMailer
+    /**
+     * Clear recipients and attachments to prepare for next send.
+     */
+    public function resetForNext(): void
     {
         try {
-            $mail = new PHPMailer(true);
-            $mail->SMTPAutoTLS = true;
-            $mail->Timeout = (int)$this->options['smtp_timeout'];
-            $mail->SMTPKeepAlive = (bool)$this->options['smtp_keepalive'];
-            $mail->isSMTP();
-            $mail->Host = (string)$this->options['smtp_host'];
-            $mail->Port = (int)$this->options['smtp_port'];
-            $mail->SMTPAuth = (bool)$this->options['smtp_auth'];
-            if (!empty($this->options['smtp_user'])) {
-                $mail->Username = (string)$this->options['smtp_user'];
+            $this->clearAddresses();
+            $this->clearCCs();
+            $this->clearBCCs();
+            $this->clearReplyTos();
+            $this->clearAllRecipients();
+            $this->clearAttachments();
+            // clear custom headers if present
+            if (method_exists($this, 'clearCustomHeaders')) {
+                $this->clearCustomHeaders();
             }
-            if (!empty($this->options['smtp_pass'])) {
-                $mail->Password = (string)$this->options['smtp_pass'];
-            }
-            if (!empty($this->options['smtp_encryption'])) {
-                $enc = strtolower((string)$this->options['smtp_encryption']);
-                if ($enc === 'ssl' || $enc === 'tls') {
-                    $mail->SMTPSecure = $enc;
+        } catch (\Throwable $e) {
+            $this->logger->warning('clear* failed on resetForNext', ['exception' => $e]);
+        }
+    }
+
+    public function closeSmtp(): void
+    {
+        try {
+            $this->smtpClose();
+        } catch (\Throwable $e) {
+            $this->logger->warning('smtpClose failed', ['exception' => $e]);
+        }
+    }
+
+    /**
+     * Helper: return simplified list of recipients for logging
+     */
+    public function getToAddresses(): array
+    {
+        $list = [];
+        try {
+            if (!empty($this->getToAddresses())) {
+                // some PHPMailer versions expose getToAddresses method
+                $addresses = self::getToAddresses();
+                foreach ($addresses as $a) {
+                    $list[] = \is_array($a) ? ($a[0] ?? '') : (string)$a;
                 }
-            }
-            // set DKIM if configured
-            if (!empty($this->options['dkim']) && is_array($this->options['dkim'])) {
-                $dk = $this->options['dkim'];
-                if (!empty($dk['private_key_file']) && !empty($dk['domain']) && !empty($dk['selector'])) {
-                    $mail->DKIM_domain = $dk['domain'];
-                    $mail->DKIM_private = $dk['private_key_file'];
-                    $mail->DKIM_selector = $dk['selector'];
-                    if (!empty($dk['passphrase'])) $mail->DKIM_passphrase = $dk['passphrase'];
-                }
-            }
-            // default charset
-            $mail->CharSet = 'UTF-8';
-            return $mail;
-        } catch (Throwable $e) {
-            if ($this->logger) $this->logger->error('createPHPMailer failed: ' . $e->getMessage());
-            return null;
-        }
-    }
-
-    /**
-     * Acquire PHPMailer from pool (FIFO). Caller must not new() inside critical loops.
-     */
-    private function acquireMailer(): ?PHPMailer
-    {
-        if (empty(self::$smtpPool)) {
-            $this->ensurePoolSize((int)$this->options['pool_size']);
-        }
-        // pop first
-        $mailer = array_shift(self::$smtpPool) ?? null;
-        if ($mailer === null) {
-            // create on demand
-            $mailer = $this->createPHPMailer();
-        }
-        return $mailer;
-    }
-
-    /**
-     * Release mailer back to pool (keep alive connection if configured).
-     */
-    private function releaseMailer(?PHPMailer $mailer): void
-    {
-        if ($mailer === null) return;
-        // keep pool bounded
-        $max = max(1, (int)$this->options['pool_size']);
-        if (count(self::$smtpPool) >= $max) {
-            // close SMTP if too many
-            try { $mailer->smtpClose(); } catch (Throwable) {}
-            return;
-        }
-        self::$smtpPool[] = $mailer;
-    }
-
-    /**
-     * Reset pool and close connections.
-     */
-    public function resetPool(): void
-    {
-        foreach (self::$smtpPool as $m) {
-            try { $m->smtpClose(); } catch (Throwable) {}
-        }
-        self::$smtpPool = [];
-    }
-
-    // ---------------------------
-    // Rate limiter
-    // ---------------------------
-
-    /**
-     * Simple in-memory rate limiter. For multi-process correctness use PSR-6 cache or external store (Redis).
-     * Returns true if allowed, false if limit reached.
-     */
-    private function rateAllow(): bool
-    {
-        $now = time();
-        $sec = (int)$now;
-        $minKey = (int)floor($now / 60);
-
-        // second window
-        if (self::$rateState['second_ts'] !== $sec) {
-            self::$rateState['second_ts'] = $sec;
-            self::$rateState['second_count'] = 0;
-        }
-        if (self::$rateState['minute_key'] !== $minKey) {
-            self::$rateState['minute_key'] = $minKey;
-            self::$rateState['minute_count'] = 0;
-        }
-
-        if (self::$rateState['second_count'] + 1 > (int)$this->options['max_per_second']) {
-            return false;
-        }
-        if (self::$rateState['minute_count'] + 1 > (int)$this->options['max_per_minute']) {
-            return false;
-        }
-
-        self::$rateState['second_count']++;
-        self::$rateState['minute_count']++;
-        return true;
-    }
-
-    // ---------------------------
-    // Sending primitives
-    // ---------------------------
-
-    /**
-     * Low-level send using PHPMailer instance.
-     *
-     * @param array $envelope - associative: ['from'=>['email','name'], 'to'=>[['email','name'],...], 'subject'=>string, 'body'=>string, 'is_html'=>bool, 'attachments'=>[['path','name'],...], 'headers'=>['X: v'], 'return_path'=>string|null]
-     */
-    private function sendViaSMTP(array $envelope, ?PHPMailer $mailer = null): bool
-    {
-        if ($this->options['test_mode']) {
-            // simulate full flow until send
-            if ($this->logger) $this->logger->debug('TEST MODE: simulate SMTP send');
-            return true;
-        }
-
-        $owned = false;
-        if ($mailer === null) {
-            $mailer = $this->acquireMailer();
-            $owned = true;
-        }
-        if ($mailer === null) {
-            $this->stats['failed']++;
-            return false;
-        }
-
-        // prepare mailer - clear previous recipients/attachments
-        try {
-            $mailer->clearAddresses();
-            $mailer->clearCCs();
-            $mailer->clearBCCs();
-            $mailer->clearReplyTos();
-            $mailer->clearAllRecipients();
-            $mailer->clearAttachments();
-        } catch (Throwable) {
-            // ignore older versions
-        }
-
-        // set from
-        [$fromEmail, $fromName] = $envelope['from'] ?? ['', ''];
-        if ($fromEmail !== '') {
-            try {
-                if (!empty($fromName)) $mailer->setFrom($fromEmail, $fromName);
-                else $mailer->setFrom($fromEmail);
-            } catch (Throwable) {}
-        }
-
-        // return-path / sender
-        if (!empty($envelope['return_path'])) {
-            try {
-                $mailer->Sender = $envelope['return_path'];
-            } catch (Throwable) {}
-        }
-
-        // recipients
-        foreach ($envelope['to'] ?? [] as $rcpt) {
-            [$e,$n] = [$rcpt[0] ?? '', $rcpt[1] ?? ''];
-            if ($e === '') continue;
-            try { $mailer->addAddress($e, $n); } catch (Throwable) {}
-        }
-        foreach ($envelope['cc'] ?? [] as $rcpt) {
-            [$e,$n] = [$rcpt[0] ?? '', $rcpt[1] ?? ''];
-            if ($e === '') continue;
-            try { $mailer->addCC($e, $n); } catch (Throwable) {}
-        }
-        foreach ($envelope['bcc'] ?? [] as $rcpt) {
-            [$e,$n] = [$rcpt[0] ?? '', $rcpt[1] ?? ''];
-            if ($e === '') continue;
-            try { $mailer->addBCC($e, $n); } catch (Throwable) {}
-        }
-
-        // subject & body
-        $mailer->Subject = (string)($envelope['subject'] ?? '');
-        $isHtml = (bool)($envelope['is_html'] ?? false);
-        if ($isHtml) {
-            $mailer->isHTML(true);
-            $mailer->Body = (string)($envelope['body'] ?? '');
-            if (!empty($envelope['alt'])) $mailer->AltBody = (string)$envelope['alt'];
-        } else {
-            $mailer->isHTML(false);
-            $mailer->Body = (string)($envelope['body'] ?? '');
-        }
-
-        // headers
-        foreach ($envelope['headers'] ?? [] as $hn => $hv) {
-            try { $mailer->addCustomHeader($hn, $hv); } catch (Throwable) {}
-        }
-
-        // attachments
-        foreach ($envelope['attachments'] ?? [] as $att) {
-            [$path,$name] = [$att[0] ?? '', $att[1] ?? null];
-            if ($path === '') continue;
-            try { $mailer->addAttachment($path, $name); } catch (Throwable) {}
-        }
-
-        // DKIM - PHPMailer already set globally if provided in createPHPMailer
-        // send
-        try {
-            $ok = $mailer->send();
-            if ($ok) {
-                $this->stats['sent']++;
             } else {
-                $this->stats['failed']++;
-            }
-        } catch (PHPMailerException $e) {
-            $ok = false;
-            $this->stats['failed']++;
-            if ($this->logger) $this->logger->warning('PHPMailerException: ' . $e->getMessage());
-        } catch (Throwable $e) {
-            $ok = false;
-            $this->stats['failed']++;
-            if ($this->logger) $this->logger->error('SMTP send failed: ' . $e->getMessage());
-        }
-
-        // release or close
-        if ($owned) {
-            // if keepalive enabled, keep connection, else close it
-            if ((bool)$this->options['smtp_keepalive']) {
-                $this->releaseMailer($mailer);
-            } else {
-                try { $mailer->smtpClose(); } catch (Throwable) {}
-            }
-        }
-
-        return (bool)$ok;
-    }
-
-    /**
-     * Fallback sending using PHP mail()
-     *
-     * Note: we build headers and call mail(). Many hosts have limits; prefer SMTP when possible.
-     */
-    private function sendViaNative(array $envelope): bool
-    {
-        if ($this->options['test_mode']) {
-            if ($this->logger) $this->logger->debug('TEST MODE: simulate native mail() send');
-            return true;
-        }
-
-        $to = [];
-        // Build an array of 'to' email addresses
-        // We only care about the first element of each 'to' array
-        // (the email address itself), so we ignore any additional elements
-        // (typically the recipient's name)
-        foreach ($envelope['to'] ?? [] as $recipient) {
-            $to[] = \is_array($recipient) ? $recipient[0] : $recipient; // only care about the email address itself
-        }
-        $toHeader = implode(', ', $to);
-        $subject = $envelope['subject'] ?? '';
-        $body = $envelope['body'] ?? '';
-        $headers = [];
-
-        // From
-        [$fromEmail,$fromName] = $envelope['from'] ?? ['', ''];
-        if ($fromEmail !== '') {
-            $headers[] = 'From: ' . (!empty($fromName) ? sprintf('%s <%s>', $fromName, $fromEmail) : $fromEmail);
-        }
-        // Reply-To
-        if (!empty($envelope['reply_to'])) {
-            [$re,$rn] = $envelope['reply_to'];
-            $headers[] = 'Reply-To: ' . (!empty($rn) ? sprintf('%s <%s>',$rn,$re) : $re);
-        }
-
-        // Custom headers
-        foreach ($envelope['headers'] ?? [] as $hn=>$hv) {
-            $headers[] = sprintf('%s: %s', $hn, $hv);
-        }
-        // Content-type
-        if (!empty($envelope['is_html'])) {
-            $headers[] = 'MIME-Version: 1.0';
-            $headers[] = 'Content-type: text/html; charset=utf-8';
-        } else {
-            $headers[] = 'Content-type: text/plain; charset=utf-8';
-        }
-
-        $headerStr = implode("\r\n", $headers);
-
-        // Return-Path parameter on mail() supported by some SAPIs; use -f flag if requested
-        $additionalParams = '';
-        if (!empty($envelope['return_path'])) {
-            $additionalParams = '-f' . escapeshellarg($envelope['return_path']);
-        }
-
-        $ok = false;
-        try {
-            $ok = mail($toHeader, $subject, $body, $headerStr, $additionalParams);
-            if ($ok) $this->stats['sent']++; else $this->stats['failed']++;
-        } catch (Throwable $e) {
-            $ok = false;
-            $this->stats['failed']++;
-            if ($this->logger) $this->logger->error('native mail() failed: ' . $e->getMessage());
-        }
-
-        return (bool)$ok;
-    }
-
-    // ---------------------------
-    // High-level send API
-    // ---------------------------
-
-    /**
-     * Send a single email envelope. Envelope structure defined in sendViaSMTP/sendViaNative.
-     *
-     * If MessageBusInterface provided and $useQueue === true, dispatches MailSendJob to bus instead of direct send.
-     * If test_mode enabled, simulate and return true.
-     *
-     * @param array $envelope
-     * @param bool $useQueue
-     * @return bool
-     */
-    public function sendOne(array $envelope, bool $useQueue = false): bool
-    {
-        // rate limit check
-        if (!$this->rateAllow()) {
-            // rate limit exceeded — either sleep briefly or return false (we choose to sleep small)
-            usleep(250000); // 250ms
-            if (!$this->rateAllow()) {
-                if ($this->logger) $this->logger->warning('Rate limit exceeded');
-                return false;
-            }
-        }
-
-        // If queue requested and bus available -> dispatch
-        if ($useQueue && $this->bus !== null) {
-            // create a simple job object (MailSendJob) and dispatch
-            $job = new MailSendJob($envelope, ['retries' => $this->options['max_retries']]);
-            try {
-                $this->bus->dispatch($job);
-                $this->stats['dispatched']++;
-                return true;
-            } catch (Throwable $e) {
-                if ($this->logger) $this->logger->error('Dispatch failed: ' . $e->getMessage());
-                // fallback to sync send below
-            }
-        }
-
-        // direct synchronous attempt with retry/backoff
-        $attempt = 0;
-        $max = (int)$this->options['max_retries'];
-        $backoff = (int)$this->options['retry_backoff_seconds'];
-        
-        while ($attempt <= $max) {
-            $attempt++;
-            // Acquire mailer
-            $mailer = $this->acquireMailer();
-            $ok = $this->sendViaSMTP($envelope, $mailer);
-var_dump($ok, "sadas s");
-            if ($ok) {
-                // success
-                // ensure mailer remains in pool (release already done inside sendViaSMTP)
-                return true;
-            }
-return true;
-            // failed - release mailer and maybe try native fallback
-            $this->releaseMailer($mailer);
-
-            // fallback to native mail if SMTP fails and fallback is allowed
-            if (!empty($this->options['smtp_auth']) || !empty($this->options['smtp_host'])) {
-                // try native fallback only on last attempt
-                if ($attempt > $max) {
-                    $nativeOk = $this->sendViaNative($envelope);
-                    if ($nativeOk) return true;
+                // fallback: inspect property
+                if (property_exists($this, 'to') && is_array($this->to)) {
+                    foreach ($this->to as $a) {
+                        if (\is_array($a)) {
+                            $list[] = $a[0] ?? '';
+                        }
+                    }
                 }
             }
-
-            // retry/backoff
-            if ($attempt <= $max) {
-                $this->stats['retried']++;
-                $sleep = $backoff * ($attempt); // linear backoff
-                if ($this->logger) $this->logger->info("Retry #{$attempt} after {$sleep}s");
-                sleep((int)$sleep);
-            }
+        } catch (\Throwable $e) {
+            $this->logger->warning('getToAddresses failed', ['exception' => $e]);
         }
-
-        return false;
+        return $list;
     }
 
-    /**
-     * Send many envelopes in one call; reuses pool and respects rate limit and retries.
-     *
-     * @param array $envelopes array of envelope arrays
-     * @param bool $useQueue if true and bus available, dispatch as jobs
-     * @return array ['ok' => int, 'failed' => int]
-     */
-    public function sendMany(array $envelopes, bool $useQueue = false): array
+    public function __destruct()
     {
-        $ok = 0;
-        $failed = 0;
-
-        // if async and bus exists -> dispatch all and return
-        if ($useQueue && $this->bus !== null) {
-            foreach ($envelopes as $env) {
-                $job = new MailSendJob($env, ['retries' => $this->options['max_retries']]);
-                try {
-                    $this->bus->dispatch($job);
-                    $this->stats['dispatched']++;
-                    $ok++;
-                } catch (Throwable $e) {
-                    $failed++;
-                    if ($this->logger) $this->logger->error('Dispatch failed in sendMany: ' . $e->getMessage());
-                }
-            }
-            return ['ok' => $ok, 'failed' => $failed];
-        }
-
-        // synchronous loop - reuse mailer per envelope
-        foreach ($envelopes as $env) {
-            $r = $this->sendOne($env, false);
-            if ($r) $ok++; else $failed++;
-        }
-
-        return ['ok' => $ok, 'failed' => $failed];
-    }
-
-    // ---------------------------
-    // Utility / info
-    // ---------------------------
-
-    public function getStats(): array
-    {
-        return $this->stats;
-    }
-
-    public function getOptions(): array
-    {
-        return $this->options;
-    }
-
-    public function resetRateState(): void
-    {
-        self::$rateState = ['second_ts'=>0,'second_count'=>0,'minute_key'=>0,'minute_count'=>0];
+        $this->closeSmtp();
     }
 }

@@ -31,6 +31,31 @@ class Request
         return $this->getMethod() === 'post';
     }
 
+    public function isPut()
+    {
+        return $this->getMethod() === 'put';
+    }
+
+    public function isDelete()
+    {
+        return $this->getMethod() === 'delete';
+    }
+
+    public function isPatch()
+    {
+        return $this->getMethod() === 'patch';
+    }
+
+    public function isOptions()
+    {
+        return $this->getMethod() === 'options';
+    }
+
+    public function isHead()
+    {
+        return $this->getMethod() === 'head';
+    }
+
     public function getBody()
     {
         $data = [];

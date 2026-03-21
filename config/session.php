@@ -12,9 +12,9 @@ return [
      *
      * Available drivers:
      * cookie - stores session data in cookies
-     * database - stores session data in a database
-     * file - stores session data in a file
-     * redis - stores session data in a Redis server
+     * database - stores session data in a database (comming soon)
+     * file - stores session data in a file  (comming soon)
+     * redis - stores session data in a Redis server (comming soon)
      *
      * @var string
      */

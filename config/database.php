@@ -26,11 +26,11 @@ return [
          * @var array
          */
         'mysql' => [
-            'dsn'      => 'mysql:host='. env('DB_HOST', '127.0.0.1') .';port='. env('DB_PORT', 3306) .';dbname='. env('DB_NAME', 'Atom') . ';charset='. env('DB_CHARSET', 'utf8mb4'),
+            'dsn'      => 'mysql:host='. env('DB_HOST', '127.0.0.1') .';port='. env('DB_PORT', 3306) .';dbname='. env('DB_DATABASE', 'Atom') . ';charset='. env('DB_CHARSET', 'utf8mb4'),
             'driver'   => 'mysql',
             'host'     => env('DB_HOST', '127.0.0.1'),
             'port'     => env('DB_PORT', 3306),
-            'dbname'   => env('DB_NAME', 'Atom'),
+            'dbname'   => env('DB_DATABASE', 'Atom'),
             'user'     => env('DB_USERNAME', 'root'),
             'password' => env('DB_PASSWORD', ''),
             'charset'  => env('DB_CHARSET', 'utf8mb4'), //'utf8mb4',

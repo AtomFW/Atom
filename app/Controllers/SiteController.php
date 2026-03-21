@@ -63,7 +63,7 @@ class SiteController extends Controller
 
     public function logout(Request $request, Response $response)
     {
-        Atom::$app->logout();
+        Atom::$app->account->logout();
         $response->redirect('/');
     }
 

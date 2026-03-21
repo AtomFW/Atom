@@ -38,6 +38,6 @@ class LoginForm extends Model
             return false;
         }
 
-        return Atom::$app->login($user);
+        return Atom::$app->account->login($user);
     }
 }

@@ -221,7 +221,8 @@ final class HtmlPurifierWrapperTest extends TestCase
     public function testConstructorThrowsIfHtmlPurifierMissing(): void
     {
         // This test simulates the absence of the HTMLPurifier class by checking the guard message
-        // We cannot easily unload a class in PHP once loaded, so this assertion is best-effort by reflection of code path.
+        // We cannot easily unload a class in PHP once loaded,
+        //  so this assertion is best-effort by reflection of code path.
         // Assert the guard uses RuntimeException message we expect when class does not exist.
         $ref = new \ReflectionClass(HtmlPurifierWrapper::class);
         $method = $ref->getConstructor();
@@ -231,6 +232,9 @@ final class HtmlPurifierWrapperTest extends TestCase
         self::assertIsString($file);
         $source = file_get_contents($file);
         self::assertIsString($source);
-        self::assertStringContainsString('HTMLPurifier class not found. Install ezyang/htmlpurifier via Composer.', $source);
+        self::assertStringContainsString(
+            'HTMLPurifier class not found. Install ezyang/htmlpurifier via Composer.',
+            $source
+        );
     }
 }

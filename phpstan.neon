@@ -4,7 +4,11 @@ parameters:
         - Atom
         - app
     excludePaths:
-        - vendor
-        - logs
+        - vendor/*
+        - logs/*
         - Atom/Lib
         - Atom/Lib/SimpleHtmlDom
+        analyse:
+            - vendor/*
+    parallel:
+        maximumNumberOfProcesses: 32

@@ -1,3 +1,4 @@
+<?php use Atom\Atom; ?>
 <!doctype html>
 <html lang="pl">
 
@@ -22,41 +23,38 @@
                 </section>
                 <section class="col-ms80 ">
                     <ol class="menu">
-                        <li><a class="nav-link" href="/newatom/public/">Home</a></li>
+                        <li><a class="nav-link" href="<?php echo Atom::$ROOT_URI ?>/public/">Home</a></li>
                         
                         <li>
-                            <a class="nav-link" href="/newatom/public/contact">Contact</a>
+                            <a class="nav-link" href="<?php echo Atom::$ROOT_URI ?>/public/contact">Contact</a>
                         </li>
                         
                         <li>
-                            <a class="nav-link" href="/newatom/public/about">About</a>
+                            <a class="nav-link" href="<?php echo Atom::$ROOT_URI ?>/public/about">About</a>
                         </li>
                     </ol>
                 </section>
             </section>
             <section class="col-ms30 tsr-width-50-2 tsr-height-40px-3 tsr-float-right-3">
                 <?php
-
-                use Atom\Atom;
-
-                if (Atom::isGuest()) : ?>
+                if (Atom::$app->account->isGuest) : ?>
                     <ol class="menu">
                          <li class="nav-item active">
-                            <a class="nav-link" href="/newatom/public/login">Login</a>
+                            <a class="nav-link" href="<?php echo Atom::$ROOT_URI ?>/public/login">Login</a>
                         </li>
                         <li class="nav-item active">
-                            <a class="nav-link" href="/newatom/public/register">Register</a>
+                            <a class="nav-link" href="<?php echo Atom::$ROOT_URI ?>/public/register">Register</a>
                         </li>
                     </ol>
                 <?php else : ?>
                     <ol class="menu">
                          <li class="nav-item active">
-                            <a class="nav-link" href="/newatom/public/profile">
+                            <a class="nav-link" href="<?php echo Atom::$ROOT_URI ?>/public/profile">
                                 Profile
                             </a>
                         </li>
                         <li class="nav-item active">
-                            <a class="nav-link" href="/newatom/public/logout">
+                            <a class="nav-link" href="<?php echo Atom::$ROOT_URI ?>/public/logout">
                                 <?php echo Atom::$app->user->getDisplayName() ?> (Logout)
                             </a>
                         </li>

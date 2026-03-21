@@ -12,10 +12,32 @@ use Atom\Exception\IO\Generative\InvalidArgumentGenerativeException;
 use Atom\Exception\IO\Generative\IOGenerativeException;
 use Exception;
 
-class FileSystem
+/**
+ * FileSystem class
+ *
+ * This class is responsible for managing the file system.
+ *
+ * It provides methods to copy, move, and delete files and directories.
+ *
+ * It also provides methods to check if a file or directory exists, and to get the
+ * contents of a file or directory.
+ *
+ * @final
+ */
+final class FileSystem
 {
     private static $lastError;
 
+    /**
+     * Copy a file from the origin to the target.
+     *
+     * @param string $originFile The origin file path.
+     * @param string $targetFile The target file path.
+     * @param bool $overwriteNewerFiles Whether to overwrite newer files.
+     * @return bool True if the file was successfully copied, false otherwise.
+     *
+     * @throws FileNotFoundGenerativeException If the origin file does not exist.
+     */
     public function copy(string $originFile, string $targetFile, bool $overwriteNewerFiles = false): bool
     {
         $originIsLocal = stream_is_local($originFile) || 0 === stripos($originFile, 'file://');
@@ -96,6 +118,16 @@ class FileSystem
         return false;
     }
 
+    /**
+     * Create one or more directories.
+     *
+     * @param string|iterable $dirs The directories to create.
+     * @param int $mode The permissions to apply to the directories.
+     *
+     * @return void
+     *
+     * @throws IOGenerativeException If the directories cannot be created.
+     */
     public function mkdir(string|iterable $dirs, int $mode = 0777)
     {
         foreach ($this->toIterable($dirs) as $dir) {
@@ -109,6 +141,15 @@ class FileSystem
         }
     }
 
+    /**
+     * Check if one or more files exist.
+     *
+     * @param string|iterable $files The files to check for existence.
+     *
+     * @return bool True if all files exist, false otherwise.
+     *
+     * @throws IOGenerativeException If the path length exceeds the maximum allowed.
+     */
     public function exists(string|iterable $files): bool
     {
         $maxPathLength = \PHP_MAXPATHLEN - 2;
@@ -129,6 +170,17 @@ class FileSystem
         return true;
     }
 
+    /**
+     * Sets the access and modification time of a file.
+     *
+     * This is a wrapper around the touch() PHP function.
+     *
+     * @param string|iterable $files The file(s) to touch.
+     * @param int|null $time The time. If null, the current time is used.
+     * @param int|null $atime The access time. If null, the modification time is used.
+     *
+     * @throws IOGenerativeException If the file could not be touched.
+     */
     public function touch(string|iterable $files, ?int $time = null, ?int $atime = null): void
     {
         foreach ($this->toIterable($files) as $file) {
@@ -154,6 +206,16 @@ class FileSystem
         self::doRemove($files, false);
     }
 
+    /**
+     * Removes files or directories.
+     *
+     * This is a helper function for remove() and removeRecursive().
+     *
+     * @param array $files The files or directories to remove.
+     * @param bool $isRecursive Whether to remove files and directories recursively or not.
+     *
+     * @throws IOGenerativeException When removal fails
+     */
     private static function doRemove(array $files, bool $isRecursive): void
     {
         $files = array_reverse($files);
@@ -823,5 +885,21 @@ class FileSystem
     public static function handleError(int $type, string $msg): void
     {
         self::$lastError = $msg;
+    }
+
+    /**
+     * Normalizes a path string.
+     *
+     * Replaces backslashes with directory separators to ensure a consistent path
+     * format.
+     *
+     * @param string $path The path to normalize
+     *
+     * @return string The normalized path
+     */
+    public static function normalize(string $path): string
+    {
+        // Replace all backslashes with directory separators
+        return \str_replace('\\', DIRECTORY_SEPARATOR, $path);
     }
 }

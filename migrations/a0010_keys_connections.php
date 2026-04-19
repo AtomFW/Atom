@@ -1,9 +1,11 @@
 <?php
 
 final class a0010_keys_connections {
+    public object $db;
+
     public function up()
     {
-        $db = \Atom\Atom::$app->db;
+        $db = $this->db->database;
         $SQL = "ALTER TABLE `{{prefix}}connections`
             ADD KEY `idx_server_datetime` (`server_id`,`datetime` DESC),
             ADD KEY `idx_datetime` (`datetime` DESC),
@@ -18,13 +20,13 @@ final class a0010_keys_connections {
             ADD KEY `idx_lang` (`lang`),
             ADD KEY `idx_region` (`region`),
             ADD SPATIAL KEY `idx_coordinates` (`coordinates`);";
-        $SQL = $db->adaptMigration($SQL);
+        $SQL = $this->db->adaptMigration($SQL);
         $db->pdo->exec($SQL);
     }
 
     public function down()
     {
-        $db = \Atom\Atom::$app->db;
+        $db = $this->db->database;
         $SQL = "ALTER TABLE `{{prefix}}connections`
             DROP KEY `idx_server_datetime`,
             DROP KEY `idx_datetime`,
@@ -39,7 +41,7 @@ final class a0010_keys_connections {
             DROP KEY `idx_lang`,
             DROP KEY `idx_coordinates`,
             DROP KEY `idx_region`;";
-        $SQL = $db->adaptMigration($SQL);
+        $SQL = $this->db->adaptMigration($SQL);
         $db->pdo->exec($SQL);
     }
 }

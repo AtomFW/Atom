@@ -1,9 +1,11 @@
 <?php
 
 final class a0007_keys_users {
+    public object $db;
+
     public function up()
     {
-        $db = \Atom\Atom::$app->db;
+        $db = $this->db->database;
         $SQL = "ALTER TABLE `{{prefix}}users`
             ADD UNIQUE KEY `ux_user_uuid` (`user_uuid`),
             ADD UNIQUE KEY `ux_username` (`username`),
@@ -16,13 +18,13 @@ final class a0007_keys_users {
             ADD KEY `idx_country` (`country`),
             ADD KEY `idx_is_online` (`is_online`),
             ADD KEY `idx_name` (`last_name`,`first_name`);";
-        $SQL = $db->adaptMigration($SQL);
+        $SQL = $this->db->adaptMigration($SQL);
         $db->pdo->exec($SQL);
     }
 
     public function down()
     {
-        $db = \Atom\Atom::$app->db;
+        $db = $this->db->database;
         $SQL = "ALTER TABLE `{{prefix}}users`
             DROP KEY `ux_user_uuid`,
             DROP KEY `ux_username`,
@@ -35,7 +37,7 @@ final class a0007_keys_users {
             DROP KEY `idx_country`,
             DROP KEY `idx_is_online`,
             DROP KEY `idx_name`;";
-        $SQL = $db->adaptMigration($SQL);
+        $SQL = $this->db->adaptMigration($SQL);
         $db->pdo->exec($SQL);
     }
 }

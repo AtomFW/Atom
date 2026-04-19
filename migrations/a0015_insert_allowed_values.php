@@ -1,9 +1,11 @@
 <?php
 
-final class a0016_insert_allowed_values {
+final class a0015_insert_allowed_values {
+    public object $db;
+
     public function up()
     {
-        $db = \Atom\Atom::$app->db;
+        $db = $this->db->database;
         $SQL = "
             INSERT INTO `{{prefix}}allowed_values` (`id`, `table_name`, `column_name`, `value_key`, `value_label`, `sort_order`, `is_active`, `is_system`, `description`, `added_by`, `added_at`, `updated_at`) VALUES
             (1, 'connections_banned', 'entity_type_id', 'ip', 'ip', 1, 1, 1, 'ip', 1, '2026-01-01 00:00:00.000', '2026-03-31 22:09:34.570'),
@@ -99,23 +101,23 @@ final class a0016_insert_allowed_values {
             (91, 'system_events', 'event_type_id', 'cache_connection_refused', 'Cache Connection Refused', 17, 1, 1, 'No connection to Redis/Membercache', 1, '2026-01-01 00:00:00.000', '2026-03-31 22:21:29.482'),
             (92, 'system_events', 'event_type_id', 'php_opcache_reset', 'Php Opcache Reset', 18, 1, 1, 'Reloading PHP scripts in memory.', 1, '2026-01-01 00:00:00.000', '2026-03-31 22:21:32.078'),
             (93, 'system_events', 'event_type_id', 'external_api_timeout', 'Extenal Api Timeout', 19, 1, 1, 'When an external service (e.g. SMS gateway) does not respond.', 1, '2026-01-01 00:00:00.000', '2026-03-31 22:21:36.250'),
-            (94, 'server', 'type_id', 'self_hosted', 'Self Hosted', 1, 1, 1, 'Self Hosted', 1, '2026-01-01 00:00:00.000', '2026-04-01 00:03:02.007'),
-            (95, 'server', 'type_id', 'vps', 'Virtual Private Server', 2, 1, 1, 'Virtual Private Server', 1, '2026-01-01 00:00:00.000', '2026-04-01 00:03:04.624'),
-            (96, 'server', 'type_id', 'dedicated', 'dedicated', 3, 1, 1, 'dedicated', 1, '2026-01-01 00:00:00.000', '2026-04-01 00:03:16.568'),
-            (97, 'server', 'provider_id', 'ovh', 'ovh', 1, 1, 1, 'ovh', 1, '2026-01-01 00:00:00.000', '2026-03-31 23:57:10.007'),
-            (98, 'server', 'provider_id', 'seohost', 'seohost', 2, 1, 1, 'seohost', 1, '2026-01-01 00:00:00.000', '2026-03-31 23:57:15.027'),
-            (99, 'server', 'provider_id', 'google_cloud', 'Google Cloud (GCP)', 3, 1, 1, 'Google Cloud (GCP)', 1, '2026-01-01 00:00:00.000', '2026-03-31 23:57:17.811'),
-            (100, 'server', 'provider_id', 'aws', 'Amazon Web Services', 4, 1, 1, 'Amazon Web Services', 1, '2026-01-01 00:00:00.000', '2026-03-31 23:57:21.892'),
-            (101, 'server', 'provider_id', 'azure', 'Microsoft Azure', 5, 1, 1, 'Microsoft Azure', 1, '2026-01-01 00:00:00.000', '2026-03-31 23:57:25.417'),
-            (102, 'server', 'provider_id', 'oracle', 'oracle', 6, 1, 1, 'oracle', 1, '2026-01-01 00:00:00.000', '2026-03-31 23:57:28.557'),
-            (103, 'server', 'provider_id', 'digitalocean', 'DigitalOcean', 7, 1, 1, 'digitalocean', 1, '2026-01-01 00:00:00.000', '2026-03-31 23:57:49.013'),
-            (104, 'server', 'type_id', 'container', 'Container', 4, 1, 1, 'Container', 1, '2026-01-01 00:00:00.000', '2026-04-01 00:03:19.330'),
-            (105, 'server', 'type_id', 'cloud', 'Cloud', 5, 1, 1, 'Cloud', 1, '2026-01-01 00:00:00.000', '2026-04-01 00:03:23.217'),
+            (94, 'servers', 'type_id', 'self_hosted', 'Self Hosted', 1, 1, 1, 'Self Hosted', 1, '2026-01-01 00:00:00.000', '2026-04-01 00:03:02.007'),
+            (95, 'servers', 'type_id', 'vps', 'Virtual Private Server', 2, 1, 1, 'Virtual Private Server', 1, '2026-01-01 00:00:00.000', '2026-04-01 00:03:04.624'),
+            (96, 'servers', 'type_id', 'dedicated', 'dedicated', 3, 1, 1, 'dedicated', 1, '2026-01-01 00:00:00.000', '2026-04-01 00:03:16.568'),
+            (97, 'servers', 'provider_id', 'ovh', 'ovh', 1, 1, 1, 'ovh', 1, '2026-01-01 00:00:00.000', '2026-03-31 23:57:10.007'),
+            (98, 'servers', 'provider_id', 'seohost', 'seohost', 2, 1, 1, 'seohost', 1, '2026-01-01 00:00:00.000', '2026-03-31 23:57:15.027'),
+            (99, 'servers', 'provider_id', 'google_cloud', 'Google Cloud (GCP)', 3, 1, 1, 'Google Cloud (GCP)', 1, '2026-01-01 00:00:00.000', '2026-03-31 23:57:17.811'),
+            (100, 'servers', 'provider_id', 'aws', 'Amazon Web Services', 4, 1, 1, 'Amazon Web Services', 1, '2026-01-01 00:00:00.000', '2026-03-31 23:57:21.892'),
+            (101, 'servers', 'provider_id', 'azure', 'Microsoft Azure', 5, 1, 1, 'Microsoft Azure', 1, '2026-01-01 00:00:00.000', '2026-03-31 23:57:25.417'),
+            (102, 'servers', 'provider_id', 'oracle', 'oracle', 6, 1, 1, 'oracle', 1, '2026-01-01 00:00:00.000', '2026-03-31 23:57:28.557'),
+            (103, 'servers', 'provider_id', 'digitalocean', 'DigitalOcean', 7, 1, 1, 'digitalocean', 1, '2026-01-01 00:00:00.000', '2026-03-31 23:57:49.013'),
+            (104, 'servers', 'type_id', 'container', 'Container', 4, 1, 1, 'Container', 1, '2026-01-01 00:00:00.000', '2026-04-01 00:03:19.330'),
+            (105, 'servers', 'type_id', 'cloud', 'Cloud', 5, 1, 1, 'Cloud', 1, '2026-01-01 00:00:00.000', '2026-04-01 00:03:23.217'),
             (106, 'servers', 'environment_id', 'production_and_development', 'Production & Development', 6, 1, 1, 'Production & Development', 1, '2026-01-01 00:00:00.000', '2026-03-31 22:18:25.440'),
-            (107, 'servers', 'ban_reason_id', 'automated_detection', 'Automated Detection', 1, 1, 1, 'Automated detection', 1, '2026-01-01 00:00:00.000', '2026-03-31 22:15:49.968'),
-            (108, 'servers', 'ban_reason_id', 'external_detection', 'External Detection', 4, 1, 1, 'External Detection', 1, '2026-01-01 00:00:00.000', '2026-03-31 22:16:02.192'),
-            (109, 'servers', 'ban_reason_id', 'manual_detection', 'Manual Detection', 2, 1, 1, 'Manual Detection', 1, '2026-01-01 00:00:00.000', '2026-03-31 22:15:55.382'),
-            (110, 'servers', 'ban_reason_id', 'ai_detection', 'Artificial Intelligence Detection', 3, 1, 1, 'artificial intelligence (AI) Detection', 1, '2026-01-01 00:00:00.000', '2026-03-31 22:15:58.120'),
+            (107, 'connections_banned', 'ban_reason_id', 'automated_detection', 'Automated Detection', 1, 1, 1, 'Automated detection', 1, '2026-01-01 00:00:00.000', '2026-03-31 22:15:49.968'),
+            (108, 'connections_banned', 'ban_reason_id', 'external_detection', 'External Detection', 4, 1, 1, 'External Detection', 1, '2026-01-01 00:00:00.000', '2026-03-31 22:16:02.192'),
+            (109, 'connections_banned', 'ban_reason_id', 'manual_detection', 'Manual Detection', 2, 1, 1, 'Manual Detection', 1, '2026-01-01 00:00:00.000', '2026-03-31 22:15:55.382'),
+            (110, 'connections_banned', 'ban_reason_id', 'ai_detection', 'Artificial Intelligence Detection', 3, 1, 1, 'artificial intelligence (AI) Detection', 1, '2026-01-01 00:00:00.000', '2026-03-31 22:15:58.120'),
             (111, 'users', 'role_id', 'user', 'User', 1, 1, 1, 'User', 1, '2026-01-01 00:00:00.000', '2026-03-31 23:57:59.272'),
             (112, 'users', 'role_id', 'system', 'System', 4, 1, 1, 'System', 1, '2026-01-01 00:00:00.000', '2026-03-31 23:59:35.109'),
             (113, 'users', 'role_id', 'bot', 'Bot', 3, 1, 1, 'Bot', 1, '2026-01-01 00:00:00.000', '2026-03-31 23:59:31.746'),
@@ -127,17 +129,18 @@ final class a0016_insert_allowed_values {
             (119, 'servers', 'main_service_type_id', 'nginx', 'Nginx', 6, 1, 1, 'Nginx', 1, '2026-01-01 00:00:00.000', '2026-04-01 08:50:44.078'),
             (120, 'servers', 'main_service_type_id', 'mysql', 'Mysql', 7, 1, 1, 'Mysql', 1, '2026-01-01 00:00:00.000', '2026-04-01 08:50:49.677'),
             (121, 'servers', 'main_service_type_id', 'meilisearch', 'Meilisearch', 10, 1, 1, 'Meilisearch', 1, '2026-01-01 00:00:00.000', '2026-04-01 08:51:11.438'),
-            (122, 'server', 'type_id', 'shared_hosting', 'Shared Hosting', 6, 1, 1, 'Shared Hosting', 1, '2026-01-01 00:00:00.000', '2026-04-01 00:04:12.128');
+            (122, 'servers', 'type_id', 'shared_hosting', 'Shared Hosting', 6, 1, 1, 'Shared Hosting', 1, '2026-01-01 00:00:00.000', '2026-04-01 00:04:12.128'),
+            (123, 'servers', 'provider_id', 'self_hosted', 'Self Hosted', '7', '1', '1', 'Self Hosted', '1', '2026-01-01 00:00:00.000', '2026-04-01 00:04:12.128');
         ";
-        $SQL = $db->adaptMigration($SQL);
+        $SQL = $this->db->adaptMigration($SQL);
         $db->pdo->exec($SQL);
     }
 
     public function down()
     {
-        $db = \Atom\Atom::$app->db;
+        $db = $this->db->database;
         $SQL = "DELETE FROM `{{prefix}}allowed_values` WHERE `id` = BETWEEN '1' AND '168'";
-        $SQL = $db->adaptMigration($SQL);
+        $SQL = $this->db->adaptMigration($SQL);
         $db->pdo->exec($SQL);
     }
 }

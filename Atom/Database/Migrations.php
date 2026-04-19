@@ -10,9 +10,9 @@ use Atom\DateTime\DateTime;
 
 final class Migrations
 {
-    private array $config;
+    public array $config;
 
-    public function __construct(private Database $database, private DateTime $datetime, private array $configs) {
+    public function __construct(public Database $database, public DateTime $datetime) {
         $this->config = $this->database->getConfig();
     }
 
@@ -45,6 +45,7 @@ final class Migrations
             require_once Atom::$ROOT_DIR . '/migrations/' . $migration;
             $className = pathinfo($migration, PATHINFO_FILENAME);
             $instance = new $className();
+            $instance->db = $this;
             $this->log("Applying migration $migration");
             $instance->up();
             $this->log("Applied migration $migration");

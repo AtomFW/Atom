@@ -1,9 +1,11 @@
 <?php
 
 final class a0004_initial_connections {
+    public object $db;
+
     public function up()
     {
-        $db = \Atom\Atom::$app->db;
+        $db = $this->db->database;
         $SQL = "CREATE TABLE `{{prefix}}connections` (
             `id` bigint UNSIGNED AUTO_INCREMENT PRIMARY KEY COMMENT 'unique id',
             `ip` varbinary(16) NOT NULL COMMENT 'connection ip',
@@ -22,15 +24,15 @@ final class a0004_initial_connections {
             `datetime` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT 'datetime added',
             `raw_details` json DEFAULT NULL COMMENT 'other connection data'
             ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='all requests made to servers';";
-        $SQL = $db->adaptMigration($SQL);
+        $SQL = $this->db->adaptMigration($SQL);
         $db->pdo->exec($SQL);
     }
 
     public function down()
     {
-        $db = \Atom\Atom::$app->db;
+        $db = $this->db->database;
         $SQL = "DROP TABLE `{{prefix}}connections`;";
-        $SQL = $db->adaptMigration($SQL);
+        $SQL = $this->db->adaptMigration($SQL);
         $db->pdo->exec($SQL);
     }
 }

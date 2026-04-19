@@ -1,9 +1,11 @@
 <?php
 
 final class a0012_keys_system_events {
+    public object $db;
+
     public function up()
     {
-        $db = \Atom\Atom::$app->db;
+        $db = $this->db->database;
         $SQL = "ALTER TABLE `{{prefix}}system_events`
             ADD KEY `idx_event_time` (`event_time` DESC),
             ADD KEY `idx_event_type` (`event_type_id`,`event_time` DESC),
@@ -12,13 +14,13 @@ final class a0012_keys_system_events {
             ADD KEY `idx_actor` (`actor_type_id`,`actor_id`,`event_time` DESC),
             ADD KEY `idx_server_event` (`server_id`,`event_time` DESC),
             ADD KEY `idx_event_time_type` (`event_time`,`event_type_id`);";
-        $SQL = $db->adaptMigration($SQL);
+        $SQL = $this->db->adaptMigration($SQL);
         $db->pdo->exec($SQL);
     }
 
     public function down()
     {
-        $db = \Atom\Atom::$app->db;
+        $db = $this->db->database;
         $SQL = "ALTER TABLE `{{prefix}}system_events`
             DROP KEY `idx_event_time`,
             DROP KEY `idx_event_type`,
@@ -27,7 +29,7 @@ final class a0012_keys_system_events {
             DROP KEY `idx_actor`,
             DROP KEY `idx_server_event`,
             DROP KEY `idx_event_time_type`;";
-        $SQL = $db->adaptMigration($SQL);
+        $SQL = $this->db->adaptMigration($SQL);
         $db->pdo->exec($SQL);
     }
 }

@@ -1,9 +1,11 @@
 <?php
 
 final class a0003_initial_allowed_values {
+    public object $db;
+
     public function up()
     {
-        $db = \Atom\Atom::$app->db;
+        $db = $this->db->database;
         $SQL = "CREATE TABLE `{{prefix}}allowed_values` (
             `id` int UNSIGNED AUTO_INCREMENT PRIMARY KEY,
             `table_name` varchar(64) CHARACTER SET ascii COLLATE ascii_bin NOT NULL COMMENT 'np. users, temp_blocks, system_events, visit_logs',
@@ -18,15 +20,15 @@ final class a0003_initial_allowed_values {
             `added_at` datetime(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) COMMENT 'time when the data was added',
             `updated_at` datetime(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3) COMMENT 'time when the data was updated'
             ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_bin COMMENT='Dynamic allowed values/enums for all tables in the system';";
-        $SQL = $db->adaptMigration($SQL);
+        $SQL = $this->db->adaptMigration($SQL);
         $db->pdo->exec($SQL);
     }
 
     public function down()
     {
-        $db = \Atom\Atom::$app->db;
+        $db = $this->db->database;
         $SQL = "DROP TABLE `{{prefix}}allowed_values`;";
-        $SQL = $db->adaptMigration($SQL);
+        $SQL = $this->db->adaptMigration($SQL);
         $db->pdo->exec($SQL);
     }
 }

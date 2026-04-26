@@ -5,6 +5,8 @@ declare(strict_types=1);
 namespace Atom\DateTime;
 
 use Carbon\Carbon;
+use DateTimeInterface;
+use IntlDateFormatter;
 
 /**
  * DateTime class that extends Carbon
@@ -141,48 +143,57 @@ final class DateTime extends Carbon
         /*
             DATETIME
         */
-        parent::macro("native", function () {
-            return $this->locale(ATOM_LOCAE)->timezone(ATOM_TIMEZONE)->format(ATOM_DATETIME);
+        parent::macro("native", function (DateTimeInterface|WeekDay|Month|string|int|float|null $other = null) {
+            return $this->parse($other)->locale(ATOM_LOCAE)->timezone(ATOM_TIMEZONE)->format(ATOM_DATETIME);
         });
         
-        parent::macro("atom", function () {
-            return $this->locale(ATOM_LOCAE)->timezone(ATOM_TIMEZONE)->format(ATOM_DATETIME);
+        parent::macro("atom", function (DateTimeInterface|WeekDay|Month|string|int|float|null $other = null) {
+            return $this->parse($other)->locale(ATOM_LOCAE)->timezone(ATOM_TIMEZONE)->format(ATOM_DATETIME);
         });
         
-        parent::macro("toAtom", function () {
-            return $this->locale(ATOM_LOCAE)->timezone(ATOM_TIMEZONE)->format(ATOM_DATETIME);
+        parent::macro("toAtom", function (DateTimeInterface|WeekDay|Month|string|int|float|null $other = null) {
+            return $this->parse($other)->locale(ATOM_LOCAE)->timezone(ATOM_TIMEZONE)->format(ATOM_DATETIME);
         });
         
         /*
             DATE
         */
-        parent::macro("nativeDate", function () {
-            return $this->locale(ATOM_LOCAE)->timezone(ATOM_TIMEZONE)->format(ATOM_DATE);
+        parent::macro("nativeDate", function (DateTimeInterface|WeekDay|Month|string|int|float|null $other = null) {
+            return $this->parse($other)->locale(ATOM_LOCAE)->timezone(ATOM_TIMEZONE)->format(ATOM_DATE);
         });
         
-        parent::macro("atomDate", function () {
-            return $this->locale(ATOM_LOCAE)->timezone(ATOM_TIMEZONE)->format(ATOM_DATE);
+        parent::macro("atomDate", function (DateTimeInterface|WeekDay|Month|string|int|float|null $other = null) {
+            return $this->parse($other)->locale(ATOM_LOCAE)->timezone(ATOM_TIMEZONE)->format(ATOM_DATE);
         });
         
-        parent::macro("toAtomDate", function () {
-            return $this->locale(ATOM_LOCAE)->timezone(ATOM_TIMEZONE)->format(ATOM_DATE);
+        parent::macro("toAtomDate", function (DateTimeInterface|WeekDay|Month|string|int|float|null $other = null) {
+            return $this->parse($other)->locale(ATOM_LOCAE)->timezone(ATOM_TIMEZONE)->format(ATOM_DATE);
         });
         
         /*
             TIME
         */
-        parent::macro("nativeTime", function () {
-            return $this->locale(ATOM_LOCAE)->timezone(ATOM_TIMEZONE)->format(ATOM_TIME);
+        parent::macro("nativeTime", function (DateTimeInterface|WeekDay|Month|string|int|float|null $other = null) {
+            return $this->parse($other)->locale(ATOM_LOCAE)->timezone(ATOM_TIMEZONE)->format(ATOM_TIME);
         });
         
-        parent::macro("atomTime", function () {
-            return $this->locale(ATOM_LOCAE)->timezone(ATOM_TIMEZONE)->format(ATOM_TIME);
+        parent::macro("atomTime", function (DateTimeInterface|WeekDay|Month|string|int|float|null $other = null) {
+            return $this->parse($other)->locale(ATOM_LOCAE)->timezone(ATOM_TIMEZONE)->format(ATOM_TIME);
         });
         
-        parent::macro("toAtomTime", function () {
-            return $this->locale(ATOM_LOCAE)->timezone(ATOM_TIMEZONE)->format(ATOM_TIME);
+        parent::macro("toAtomTime", function (DateTimeInterface|WeekDay|Month|string|int|float|null $other = null) {
+            return $this->parse($other)->locale(ATOM_LOCAE)->timezone(ATOM_TIMEZONE)->format(ATOM_TIME);
         });
         
+
+        // sql datetime
+        parent::macro("sqlDatetime", function (DateTimeInterface|WeekDay|Month|string|int|float|null $other = null) {
+            return $this->parse($other)->format("Y-m-d H:i:s.u");
+        });
+        
+        parent::macro("toSQL", function (DateTimeInterface|WeekDay|Month|string|int|float|null $other = null) {
+            return $this->parse($other)->format("Y-m-d H:i:s.u");
+        });
 
         self::$isSetMacro = true;
         return true;

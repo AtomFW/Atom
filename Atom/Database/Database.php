@@ -119,11 +119,7 @@ final class Database extends Connection
         $username = $dbConfig['user'] ?? '';
         $password = $dbConfig['password'] ?? '';
 
-        $option = [
-            \PDO::ATTR_PERSISTENT => true,
-        ];
-
-        $this->pdo = new \PDO($dbDsn, $username, $password, $option);
+        $this->pdo = new \PDO($dbDsn, $username, $password, (array)$dbConfig['options']);
         $this->pdo->setAttribute(\PDO::ATTR_ERRMODE, \PDO::ERRMODE_EXCEPTION);
 
         $this->smartConnection = static::fromExistingPdo($this->pdo);
@@ -526,12 +522,15 @@ final class Database extends Connection
 
     public function mapColumnFromTypes(array $attributes,array $attributesTypes):array
     {
+        // var_dump($attributes);
+        // var_dump($attributesTypes);
         $attributesTypesOnlySQLPrefix = array_filter(
             $attributesTypes, 
-            fn($value) => str_starts_with($value, 'sql_'), 
+            fn($value) => str_starts_with(\is_array($value) ? $value[0] : $value, 'sql_'), 
             ARRAY_FILTER_USE_BOTH
         );
-
+// var_dump($attributesTypesOnlySQLPrefix);
+// die();
         foreach ($attributesTypesOnlySQLPrefix as $key => $value) {
             if ($attributes[$key]) {
                 $attributes[$key] =
@@ -541,6 +540,32 @@ final class Database extends Connection
             }
         }
 
+        // $attributes = self::filterIgnoredTypes($attributes);
+
         return $attributes;
     }
+
+    public static function prioritizeTheMoppingArrayOfTypes (array $attributesTypes, bool $getEnd = false): array
+    {
+        return array_map(function ($types) use ($getEnd) {
+            if (\is_array($types)) {
+                if ($getEnd && \count($types) > 1) {
+                    return $types[1];
+                }
+
+                return $types[0];
+            }
+
+            return $types;
+        }, $attributesTypes);
+    }
+
+    public static function filterIgnoredTypes(array $attributes, array $attributesTypes): array
+    {
+        // var_dump($attributesTypes);
+        // die();
+        return array_filter($attributes, fn($key) => !isset($attributesTypes[$key]) || (!stristr($attributesTypes[$key], "ignore") && $attributesTypes[$key] !== null));
+        // return array_filter($attributesTypes, fn($key, $types) => !stristr($types, "ignore") && $types !== null);
+    }
+
 }

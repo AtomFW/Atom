@@ -7,9 +7,11 @@ namespace Atom\DataBase;
 use Atom\Atom;
 use Atom\Database\Migrations;
 use Atom\DateTime\DateTime;
-
-
 use DateTimeInterface;
+use InvalidArgumentException;
+use RuntimeException;
+use Throwable;
+
 use Doctrine\DBAL\Connection;
 use Doctrine\DBAL\Driver\PDO\Connection as PDOConnection;
 use Doctrine\DBAL\Configuration;
@@ -17,9 +19,6 @@ use Doctrine\DBAL\DriverManager;
 use Doctrine\DBAL\ParameterType;
 use Doctrine\DBAL\Query\QueryBuilder;
 use Doctrine\DBAL\Types\Type;
-use InvalidArgumentException;
-use RuntimeException;
-use Throwable;
 use Doctrine\DBAL\Driver\PDO\MySQL\Driver as MySQLDriver;
 use Doctrine\DBAL\Driver\PDO\SQLite\Driver as SQLiteDriver;
 use Doctrine\DBAL\Driver\PDO\SQLSrv\Driver as SQLSrvDriver;
@@ -321,39 +320,6 @@ final class Database extends Connection
         return $this->quoteSingleIdentifier($identifier);
     }
 
-    private function detectType(mixed $value): array
-    {
-        if ($value instanceof DateTimeInterface) {
-            return ['datetime_immutable', 'datetime_immutable'];
-        }
-
-        if (\is_bool($value)) {
-            return ['boolean', 'boolean'];
-        }
-
-        if (\is_int($value)) {
-            return ['integer', 'integer'];
-        }
-
-        if (\is_float($value)) {
-            return ['float', 'float'];
-        }
-
-        if (\is_array($value)) {
-            return ['json', 'json'];
-        }
-
-        if (\is_object($value)) {
-            foreach ($this->typeMap as $class => $dbalType) {
-                if (class_exists($class) && $value instanceof $class) {
-                    return [$dbalType, $dbalType];
-                }
-            }
-        }
-
-        return [null, null];
-    }
-
     public static function fromExistingPdo(\PDO $pdo): Database
     {
         $params = ['pdo' => $pdo];
@@ -370,7 +336,6 @@ final class Database extends Connection
 
         if ($driver == null) {
             throw new \Exception("Driver not found", 1);
-            
         }
 
         $instance = new static($params, $driver, $config);
@@ -522,15 +487,12 @@ final class Database extends Connection
 
     public function mapColumnFromTypes(array $attributes,array $attributesTypes):array
     {
-        // var_dump($attributes);
-        // var_dump($attributesTypes);
         $attributesTypesOnlySQLPrefix = array_filter(
             $attributesTypes, 
             fn($value) => str_starts_with(\is_array($value) ? $value[0] : $value, 'sql_'), 
             ARRAY_FILTER_USE_BOTH
         );
-// var_dump($attributesTypesOnlySQLPrefix);
-// die();
+        
         foreach ($attributesTypesOnlySQLPrefix as $key => $value) {
             if ($attributes[$key]) {
                 $attributes[$key] =
@@ -539,8 +501,6 @@ final class Database extends Connection
                 "({$attributes[$key]}) as {$attributes[$key]}";
             }
         }
-
-        // $attributes = self::filterIgnoredTypes($attributes);
 
         return $attributes;
     }
@@ -562,10 +522,7 @@ final class Database extends Connection
 
     public static function filterIgnoredTypes(array $attributes, array $attributesTypes): array
     {
-        // var_dump($attributesTypes);
-        // die();
         return array_filter($attributes, fn($key) => !isset($attributesTypes[$key]) || (!stristr($attributesTypes[$key], "ignore") && $attributesTypes[$key] !== null));
-        // return array_filter($attributesTypes, fn($key, $types) => !stristr($types, "ignore") && $types !== null);
     }
 
 }

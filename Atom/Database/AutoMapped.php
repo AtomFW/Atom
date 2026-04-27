@@ -29,6 +29,12 @@ class AutoMapped
                 $valueParameter = (float)$valueParameter;
             }
         }
+        if (substr_count($type, "\\") >= 3) {
+            if (class_exists($type)) {
+                $class = new $type();
+                $type = "class";
+            }
+        }
 
         return match($type) {
             'datetime'      => Atom::$app->datetime->atom($value),
@@ -38,11 +44,9 @@ class AutoMapped
             'json'          => json_decode($value, true),
             'stringJson'    => json_decode($value),
             'decimal'       => number_format((float)$value, (int)$valueParameter),
-            // 'decimal:2' => number_format($value, 2),
-            // 'decimal:3' => number_format($value, 2),
-            // 'decimal:4' => number_format($value, 4),
             'point', 'location', 'gps' => new Point((float)$latitude, (float)$longitude),
             'uuid'          => vsprintf('%s-%s-%s-%s-%s', unpack('H8a/H4b/H4c/H4d/H12e', $value)),
+            'class' => $class->toPHP($value),
             default    => $value
         };
     }
@@ -55,29 +59,23 @@ class AutoMapped
      * @return mixed The value after being processed or converted according to the specified type.
      */
     public static function mapValueFromPHP(int|string $value, string $type) {
-        if ($type == ["point", 'location', 'gps']) {
+        if (\in_array($type, ['point', 'location', 'gps'])) {
             sscanf($value, "POINT(%f %f)", $longitude, $latitude);
         }
-        // if (strstr($value, ":") && (substr_count($value, ":") === 1)) {
-        //     [$value, $valueParameter] = explode(":", $value);
-        //     if (\intval($valueParameter)) {
-        //         $valueParameter = (int)$valueParameter;
-        //     }
-        //     if (\floatval($valueParameter)) {
-        //         $valueParameter = (float)$valueParameter;
-        //     }
-        // }
+        if (substr_count($type, "\\") >= 3) {
+            if (class_exists($type)) {
+                $class = new $type();
+                $type = "class";
+            }
+        }
 
         return match($type) {
             'datetime','date', 'time' => Atom::$app->datetime->toSQL($value),
             'json'          => json_encode($value),
-            // 'decimal'       => number_format($value, (int)$valueParameter),
-            // 'decimal:2' => number_format($value, 2),
-            // 'decimal:3' => number_format($value, 2),
-            // 'decimal:4' => number_format($value, 4),
             'point', 'location', 'gps' => new Point((float)$latitude, (float)$longitude),
             'raw_point', 'raw_location', 'raw_gps' => (object)$value,
             'uuid'          => str_replace('-', "", pack('H8a/H4b/H4c/H4d/H12e', $value)),
+            'class' => $class->toSQL($value),
             default    => $value
         };
     }

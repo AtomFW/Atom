@@ -1,9 +1,15 @@
 <?php
 
+declare(strict_types=1);
+
 namespace Atom\DataBase;
 
 use Atom\Atom;
 use Atom\Model;
+use Atom\Types\Point;
+use stdClass;
+use Atom\Structure\Cast;
+use Carbon\Carbon;
 
 /**
  * Base Active Record-like model for DB-backed entities.
@@ -18,11 +24,16 @@ abstract class DbModel extends Model
     abstract public static function tableName(): string;
 
     /**
-     * Schema definition or list of columns for the table.
+     * Returns an array of column names mapped to their respective
+     * database data types.
+     *
+     * For example, if a column is a datetime, the value should be
+     * 'datetime'. If the column is a boolean, the value should be
+     * 'boolean'.
      *
      * @return array
      */
-    abstract public static function tableKeys(): array;
+    abstract public static function attributesTypes(): array;
 
     /**
      * Returns the primary key column name.
@@ -39,17 +50,24 @@ abstract class DbModel extends Model
      *
      * @return bool True on successful execution.
      */
-    public function save()
+    public function save(): bool
     {
         $tableName = $this->tableName();
         $attributes = $this->attributes();
-        $params = array_map(fn($attr) => ":$attr", $attributes);
-        $statement = self::prepare("INSERT INTO $tableName (" . implode(",", $attributes) . ") 
-                VALUES (" . implode(",", $params) . ")");
-        foreach ($attributes as $attribute) {
-            $statement->bindValue(":$attribute", $this->{$attribute});
-        }
-        $statement->execute();
+        $attributesTypes = static::attributesTypes();
+        $attributesTypes = Atom::$app->db::prioritizeTheMoppingArrayOfTypes($attributesTypes, true);
+        $attributesKeys = Atom::$app->db->resolveKeys($attributes);
+        $attributesKeys = Atom::$app->db::filterIgnoredTypes($attributesKeys, $attributesTypes);
+        $propertyToColumnName = Atom::$app->db->propertyToColumnName($attributesKeys);
+        $attributesToBindsProperty = Atom::$app->db->attributesToBindsProperty($propertyToColumnName);
+        $attributesToBindsProperty = Atom::$app->db->mapColumnFromTypes($attributesToBindsProperty, $attributesTypes);
+        $valueToArray = self::bindValuesToKeys($this, $attributesKeys, $attributesTypes);
+        $bindValuesToProperty = Atom::$app->db->bindValuesToProperty($propertyToColumnName, $valueToArray);
+
+        $insert = Atom::$app->db->insertInto($tableName)->values($attributesToBindsProperty)->setParameters($bindValuesToProperty);
+
+        $statement = $insert->executeQuery();
+
         return true;
     }
 
@@ -61,89 +79,146 @@ abstract class DbModel extends Model
      */
     public static function prepare($sql): \PDOStatement
     {
-        return Atom::$app->db->prepare($sql);
+        return Atom::$app->db->pdo->prepare($sql);
     }
 
     /**
      * Fetch a single record by conditions and map it to the current subclass.
      *
      * @param array $where Associative array of column => value filters.
-     * @param bool|null $autoLoadKeysOrAutoRenameKeysFromTable Controls field selection/renaming.
-     * @return static|null Instance of the model or null if not found.
+     * @return static|false Instance of the model or null if not found.
      */
-    public static function findOne($where, bool|null $autoLoadKeysOrAutoRenameKeysFromTable = true)
+    public static function findOne(array $where/* , ?array $select */): static|false
     {
+
         $tableName = static::tableName();
         $attributes = array_keys($where);
-        $sql = implode("AND", array_map(fn($attr) => "$attr = :$attr", $attributes));
-        $tableKey = "*";
-        if ($autoLoadKeysOrAutoRenameKeysFromTable !== null) {
-            if ($autoLoadKeysOrAutoRenameKeysFromTable === true) {
-                $tableKey = self::buildAutoTranslatedTableKeys(static::tableKeys(), true);
-            } else {
-                $tableKey = self::buildAutoTranslatedTableKeys(static::tableKeys(), false);
+        $select = static::attributes();
+
+        if ($select) {
+            $attributesTypes = static::attributesTypes();
+            $attributesTypes = Atom::$app->db::prioritizeTheMoppingArrayOfTypes($attributesTypes);
+            $attributesTypes = Atom::$app->db::filterIgnoredTypes($attributes, $attributesTypes);
+            $selectAttributes = Atom::$app->db->resolveKeys($select);
+            $selectAttributesToColumnName = Atom::$app->db->propertyToColumnName($selectAttributes);
+            $selectAttributes = Atom::$app->db->mapColumnFromTypes($selectAttributesToColumnName, $attributesTypes);
+        }
+
+        $attributesKeys = Atom::$app->db->resolveKeys($attributes);
+        $propertyToColumnName = Atom::$app->db->propertyToColumnName($attributesKeys);
+        
+        $bindValuesToProperty = Atom::$app->db->bindValuesToProperty($propertyToColumnName, $where);
+
+        if (isset($selectAttributes)) {
+            $select = Atom::$app->db->selectFrom($tableName, $selectAttributes);
+        } else {
+            $select = Atom::$app->db->selectFrom($tableName);
+        }
+
+        $select = Atom::$app->db->attributesToAutoBindsComparisonsProperty($select, $propertyToColumnName);
+
+        $select->setParameters($bindValuesToProperty);
+
+        $result = $select->executeQuery();
+
+        $data = $result->fetchAssociative();
+
+        if ($data) {
+            if (isset($selectAttributesToColumnName)) {
+                $temp = [];
+                foreach ($selectAttributesToColumnName as $key => $value) {
+                    $temp[$key] = $data[$value];
+                }
+                $data = $temp;
+            }
+
+            $data = Atom::$app->db->columnNameToProperty($data);
+
+            $data = self::bindDataToStaticClass($data);
+        }
+
+        return $data;
+    }
+    private static function bindValuesToKeys(object $modelClass, array $classProperty, array $attributesTypes)
+    {
+        $temp = [];
+
+        if ($attributesTypes && \count($attributesTypes) > 0) {
+            foreach ($attributesTypes as $key => $value) {
+                if (isset($modelClass->{$key})) {
+                    $modelClass->{$key} = AutoMapped::mapValueFromPHP($modelClass->{$key}, $value);
+                }
+
             }
         }
 
-        $statement = self::prepare("SELECT $tableKey FROM $tableName WHERE $sql");
+        $reflection = new \ReflectionClass(static::class);
 
-        foreach ($where as $key => $item) {
-            $statement->bindValue(":$key", $item);
-        }
+        foreach ($classProperty as $key => $value) {
+            if ($reflection->hasProperty($key)) {
+                $prop = $reflection->getProperty($key);
+                // Check if exist attribute #[Cast]
+                $attributes = $prop->getAttributes();
+                foreach ($attributes as $attr) {
+                    // We check by name (string), not by class
+                    if (str_ends_with($attr->getName(), 'Cast')) {
+                        // Returns an array of arguments given in #[Cast('this_is_argument')]
+                        $arguments = $attr->getArguments();
+                        $castType = \count($arguments) > 1 ? $arguments[1] : $arguments[0] ?? null;
 
-        $statement->execute();
-
-        return $statement->fetchObject(static::class);
-    }
-
-    public function getSafeSqlFields(array $tableKeys, bool $autoVerifyKeys = true): string
-    {
-        return self::buildAutoTranslatedTableKeys($tableKeys, $autoVerifyKeys);
-    }
-
-
-
-    protected static function getMappedDBKeys(array $tableKeys, bool $autoRestrict = true): array
-    {
-        $classProps = [];
-        // if ($autoRestrict) $classProps = array_keys(get_class_vars(static::class)); //in_array
-        if ($autoRestrict) {
-            $classProps = array_flip(array_keys(get_class_vars(static::class)));
-        }
-
-        $mapped = [];
-
-        foreach ($tableKeys as $key => $value) {
-            $dbColumn = is_int($key) ? $value : $key;
-            // if ($autoRestrict && !in_array($propName, $classProps)) continue;
-            // if ($autoRestrict && !array_key_exists($propName, $classProps)) continue;
-            if ($autoRestrict && !isset($classProps[$value])) {
-                continue;
+                        if ($castType && $modelClass->{$key}) {
+                            $modelClass->{$key} = AutoMapped::mapValueFromPHP($modelClass->{$key}, $castType);
+                        }
+                    }
+                }
             }
-            // 1. in_array() (Linear search) : 0.0045 ms string(24) "firstname,email,password"
-            // 2. array_key_exists() (Linear search) : 0.0038 ms string(24) "firstname,email,password"
-            // 3. isset() (Linear search) : 0.0035 ms string(24) "firstname,email,password"
-
-            $mapped[$dbColumn] = $value;
         }
 
-        return $mapped;
+        foreach ($classProperty as $key => $value) {
+            if (isset($modelClass->{$key})) {
+                $temp[$key] = $modelClass->{$key};
+            }
+        }
+
+        return $temp;
     }
 
-    protected static function buildAutoTranslatedTableKeys(array $tableKeys, bool $autoRestrict = true): string
+    private static function bindDataToStaticClass(array $data, bool $autoRestrict = true): static
     {
-        $fields = self::getMappedDBKeys($tableKeys, $autoRestrict);
-        $queryParts = [];
-
-        foreach ($fields as $dbCol => $propName) {
-            if ($dbCol === $propName) {
-                $queryParts[] = "`$dbCol`";
-                continue;
+        if (!$autoRestrict) {
+            $static = new static(); 
+            foreach ($data as $key => $value) {
+                $static->$key = $value;
             }
-
-            $queryParts[] = "`$dbCol`AS`$propName`";
+            return $static;
         }
 
-        return implode(',', $queryParts);
+        $attributesTypes = static::attributesTypes();
+
+        $reflection = new \ReflectionClass(static::class);
+        $static = new static();
+
+        foreach ($data as $key => $value) {
+            if ($reflection->hasProperty($key)) {
+            $prop = $reflection->getProperty($key);
+                // Check if Attribute #[Cast] is present
+                $attributes = $prop->getAttributes();
+                foreach ($attributes as $attr) {
+                    // We check by name (string), not by class
+                    if (str_ends_with($attr->getName(), 'Cast')) {
+                        // Returns an array of arguments given in #[Cast('this_is_argument')]
+                        $arguments = $attr->getArguments();
+                        $castType = $arguments[0] ?? null;
+                        if ($castType) {
+                            $value = AutoMapped::mapValueFromDB($value, $castType);
+                        }
+                    }
+                }
+
+                $prop->setValue($static, $value);
+            }
+        }
+
+        return $static;
     }
 }

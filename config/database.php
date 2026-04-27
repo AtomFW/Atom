@@ -1,5 +1,7 @@
 <?php
 
+use Pdo\Mysql;
+
 /**
  * Szablon konfiguracji bazy danych
  */
@@ -33,24 +35,28 @@ return [
             'dbname'   => env('DB_DATABASE', 'Atom'),
             'user'     => env('DB_USERNAME', 'root'),
             'password' => env('DB_PASSWORD', ''),
-            'charset'  => env('DB_CHARSET', 'utf8mb4'), //'utf8mb4',
+            'charset'  => env('DB_CHARSET', 'utf8mb4'),
             'prefix'   => env('DB_PREFIX', ''),
 
-            // Opcje specyficzne dla PDO (Przyszłościowe)
+            // PDO-specific options
             'options'  => [
-                // Zgłaszanie wyjątków zamiast błędów cichych
+                // Throwing exceptions instead of silent errors
                 PDO::ATTR_ERRMODE            => env('DB_ERRMODE', PDO::ERRMODE_EXCEPTION),
-                // Format zwracania danych (domyślnie tablica asocjacyjna)
+                // Data return format (associative array by default)
                 PDO::ATTR_DEFAULT_FETCH_MODE => env('DB_DEFAULT_FETCH_MODE', PDO::FETCH_ASSOC),
-                // Wyłączenie emulacji przygotowanych zapytań (bezpieczeństwo)
+                // Disabling emulation of prepared queries
                 PDO::ATTR_EMULATE_PREPARES   => env('DB_EMULATE_PREPARES', false),
-                // Trwałe połączenie (opcjonalnie)
+                // Permanent connection
                 PDO::ATTR_PERSISTENT         => env('DB_PERSISTENT', false),
+                // Exception mode
+                // PDO::ERRMODE_EXCEPTION       => env('DB_ERRMODE_EXCEPTION', false),
+                Mysql::ATTR_INIT_COMMAND => 'SET NAMES '. env('DB_CHARSET', 'utf8mb4') .', time_zone = \'+00:00\'',
             ],
 
-            // Ustawienia dodatkowe (np. dla migracji lub cache)
+            // Additional settings (e.g. for migration or cache)
             'engine'    => 'InnoDB',
             'collation' => env('DB_COLLATION', 'utf8mb4_0900_ai_ci'),
+            'version'   => env('DB_VERSION', '9.6'),
             'cluster'   => env('DB_CLUSTER', false),
             'atom_replication' => env('DB_ATOM_REPLICATION', false),
         ],

@@ -88,23 +88,24 @@ abstract class DbModel extends Model
      * @param array $where Associative array of column => value filters.
      * @return static|false Instance of the model or null if not found.
      */
-    public static function findOne(array $where/* , ?array $select */): static|false
+    public static function findOne(array $where): static|false
     {
 
         $tableName = static::tableName();
         $attributes = array_keys($where);
         $select = static::attributes();
 
+        $attributesKeys = Atom::$app->db->resolveKeys($attributes);
+
         if ($select) {
             $attributesTypes = static::attributesTypes();
             $attributesTypes = Atom::$app->db::prioritizeTheMoppingArrayOfTypes($attributesTypes);
-            $attributesTypes = Atom::$app->db::filterIgnoredTypes($attributes, $attributesTypes);
+            $attributesTypes = Atom::$app->db::filterIgnoredTypes($attributesKeys, $attributesTypes);
             $selectAttributes = Atom::$app->db->resolveKeys($select);
             $selectAttributesToColumnName = Atom::$app->db->propertyToColumnName($selectAttributes);
             $selectAttributes = Atom::$app->db->mapColumnFromTypes($selectAttributesToColumnName, $attributesTypes);
         }
 
-        $attributesKeys = Atom::$app->db->resolveKeys($attributes);
         $propertyToColumnName = Atom::$app->db->propertyToColumnName($attributesKeys);
         
         $bindValuesToProperty = Atom::$app->db->bindValuesToProperty($propertyToColumnName, $where);
@@ -134,7 +135,7 @@ abstract class DbModel extends Model
 
             $data = Atom::$app->db->columnNameToProperty($data);
 
-            $data = self::bindDataToStaticClass($data);
+            $data = self::bindDataToStaticClass($data, $attributesTypes ?? null);
         }
 
         return $data;
@@ -183,7 +184,7 @@ abstract class DbModel extends Model
         return $temp;
     }
 
-    private static function bindDataToStaticClass(array $data, bool $autoRestrict = true): static
+    private static function bindDataToStaticClass(array $data, ?array $attributesTypes, bool $autoRestrict = true): static
     {
         if (!$autoRestrict) {
             $static = new static(); 
@@ -193,16 +194,41 @@ abstract class DbModel extends Model
             return $static;
         }
 
-        $attributesTypes = static::attributesTypes();
-
         $reflection = new \ReflectionClass(static::class);
         $static = new static();
 
+        if ($data && \is_array($data) && \is_array($attributesTypes) && \count($attributesTypes) > 0) {
+            $static = new static(); 
+            foreach ($data as $key => $value) {
+                if (isset($attributesTypes[$key])) {
+                    $newValue = AutoMapped::mapValueFromDB($data[$key], $attributesTypes[$key]);
+                    $static->$key = $newValue;
+                    continue;
+                }
+
+                if ($reflection->hasProperty($key)) {
+                    $property = $reflection->getProperty($key);
+                    $type = $property->getType();
+
+                    $typeName = ($type instanceof \ReflectionNamedType) ? $type->getName() : null;
+
+                    $newValue = AutoMapped::mapValueFromDB($data[$key], $typeName);
+                    $static->$key = $newValue;
+                    
+                    continue;
+                }
+
+                $static->$key = $value;
+            }
+
+            return $static;
+        }
+
         foreach ($data as $key => $value) {
             if ($reflection->hasProperty($key)) {
-            $prop = $reflection->getProperty($key);
+                $property = $reflection->getProperty($key);
                 // Check if Attribute #[Cast] is present
-                $attributes = $prop->getAttributes();
+                $attributes = $property->getAttributes();
                 foreach ($attributes as $attr) {
                     // We check by name (string), not by class
                     if (str_ends_with($attr->getName(), 'Cast')) {
@@ -211,12 +237,22 @@ abstract class DbModel extends Model
                         $castType = $arguments[0] ?? null;
                         if ($castType) {
                             $value = AutoMapped::mapValueFromDB($value, $castType);
+                            $property->setValue($static, $value);
+                            continue;
                         }
                     }
                 }
 
-                $prop->setValue($static, $value);
+                $type = $property->getType();
+                $typeName = ($type instanceof \ReflectionNamedType) ? $type->getName() : null;
+
+                $value = AutoMapped::mapValueFromDB($data[$key], $typeName);
+
+                $property->setValue($static, $value);
+                continue;
             }
+
+            $static->$key = $value;
         }
 
         return $static;

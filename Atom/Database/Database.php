@@ -522,7 +522,19 @@ final class Database extends Connection
 
     public static function filterIgnoredTypes(array $attributes, array $attributesTypes): array
     {
-        return array_filter($attributes, fn($key) => !isset($attributesTypes[$key]) || (!stristr($attributesTypes[$key], "ignore") && $attributesTypes[$key] !== null));
+        $temp = array_filter(
+            $attributesTypes,
+            fn($types) =>
+                !stristr($types, "ignore") && $types !== null
+        );
+
+        $attributes = array_filter(
+            $attributes,
+            fn($key) =>
+                !isset($attributesTypes[$key]) || (!stristr($attributesTypes[$key], "ignore") && $attributesTypes[$key] !== null)
+            );
+
+        return \array_merge($temp, $attributes);
     }
 
 }

@@ -12,15 +12,15 @@ class AutoMapped
     /**
      * Maps a value from database to its PHP representation based on type
      *
-     * @param string $value The value as retrieved from the database
+     * @param int|string $value The value as retrieved from the database
      * @param string $type The database column type
      * @return mixed The value properly typed for PHP usage
      */
-    public static function mapValueFromDB(string $value, string $type) {
+    public static function mapValueFromDB(int|string $value, string $type) {
         if ($type == ["point", 'location', 'gps']) {
             \sscanf($value, "POINT(%f %f)", $longitude, $latitude);
         }
-        if (strstr($value, ":") && (substr_count($value, ":") === 1)) {
+        if (strstr((string)$value, ":") && (substr_count($value, ":") === 1)) {
             [$value, $valueParameter] = explode(":", $value);
             if (\intval($valueParameter)) {
                 $valueParameter = (int)$valueParameter;
@@ -37,6 +37,13 @@ class AutoMapped
         }
 
         return match($type) {
+            'int'           => (int)$value,
+            'float'         => (float)$value,
+            'boolean'       => (bool)$value,
+            'string'        => (string)$value,
+            'array'         => (array)$value,
+            'object'        => (object)$value,
+            'null'          => null,
             'datetime'      => Atom::$app->datetime->atom($value),
             'date'          => Atom::$app->datetime->atomDate($value),
             'time'          => Atom::$app->datetime->atomTime($value),

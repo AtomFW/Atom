@@ -6,9 +6,9 @@ namespace Atom\form;
 
 use Atom\Model;
 
-class TextareaField extends BaseField
+class SelectField extends BaseField
 {
-    public const TYPE_TEXTAREA = 'textarea';
+    public const TYPE_SELECT = 'select';
 
     /**
      * Field constructor.
@@ -18,7 +18,7 @@ class TextareaField extends BaseField
      */
     public function __construct(Model $model, string $attribute)
     {
-        $this->type = self::TYPE_TEXTAREA;
+        $this->type = self::TYPE_SELECT;
         parent::__construct($model, $attribute);
     }
 
@@ -33,13 +33,33 @@ class TextareaField extends BaseField
         $inputValue = $this->model->{$this->attribute};
         if ($valueAttrubute && empty($inputValue)) $inputValue = $valueAttrubute;
 
-        return \sprintf('<%s class="form-control%s" name="%s" %s>%s</%s>',
+        $option = $this->model->getOptionSelects($this->attribute) ?? '';
+        if ($option) {
+            $option = $this->options($option);
+        }
+
+        return \sprintf('<%s class="form-control%s" name="%s" value="%s" %s>%s</%s>',
             $this->type,
             $inputClass,
             $this->attribute,
-            $this->model->property($this->attribute),
             $inputValue,
+            $this->model->property($this->attribute),
+            $option,
             $this->type
         );
+    }
+
+    public function options(array $options): string
+    {
+        $temp = '';
+
+        foreach ($options as $key => $value) {
+            $val = \is_array($value) ? $value[0] : $value;
+            $attribute = \is_array($value) && isset($value[1]) ? $value[1] : '';
+
+            $temp .= \sprintf('<option value="%s" %s>%s</option>', $key, $attribute, $val);
+        }
+
+        return $temp;
     }
 }

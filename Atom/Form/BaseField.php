@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace Atom\form;
 
 use Atom\Model;
@@ -15,7 +17,7 @@ abstract class BaseField
      * Field constructor.
      *
      * @param \Atom\Model $model
-     * @param string          $attribute
+     * @param string $attribute
      */
     public function __construct(Model $model, string $attribute)
     {
@@ -23,16 +25,42 @@ abstract class BaseField
         $this->attribute = $attribute;
     }
 
-    public function __toString()
+    public function __toString(): string
     {
-        return sprintf('<div class="form-group">
-                <label>%s</label>
+        $outerType = $this->model->getInputOuterType();
+        $outerAttrs = $this->model->getInputOuterAttributes();
+        $outerAttrClass = $this->model->getInputOuterAttribute('class');
+        if(!$outerAttrClass) {
+            $outerAttrClass = 'form-group';
+        }
+
+        $innerType = $this->model->getInputInnerType();
+        $innerAttrs = $this->model->getInputInnerAttributes();
+        $innerAttrClass = $this->model->getInputInnerAttribute('class');
+        if($innerAttrClass) {
+           $innerAttrClass = "class=\"{$innerAttrClass}\""; 
+        }
+
+        $targetType = $this->model->getInputTargetType();
+        $targetAttrs = $this->model->getInputTargetAttributes();
+        $targetAttrClass = $this->model->getInputTargetAttribute('class');
+        if(!$targetAttrClass) {
+            $targetAttrClass = 'invalid-feedback';
+        }
+
+        $getLabel = $this->model->getLabel($this->attribute);
+        $label = !empty($getLabel) ? "<{$innerType} {$innerAttrClass} for=\"{$this->attribute}\" {$innerAttrs}>%s</{$innerType}>" : '';
+
+        $scheme = "<{$outerType} class=\"{$outerAttrClass}\" {$outerAttrs}>
+            {$label}
+            %s
+            <{$targetType} class=\"{$targetAttrClass}\" {$targetAttrs}>
                 %s
-                <div class="invalid-feedback">
-                    %s
-                </div>
-            </div>',
-            $this->model->getLabel($this->attribute),
+            </{$targetType}>
+        </{$outerType}>";
+
+        return \sprintf($scheme,
+            $getLabel,
             $this->renderInput(),
             $this->model->getFirstError($this->attribute)
         );

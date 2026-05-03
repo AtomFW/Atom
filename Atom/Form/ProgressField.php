@@ -6,9 +6,9 @@ namespace Atom\form;
 
 use Atom\Model;
 
-class TextareaField extends BaseField
+class ProgressField extends BaseField
 {
-    public const TYPE_TEXTAREA = 'textarea';
+    public const TYPE_PROGRESS = 'progress';
 
     /**
      * Field constructor.
@@ -18,7 +18,7 @@ class TextareaField extends BaseField
      */
     public function __construct(Model $model, string $attribute)
     {
-        $this->type = self::TYPE_TEXTAREA;
+        $this->type = self::TYPE_PROGRESS;
         parent::__construct($model, $attribute);
     }
 
@@ -33,10 +33,11 @@ class TextareaField extends BaseField
         $inputValue = $this->model->{$this->attribute};
         if ($valueAttrubute && empty($inputValue)) $inputValue = $valueAttrubute;
 
-        return \sprintf('<%s class="form-control%s" name="%s" %s>%s</%s>',
-            $this->type,
+        return \sprintf('<%s class="form-control%s" name="%s" value="%s" %s>%s</%s>',
+            $this->type, 
             $inputClass,
             $this->attribute,
+            $inputValue,
             $this->model->property($this->attribute),
             $inputValue,
             $this->type

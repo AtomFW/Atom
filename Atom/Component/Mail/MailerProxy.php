@@ -285,16 +285,11 @@ final class MailerProxy extends PHPMailer
         }
 
         try {
-            $ok = parent::send();
-            if ($ok) {
-                $this->logger->info('Email sent', ['subject' => $this->Subject, 'to' => self::getToAddresses()]);
-            } else {
-                $this->lastError = $this->ErrorInfo;
-                $this->logger->warning('Email not sent', ['error' => $this->lastError]);
-            }
-            return (bool)$ok;
+            parent::send();
+            return true;
         } catch (PHPMailerException $e) {
             $this->lastError = $e->getMessage();
+            $this->logger->warning('Email not sent', ['error' => $this->lastError]);
             $this->logger->error('PHPMailer exception on send', ['exception' => $e]);
             return false;
         } catch (\Throwable $e) {
@@ -354,6 +349,8 @@ final class MailerProxy extends PHPMailer
 
         if ($alt !== null) {
             $this->AltBody = $alt;
+        } else {
+            $this->AltBody = strip_tags($html);
         }
 
         if ($addReplyTo !== null) {

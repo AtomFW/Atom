@@ -27,6 +27,13 @@ $app->router->get('/newatom/public/contact', [SiteController::class, 'contact'])
 $app->router->get('/newatom/public/about', [AboutController::class, 'index']);
 $app->router->get('/newatom/public/profile', [SiteController::class, 'profile']);
 $app->router->get('/newatom/public/profile/{id:\d+}/{username}', [SiteController::class, 'login']);
+$app->router->get('/newatom/public/uploads', [SiteController::class, 'uploads']);
+$app->router->get('/newatom/public/uploadsMulti', [SiteController::class, 'uploadsMulti']);
+$app->router->post('/newatom/public/atpi/upload/', [SiteController::class, 'upload']);
+$app->router->post('/newatom/public/atpi/uploadMulti/', [SiteController::class, 'uploadMulti']);
+$app->router->post('/newatom/public/atpi/subscribe/', [SiteController::class, 'subscribe']);
+$app->router->post('/newatom/public/atpi/push/', [SiteController::class, 'push']);
+$app->router->get('/newatom/public/webPush', [SiteController::class, 'webPush']);
 
 // /profile/{id}
 // /profile/13

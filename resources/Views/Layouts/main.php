@@ -32,6 +32,18 @@
                         <li>
                             <a class="nav-link" href="<?php echo Atom::$ROOT_URI ?>/public/about">About</a>
                         </li>
+                        
+                        <li>
+                            <a class="nav-link" href="<?php echo Atom::$ROOT_URI ?>/public/uploads">upload</a>
+                        </li>
+
+                        <li>
+                            <a class="nav-link" href="<?php echo Atom::$ROOT_URI ?>/public/uploadsMulti">upload Multi</a>
+                        </li>
+                        
+                        <li>
+                            <a class="nav-link" href="<?php echo Atom::$ROOT_URI ?>/public/webPush">web Push</a>
+                        </li>
                     </ol>
                 </section>
             </section>

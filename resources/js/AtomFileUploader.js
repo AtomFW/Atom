@@ -690,7 +690,7 @@ class AtomFileUploader {
     }
 
     _normalizeAjaxError(err) {
-        if (!err) return 'Nieznany błąd.';
+        if (!err) return 'Unknown error.';
         if (typeof err === 'string') return err;
         if (err.error) return String(err.error);
         if (err.status === 'abort') return 'The request was aborted.';

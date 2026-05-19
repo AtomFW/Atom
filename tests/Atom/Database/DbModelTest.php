@@ -1,8 +1,10 @@
 <?php
 
-use PHPUnit\Framework\TestCase;
+declare(strict_types=1);
 
-require_once __DIR__ . '/../../../autoload.php';
+namespace Tests\Atom\Database;
+
+use PHPUnit\Framework\TestCase;
 
 use Atom\Atom;
 use Atom\DataBase\DbModel;

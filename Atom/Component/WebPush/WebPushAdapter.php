@@ -20,22 +20,44 @@ final class WebPushAdapter
 {
     private NativeWebPush $inner;
 
+    /**
+     * Create a new notification service instance
+     * 
+     * @param mixed ...$args Arguments to pass to the native web push constructor
+     */
     public function __construct(...$args)
     {
         $this->inner = new NativeWebPush(...$args);
     }
 
+    /**
+     * Get the inner native web push instance
+     * 
+     * @return NativeWebPush The native web push instance
+     */
     public function getInner(): NativeWebPush
     {
         return $this->inner;
     }
 
+    /**
+     * Set default options for all notifications sent by this service
+     * 
+     * @param array $defaultOptions The default options to use
+     * @return self Fluent interface for method chaining
+     */
     public function setDefaultOptions(array $defaultOptions): self
     {
         $this->inner->setDefaultOptions($defaultOptions);
         return $this;
     }
 
+    /**
+     * Set whether VAPID headers should be reused for multiple notifications
+     * 
+     * @param bool $reuse Whether to reuse VAPID headers (defaults to true)
+     * @return self Fluent interface for method chaining
+     */
     public function setReuseVAPIDHeaders(bool $reuse = true): self
     {
         $this->inner->setReuseVAPIDHeaders($reuse);
@@ -44,6 +66,10 @@ final class WebPushAdapter
 
     /**
      * Accepts bool or int just like the library's automatic padding concept.
+     * Set whether automatic padding should be applied to notifications
+     * 
+     * @param bool|int $automaticPadding Whether to enable automatic padding (true/false or 1/0)
+     * @return self Fluent interface for method chaining
      */
     public function setAutomaticPadding(bool|int $automaticPadding): self
     {
@@ -51,12 +77,27 @@ final class WebPushAdapter
         return $this;
     }
 
+    /**
+     * Queue a notification for delivery to a subscription
+     * 
+     * @param Subscription $subscription The subscription to send notification to
+     * @param string|null $payload The notification payload to queue (null means use default)
+     * @return self Fluent interface for method chaining
+     */
     public function queueNotification(Subscription $subscription, ?string $payload = null): self
     {
         $this->inner->queueNotification($subscription, $payload);
         return $this;
     }
 
+    /**
+     * Send a single notification to a subscription
+     * 
+     * @param Subscription $subscription The subscription to send notification to
+     * @param string|null $payload The notification payload to send (null means use default)
+     * @param array $options Additional options for sending the notification
+     * @return MessageSentReport Report of the message delivery
+     */
     public function sendOneNotification(
         Subscription $subscription,
         ?string $payload = null,
@@ -65,6 +106,12 @@ final class WebPushAdapter
         return $this->inner->sendOneNotification($subscription, $payload, $options);
     }
 
+    /**
+     * Flush the notification queue with optional batch processing
+     * 
+     * @param int|null $batchSize The maximum number of notifications to process in this batch (null for all)
+     * @return \Generator Generator that yields processed notifications
+     */
     public function flush(?int $batchSize = null): \Generator
     {
         return $batchSize === null
@@ -72,6 +119,12 @@ final class WebPushAdapter
             : $this->inner->flush($batchSize);
     }
 
+    /**
+     * Flush the pooled notification queue with optional batch processing
+     * 
+     * @param int|null $batchSize The maximum number of notifications to process in this batch (null for all)
+     * @return \Generator Generator that yields processed notifications
+     */
     public function flushPooled(?int $batchSize = null): \Generator
     {
         return $batchSize === null
@@ -79,6 +132,13 @@ final class WebPushAdapter
             : $this->inner->flushPooled($batchSize);
     }
 
+    /**
+     * Dynamically call methods on the inner notification service
+     * 
+     * @param string $name The name of the method to call
+     * @param array $arguments The arguments to pass to the method
+     * @return mixed The result of the method call
+     */
     public function __call(string $name, array $arguments): mixed
     {
         if (!method_exists($this->inner, $name)) {
@@ -88,6 +148,12 @@ final class WebPushAdapter
         return $this->inner->{$name}(...$arguments);
     }
 
+    /**
+     * Create a new subscription with the given data
+     * 
+     * @param array $data The subscription data
+     * @return Subscription The created subscription
+     */
     public static function subscription(array $data): Subscription
     {
         return Subscription::create($data);
@@ -103,6 +169,14 @@ final class WebPushAdapter
         return VAPID::createVapidKeys();
     }
 
+    /**
+     * Build a basic text notification payload
+     * 
+     * @param string $title The title of the notification
+     * @param string $body The main content of the notification
+     * @param array $extra Additional fields to include in the payload
+     * @return string JSON encoded payload
+     */
     public static function payloadText(string $title, string $body, array $extra = []): string
     {
         return self::encodePayload(\array_merge([
@@ -112,6 +186,15 @@ final class WebPushAdapter
         ], $extra));
     }
 
+    /**
+     * Build a text notification with description payload
+     * 
+     * @param string $title The title of the notification
+     * @param string $body The main content of the notification
+     * @param string $description The description text
+     * @param array $extra Additional fields to include in the payload
+     * @return string JSON encoded payload
+     */
     public static function payloadTextWithDescription(
         string $title,
         string $body,
@@ -126,6 +209,16 @@ final class WebPushAdapter
         ], $extra));
     }
 
+    /**
+     * Build a text notification with URL payload
+     * 
+     * @param string $title The title of the notification
+     * @param string $body The main content of the notification
+     * @param string $url The URL to open when clicked
+     * @param string|null $description Optional description text
+     * @param array $extra Additional fields to include in the payload
+     * @return string JSON encoded payload
+     */
     public static function payloadTextWithUrl(
         string $title,
         string $body,
@@ -142,6 +235,15 @@ final class WebPushAdapter
         ], $extra));
     }
 
+    /**
+     * Build an image + text notification payload
+     * 
+     * @param string $title The title of the notification
+     * @param string $body The main content of the notification
+     * @param string $imageUrl The URL of the image to display
+     * @param array $extra Additional fields to include in the payload
+     * @return string JSON encoded payload
+     */
     public static function payloadImageText(
         string $title,
         string $body,
@@ -156,6 +258,12 @@ final class WebPushAdapter
         ], $extra));
     }
 
+    /**
+     * Build a rich notification payload with custom data
+     * 
+     * @param array $data The custom data for the rich notification
+     * @return string JSON encoded payload
+     */
     public static function payloadRich(array $data): string
     {
         return self::encodePayload(array_merge([
@@ -163,11 +271,30 @@ final class WebPushAdapter
         ], $data));
     }
 
+    /**
+     * Queue a text-only notification
+     * 
+     * @param Subscription $subscription The subscription to send notification to
+     * @param string $title The title of the notification
+     * @param string $body The main content of the notification
+     * @param array $extra Additional fields to include in the payload
+     * @return self Fluent interface for method chaining
+     */
     public function queueText(Subscription $subscription, string $title, string $body, array $extra = []): self
     {
         return $this->queueNotification($subscription, self::payloadText($title, $body, $extra));
     }
 
+    /**
+     * Queue a text notification with description
+     * 
+     * @param Subscription $subscription The subscription to send notification to
+     * @param string $title The title of the notification
+     * @param string $body The main content of the notification
+     * @param string $description The description text
+     * @param array $extra Additional fields to include in the payload
+     * @return self Fluent interface for method chaining
+     */
     public function queueTextWithDescription(
         Subscription $subscription,
         string $title,
@@ -181,6 +308,17 @@ final class WebPushAdapter
         );
     }
 
+    /**
+     * Queue a text notification with URL
+     * 
+     * @param Subscription $subscription The subscription to send notification to
+     * @param string $title The title of the notification
+     * @param string $body The main content of the notification
+     * @param string $url The URL to open when clicked
+     * @param string|null $description Optional description text
+     * @param array $extra Additional fields to include in the payload
+     * @return self Fluent interface for method chaining
+     */
     public function queueTextWithUrl(
         Subscription $subscription,
         string $title,
@@ -195,6 +333,16 @@ final class WebPushAdapter
         );
     }
 
+    /**
+     * Queue an image + text notification
+     * 
+     * @param Subscription $subscription The subscription to send notification to
+     * @param string $title The title of the notification
+     * @param string $body The main content of the notification
+     * @param string $imageUrl The URL of the image to display
+     * @param array $extra Additional fields to include in the payload
+     * @return self Fluent interface for method chaining
+     */
     public function queueImageText(
         Subscription $subscription,
         string $title,
@@ -208,6 +356,16 @@ final class WebPushAdapter
         );
     }
 
+    /**
+     * Send a text-only notification
+     * 
+     * @param Subscription $subscription The subscription to send notification to
+     * @param string $title The title of the notification
+     * @param string $body The main content of the notification
+     * @param array $extra Additional fields to include in the payload
+     * @param array $options Optional configuration for sending
+     * @return MessageSentReport Report of the message delivery
+     */
     public function sendText(
         Subscription $subscription,
         string $title,
@@ -218,6 +376,17 @@ final class WebPushAdapter
         return $this->sendOneNotification($subscription, self::payloadText($title, $body, $extra), $options);
     }
 
+    /**
+     * Send a text notification with description
+     * 
+     * @param Subscription $subscription The subscription to send notification to
+     * @param string $title The title of the notification
+     * @param string $body The main content of the notification
+     * @param string $description The description text
+     * @param array $extra Additional fields to include in the payload
+     * @param array $options Optional configuration for sending
+     * @return MessageSentReport Report of the message delivery
+     */
     public function sendTextWithDescription(
         Subscription $subscription,
         string $title,
@@ -233,6 +402,18 @@ final class WebPushAdapter
         );
     }
 
+    /**
+     * Send a text notification with URL
+     * 
+     * @param Subscription $subscription The subscription to send notification to
+     * @param string $title The title of the notification
+     * @param string $body The main content of the notification
+     * @param string $url The URL to open when clicked
+     * @param string|null $description Optional description text
+     * @param array $extra Additional fields to include in the payload
+     * @param array $options Optional configuration for sending
+     * @return MessageSentReport Report of the message delivery
+     */
     public function sendTextWithUrl(
         Subscription $subscription,
         string $title,
@@ -249,6 +430,17 @@ final class WebPushAdapter
         );
     }
 
+    /**
+     * Send an image + text notification
+     * 
+     * @param Subscription $subscription The subscription to send notification to
+     * @param string $title The title of the notification
+     * @param string $body The main content of the notification
+     * @param string $imageUrl The URL of the image to display
+     * @param array $extra Additional fields to include in the payload
+     * @param array $options Optional configuration for sending
+     * @return MessageSentReport Report of the message delivery
+     */
     public function sendImageText(
         Subscription $subscription,
         string $title,
@@ -264,6 +456,12 @@ final class WebPushAdapter
         );
     }
 
+    /**
+     * Encode payload data into JSON string with error handling
+     * 
+     * @param array $data The data to encode
+     * @return string JSON encoded string
+     */
     private static function encodePayload(array $data): string
     {
         try {
@@ -276,6 +474,15 @@ final class WebPushAdapter
         }
     }
 
+    /**
+     * Build a success notification payload
+     * 
+     * @param string $title The title of the notification
+     * @param string $body The main content of the notification
+     * @param string|null $url Optional URL to open when clicked
+     * @param array $extra Additional fields to include in the payload
+     * @return string JSON encoded payload
+     */
     public static function payloadSuccess(
         string $title,
         string $body,
@@ -294,6 +501,15 @@ final class WebPushAdapter
         ], $extra));
     }
 
+    /**
+     * Build a warning notification payload
+     * 
+     * @param string $title The title of the notification
+     * @param string $body The main content of the notification
+     * @param string|null $url Optional URL to open when clicked
+     * @param array $extra Additional fields to include in the payload
+     * @return string JSON encoded payload
+     */
     public static function payloadWarning(
         string $title,
         string $body,
@@ -312,6 +528,19 @@ final class WebPushAdapter
         ], $extra));
     }
 
+    /**
+     * Payload builder for error notifications.
+     * 
+     * This method creates a JSON payload specifically designed for error notifications.
+     * It extends the base notification structure with error-specific fields and default values,
+     * making it suitable for system alerts, error reporting, or user-facing error messages.
+     * 
+     * @param string $title The title of the error notification
+     * @param string $body The main content/message of the error
+     * @param string|null $url Optional URL to open when the notification is clicked (e.g., error details page)
+     * @param array $extra Additional fields to include in the payload
+     * @return string JSON encoded payload string ready for transmission
+     */
     public static function payloadError(
         string $title,
         string $body,
@@ -330,13 +559,22 @@ final class WebPushAdapter
         ], $extra));
     }
 
+    /**
+     * Build a system notification payload
+     * 
+     * @param string $title The title of the notification
+     * @param string $body The main content of the notification
+     * @param string|null $url Optional URL to open when clicked
+     * @param array $extra Additional fields to include in the payload
+     * @return string JSON encoded payload
+     */
     public static function payloadSystem(
         string $title,
         string $body,
         ?string $url = null,
         array $extra = []
     ): string {
-        return self::encodePayload(array_merge([
+        return self::encodePayload(\array_merge([
             'type' => 'system',
             'title' => $title,
             'body' => $body,
@@ -349,13 +587,22 @@ final class WebPushAdapter
         ], $extra));
     }
 
+    /**
+     * Build a marketing notification payload
+     * 
+     * @param string $title The title of the notification
+     * @param string $body The main content of the notification
+     * @param string|null $url Optional URL to open when clicked
+     * @param array $extra Additional fields to include in the payload
+     * @return string JSON encoded payload
+     */
     public static function payloadMarketing(
         string $title,
         string $body,
         ?string $url = null,
         array $extra = []
     ): string {
-        return self::encodePayload(array_merge([
+        return self::encodePayload(\array_merge([
             'type' => 'marketing',
             'title' => $title,
             'body' => $body,
@@ -369,13 +616,22 @@ final class WebPushAdapter
         ], $extra));
     }
 
+    /**
+     * Build a chat message notification payload
+     * 
+     * @param string $title The title of the notification
+     * @param string $body The main content of the notification
+     * @param string|null $url Optional URL to open when clicked
+     * @param array $extra Additional fields to include in the payload
+     * @return string JSON encoded payload
+     */
     public static function payloadChatMessage(
         string $title,
         string $body,
         ?string $url = null,
         array $extra = []
     ): string {
-        return self::encodePayload(array_merge([
+        return self::encodePayload(\array_merge([
             'type' => 'chat_message',
             'title' => $title,
             'body' => $body,
@@ -389,6 +645,16 @@ final class WebPushAdapter
         ], $extra));
     }
 
+    /**
+     * Build an order status change notification payload
+     * 
+     * @param string $orderId The order identifier
+     * @param string $oldStatus The previous order status
+     * @param string $newStatus The new order status
+     * @param string|null $url Optional URL to open when clicked
+     * @param array $extra Additional fields to include in the payload
+     * @return string JSON encoded payload
+     */
     public static function payloadOrderStatusChanged(
         string $orderId,
         string $oldStatus,
@@ -396,7 +662,7 @@ final class WebPushAdapter
         ?string $url = null,
         array $extra = []
     ): string {
-        return self::encodePayload(array_merge([
+        return self::encodePayload(\array_merge([
             'type' => 'order_status_changed',
             'title' => $extra['title'] ?? 'Order status changed',
             'body' => $extra['body'] ?? \sprintf('Order #%s changed from %s to %s', $orderId, $oldStatus, $newStatus),

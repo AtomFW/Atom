@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 /*
     FileSystem class
     the filesystem manager
@@ -193,6 +195,8 @@ final class FileSystem
     /**
      * Removes files or directories.
      *
+     * @param string|array<array-key, string>|callable $files The file, an array of files, or a callable returning an iterable of files
+     *
      * @throws IOGenerativeException When removal fails
      */
     public function remove(string|iterable $files): void
@@ -273,11 +277,6 @@ final class FileSystem
                 if (!self::box('rmdir', $file) && file_exists($file) && !$isRecursive) {
                     $lastError = self::$lastError;
 
-                    // TODO sprawdźić do czego to było potrzebne
-                    // if ($origFile !==null && self::box('rename', $file, $origFile)) {
-                    //     $file = $origFile;
-                    // }
-
                     throw new IOGenerativeException('Failed to remove directory "%s": %s', $file, $lastError);
                 }
             } elseif (
@@ -292,7 +291,8 @@ final class FileSystem
     /**
      * Change mode for an array of files or directories.
      *
-     * @param int  $mode      The new mode (octal)
+     * @param string|array{string}|callable $files    A file, an array of files, or a callable returning an iterable of files
+     * @param int  $mode     The new mode (octal)
      * @param int  $umask     The mode mask (octal)
      * @param bool $recursive Whether change the mod recursively or not
      *
@@ -313,7 +313,8 @@ final class FileSystem
     /**
      * Change the owner of an array of files or directories.
      *
-     * @param string|int $user      A user name or number
+     * @param string|array{string|int}|callable $files    A file, an array of files, or a callable returning an iterable of files
+     * @param string|int $user     A user name or number
      * @param bool       $recursive Whether change the owner recursively or not
      *
      * @throws IOGenerativeException When the change fails
@@ -339,8 +340,9 @@ final class FileSystem
     /**
      * Change the group of an array of files or directories.
      *
-     * @param string|int $group     A group name or number
-     * @param bool       $recursive Whether change the group recursively or not
+     * @param string|int|array{string|int} $files     A file, an array of files, or a callable returning an iterable of files
+     * @param string|int $group       A group name or number
+     * @param bool       $recursive   Whether change the group recursively or not
      *
      * @throws IOGenerativeException When the change fails
      */
@@ -364,6 +366,10 @@ final class FileSystem
 
     /**
      * Renames a file or a directory.
+     *
+     * @param string $origin      The original file or directory name
+     * @param string $target      The new file or directory name
+     * @param bool   $overwrite   Whether to overwrite an existing file or directory
      *
      * @throws IOGenerativeException When target file or directory already exists
      * @throws IOGenerativeException When origin cannot be renamed
@@ -390,6 +396,8 @@ final class FileSystem
     /**
      * Tells whether a file exists and is readable.
      *
+     * @param string $filename The name of the file to check.
+     *
      * @throws IOGenerativeException When windows path is longer than 258 characters
      */
     private function isReadable(string $filename): bool
@@ -409,9 +417,16 @@ final class FileSystem
     /**
      * Creates a symbolic link or copy a directory.
      *
-     * @throws IOGenerativeException When symlink fails
-     */
-    public function symlink(string $originDir, string $targetDir, bool $copyOnWindows = false)
+     * @param string $originDir The path of the original file or directory
+     * @param string $targetDir The path where the symbolic link should be created
+     * @param bool $copyOnWindows Whether to copy the file on Windows instead of creating a symlink (default: false)
+     * 
+     * @return bool True if the symbolic link was created successfully, false otherwise
+     * 
+     * @throws RuntimeException If the target path already exists or is not writable, or if the target path is not supported
+     * @throws InvalidArgumentException If the target path is not an absolute path
+    */
+    public function symlink(string $originDir, string $targetDir, bool $copyOnWindows = false): void
     {
         self::assertFunctionExists('symlink');
 
@@ -443,6 +458,7 @@ final class FileSystem
     /**
      * Creates a hard link, or several hard links to a file.
      *
+     * @param string|string[] $originFile origin File
      * @param string|string[] $targetFiles The target file(s)
      *
      * @throws FileNotFoundGenerativeException When original file is missing or not a file
@@ -476,7 +492,12 @@ final class FileSystem
 
     /**
      * @param string $linkType Name of the link type, typically 'symbolic' or 'hard'
-     */
+     * @param string $origin The path of the original file or directory
+     * @param string $target The path of the target file or directory
+     * @param string $linkType The type of link being created (e.g., "hard link", "symbolic link")
+     * 
+     * @throws RuntimeException If the link operation fails
+    */
     private function linkException(string $origin, string $target, string $linkType): never
     {
         if (self::$lastError) {
@@ -511,7 +532,11 @@ final class FileSystem
      * With $canonicalize = true
      *      - if $path does not exist, returns null
      *      - if $path exists, returns its absolute fully resolved final version
-     */
+     * @param string $path The path to the symbolic link
+     * @param bool $canonicalize Whether to return the canonicalized form of the target path (default: false)
+     * 
+     * @return string|null The target path of the symbolic link, or null if the path does not exist or is not a symbolic link
+    */
     public function readlink(string $path, bool $canonicalize = false): ?string
     {
         if (!$canonicalize && !is_link($path)) {
@@ -531,6 +556,13 @@ final class FileSystem
 
     /**
      * Given an existing path, convert it to a path relative to a given starting path.
+     *
+     * @param string $endPath The path to be made relative
+     * @param string $startPath The starting path
+     * 
+     * @return string The relative path
+     * 
+     * @throws InvalidArgumentGenerativeException If the paths are not absolute
      */
     public function makePathRelative(string $endPath, string $startPath): string
     {
@@ -590,7 +622,6 @@ final class FileSystem
         }
 
         // Determine how deep the start path is relative to the common path (ie, "web/bundles" = 2 levels)
-        // && '' === $startPathArr[0]
         if (1 === \count($startPathArr)) {
             $depth = 0;
         } else {
@@ -703,13 +734,23 @@ final class FileSystem
             } elseif (is_file($file)) {
                 $this->copy($file, $target, $options['override'] ?? false);
             } else {
-                throw new IOGenerativeException(sprintf('Unable to guess "%s" file type.', $file), 0, null, $file);
+                throw new IOGenerativeException(\sprintf('Unable to guess "%s" file type.', $file), 0, null, $file);
             }
         }
     }
 
     /**
      * Returns whether the file path is an absolute path.
+     * Checks if the given string is an absolute path.
+     *
+     * This function checks if the given string is an absolute path by applying the following rules:
+     * - The string should not be empty.
+     * - The string should start with either a forward or backward slash.
+     * - The string should start with a non-alphabetic character followed by a colon and then either a forward or backward slash.
+     * - The string should be a valid URL with a scheme.
+     *
+     * @param string $file The path to check.
+     * @return bool Returns true if the string is an absolute path, false otherwise.
      */
     public function isAbsolutePath(string $file): bool
     {
@@ -836,6 +877,13 @@ final class FileSystem
         }
     }
 
+    /**
+     * Converts a string or iterable of strings into an array.
+     *
+     * @param string|iterable $files The files to convert.
+     *
+     * @return iterable The converted iterable.
+     */
     private function toIterable(string|iterable $files): iterable
     {
         return is_iterable($files) ? $files : [$files];
@@ -865,6 +913,12 @@ final class FileSystem
         }
     }
 
+    /**
+     * @param string $func The name of the function to call
+     * @param mixed ...$args Arguments to pass to the function
+     *
+     * @return mixed The result of the function call
+     */
     private static function box(string $func, mixed ...$args): mixed
     {
         self::assertFunctionExists($func);
@@ -880,9 +934,13 @@ final class FileSystem
     }
 
     /**
+     * Error handler for internal filesystem operations.
+     *
+     * @param string $msg The error message.
+     *
      * @internal
      */
-    public static function handleError(int $type, string $msg): void
+    public static function handleError(string $msg): void
     {
         self::$lastError = $msg;
     }

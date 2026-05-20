@@ -1,7 +1,9 @@
 <?php
 
+declare(strict_types=1);
+
 /**
- * Szablon konfiguracji sesji
+ * Session configuration template
  */
 
 return [

@@ -4,6 +4,10 @@ declare(strict_types=1);
 
 namespace Atom\FileSytem;
 
+/**
+ * The BrowserUploadManager class is responsible for managing file uploads through the browser.
+ * It handles operations related to uploading files to the server using HTTP forms.
+ */
 final class BrowserUploadManager
 {
     private string $uploadDir;
@@ -23,6 +27,12 @@ final class BrowserUploadManager
 
     private \finfo $finfo;
 
+    /**
+     * Create a new instance
+     *
+     * @param array $config Configuration options
+     * @return void
+     */
     public function __construct(array $config = [])
     {
         $this->uploadDir = rtrim($config['upload_dir'] ?? __DIR__ . '/uploads', '/');
@@ -52,31 +62,66 @@ final class BrowserUploadManager
         $this->finfo = new \finfo(FILEINFO_MIME_TYPE);
     }
 
+    /**
+     * Uploads a single file using standard file upload methods.
+     *
+     * This method handles the uploading of a single file by:
+     * - Normalizing the file input array structure
+     * - Validating that exactly one file was submitted
+     * - Processing the file through the standard upload pipeline
+     *
+     * @param array $files The file data from $_FILES
+     * @param array $meta Additional metadata about the file (optional)
+     * @return array An array containing either a success or error result
+     */
     public function uploadSingle(array $files, array $meta = []): array
     {
         $normalized = $this->normalizeFilesArray($files);
-        if (count($normalized) !== 1) {
+        if (\count($normalized) !== 1) {
             return $this->fail('Exactly one file expected.');
         }
 
         return $this->processStandardUpload($normalized, $meta, false);
     }
 
+    /**
+     * Uploads multiple files using standard file upload methods.
+     *
+     * This method handles the uploading of multiple files by:
+     * - Normalizing the file input array structure
+     * - Validating that the number of files doesn't exceed the allowed limit
+     * - Processing all files through the standard upload pipeline
+     *
+     * @param array $files The file data from $_FILES
+     * @param array $meta Additional metadata about the files (optional)
+     * @return array An array containing either a success or error result
+     */
     public function uploadMultiple(array $files, array $meta = []): array
     {
         $normalized = $this->normalizeFilesArray($files);
 
-        if (!$this->allowMultiple && count($normalized) > 1) {
+        if (!$this->allowMultiple && \count($normalized) > 1) {
             return $this->fail('Multiple file uploads are disabled.');
         }
 
-        if (count($normalized) > $this->maxFiles) {
+        if (\count($normalized) > $this->maxFiles) {
             return $this->fail('Maximum number of files exceeded.');
         }
 
         return $this->processStandardUpload($normalized, $meta, true);
     }
 
+    /**
+     * Uploads a single file from a specific POST field.
+     *
+     * This method handles the uploading of a single file by:
+     * - Validating that the specified field exists in $_FILES
+     * - Delegating to the uploadSingle method for processing
+     *
+     * @param string $fieldName The name of the POST field containing the file
+     * @param array $meta Additional metadata about the file (optional)
+     * @return array An array containing either a success or error result
+     */
     public function uploadFromField(string $fieldName = 'file', array $meta = []): array
     {
         if (!isset($_FILES[$fieldName])) {
@@ -86,6 +131,17 @@ final class BrowserUploadManager
         return $this->uploadSingle($_FILES[$fieldName], $meta);
     }
 
+    /**
+     * Uploads multiple files from a specific POST field.
+     *
+     * This method handles the uploading of multiple files by:
+     * - Validating that the specified field exists in $_FILES
+     * - Delegating to the uploadMultiple method for processing
+     *
+     * @param string $fieldName The name of the POST field containing the files
+     * @param array $meta Additional metadata about the files (optional)
+     * @return array An array containing either a success or error result
+     */
     public function uploadMultipleFromField(string $fieldName = 'files', array $meta = []): array
     {
         if (!isset($_FILES[$fieldName])) {
@@ -95,6 +151,19 @@ final class BrowserUploadManager
         return $this->uploadMultiple($_FILES[$fieldName], $meta);
     }
 
+    /**
+     * Initiates a new chunked upload session for a file.
+     *
+     * This method creates and initializes a new upload session for a file that will be uploaded in chunks.
+     * It performs validation on the file and session parameters, generates a unique upload ID,
+     * and stores the session data for tracking the upload progress.
+     *
+     * @param string $originalName The original name of the file being uploaded
+     * @param int $totalSize The total size of the file in bytes
+     * @param int $totalChunks The total number of chunks the file will be divided into
+     * @param array $meta Additional metadata about the file (optional)
+     * @return array An array containing either a success or error result with the new upload session information
+     */
     public function startChunkSession(
         string $originalName,
         int $totalSize,
@@ -143,6 +212,18 @@ final class BrowserUploadManager
         return $this->ok(['upload_id' => $uploadId, 'status' => 'uploading']);
     }
 
+    /**
+     * Handles chunk saving from an HTTP request by reading the chunk data from $_FILES.
+     *
+     * This method processes an incoming chunk upload request by:
+     * - Extracting the chunk index from POST data
+     * - Reading the actual chunk data from the uploaded file
+     * - Validating that the data was read successfully
+     * - Delegating the chunk saving to the main saveChunk method
+     *
+     * @param string $uploadId The unique identifier for the upload session
+     * @return array An array containing either a success or error result from the save operation
+     */
     public function saveChunkFromRequest(string $uploadId): array
     {
         $chunkIndex = isset($_POST['chunk_index']) ? (int)$_POST['chunk_index'] : null;
@@ -163,6 +244,18 @@ final class BrowserUploadManager
         return $this->saveChunk($uploadId, $chunkIndex, $raw);
     }
 
+    /**
+     * Saves a chunk of data to temporary storage during multi-chunk upload processing.
+     *
+     * This method handles the saving of individual file chunks to disk, tracks which
+     * chunks have been received, and maintains progress tracking for the overall upload.
+     * It performs validation to ensure the chunk is valid and within the expected parameters.
+     *
+     * @param string $uploadId The unique identifier for the upload session
+     * @param int $chunkIndex The index/position of the chunk being saved
+     * @param string $chunkData The actual chunk data to save
+     * @return array An array containing either a success or error result with progress information
+     */
     public function saveChunk(string $uploadId, int $chunkIndex, string $chunkData): array
     {
         $session = $this->loadSession($uploadId);
@@ -187,7 +280,7 @@ final class BrowserUploadManager
             return $this->fail('Incorrect chunk number.');
         }
 
-        if (strlen($chunkData) > $this->chunkSize && $chunkIndex < $totalChunks - 1) {
+        if (\strlen($chunkData) > $this->chunkSize && $chunkIndex < $totalChunks - 1) {
             return $this->fail('Chunk is larger than the allowed size.');
         }
 
@@ -220,6 +313,20 @@ final class BrowserUploadManager
         ]);
     }
 
+    /**
+     * Finalizes a multi-chunk upload by merging all chunks into a single file.
+     *
+     * This method handles the finalization process of a chunked upload by:
+     * - Validating the existence of the upload session
+     * - Verifying that all chunks have been received
+     * - Merging all chunk files into a single temporary file
+     * - Performing final validation on the merged file
+     * - Moving the merged file to its final destination
+     * - Cleaning up temporary files and session data
+     *
+     * @param string $uploadId The unique identifier for the upload session
+     * @return array An array containing either a success or error result with finalization information
+     */
     public function finalizeChunk(string $uploadId): array
     {
         $session = $this->loadSession($uploadId);
@@ -234,7 +341,7 @@ final class BrowserUploadManager
         $totalChunks = (int)$session['total_chunks'];
         $received = $session['received_chunks'] ?? [];
 
-        if (count($received) !== $totalChunks) {
+        if (\count($received) !== $totalChunks) {
             return $this->fail('Not all chunks were sent.');
         }
 
@@ -323,6 +430,19 @@ final class BrowserUploadManager
         ]);
     }
 
+    /**
+     * Pauses an ongoing upload session.
+     *
+     * This method handles pausing an active file upload by:
+     * - Validating that pause/resume functionality is enabled
+     * - Loading the existing session data
+     * - Verifying that the current status is 'uploading'
+     * - Updating the session status from 'uploading' to 'paused'
+     * - Storing the updated session data for future resumption
+     *
+     * @param string $uploadId The unique identifier for the upload session
+     * @return array An array containing either a success or error result with pause confirmation
+     */
     public function pause(string $uploadId): array
     {
         if (!$this->allowPauseResume) {
@@ -345,6 +465,19 @@ final class BrowserUploadManager
         return $this->ok(['upload_id' => $uploadId, 'status' => 'paused']);
     }
 
+    /**
+     * Resumes a paused upload session.
+     *
+     * This method handles resuming an upload that was previously paused by:
+     * - Validating that pause/resume functionality is enabled
+     * - Loading the existing session data
+     * - Verifying that the current status is 'paused'
+     * - Updating the session status from 'paused' to 'uploading'
+     * - Returning information about the resumed upload
+     *
+     * @param string $uploadId The unique identifier for the upload session
+     * @return array An array containing either a success or error result with resumed upload information
+     */
     public function resume(string $uploadId): array
     {
         if (!$this->allowPauseResume) {
@@ -372,6 +505,19 @@ final class BrowserUploadManager
         ]);
     }
 
+    /**
+     * Cancels an upload session and optionally deletes associated files.
+     *
+     * This method handles the cancellation of an ongoing file upload by:
+     * - Validating that cancellation is permitted
+     * - Loading the existing session data
+     * - Updating the session status to cancelled
+     * - Optionally deleting temporary chunk files and manifest files
+     *
+     * @param string $uploadId The unique identifier for the upload session
+     * @param bool $deleteFiles Whether to also delete associated chunk files
+     * @return array An array containing either a success or error result
+     */
     public function cancel(string $uploadId, bool $deleteFiles = true): array
     {
         if (!$this->allowCancel) {
@@ -398,6 +544,15 @@ final class BrowserUploadManager
         return $this->ok(['upload_id' => $uploadId, 'status' => 'cancelled']);
     }
 
+    /**
+     * Retrieves the status of an upload session by its ID.
+     *
+     * This method fetches and returns the current status of an ongoing file upload,
+     * including progress information, chunk data, and metadata about the upload session.
+     *
+     * @param string $uploadId The unique identifier for the upload session
+     * @return array An array containing the upload status and related information
+     */
     public function status(string $uploadId): array
     {
         $session = $this->loadSession($uploadId);
@@ -416,17 +571,44 @@ final class BrowserUploadManager
         ]);
     }
 
+    /**
+     * Detects the MIME type of a file using finfo.
+     *
+     * This method uses PHP's finfo class to determine the MIME type of a file
+     * by examining its contents rather than relying solely on file extensions.
+     *
+     * @param string $filePath The path to the file to analyze
+     * @return string The detected MIME type in lowercase, or 'application/octet-stream' if undetermined
+     */
     public function detectMime(string $filePath): string
     {
         return strtolower((string)($this->finfo->file($filePath) ?: 'application/octet-stream'));
     }
 
+    /**
+     * Determines if a file is an image based on its MIME type.
+     *
+     * This method uses the detectMime function to check if a file has an image MIME type
+     * by examining if it starts with 'image/'.
+     *
+     * @param string $filePath The path to the file to check
+     * @return bool True if the file is an image, false otherwise
+     */
     public function isImage(string $filePath): bool
     {
         $mime = $this->detectMime($filePath);
         return str_starts_with($mime, 'image/');
     }
 
+    /**
+     * Converts bytes to a human-readable format.
+     *
+     * This method converts a given number of bytes into a more readable format
+     * (B, KB, MB, GB, TB) by dividing by 1024 until the appropriate unit is found.
+     *
+     * @param int $bytes The number of bytes to convert
+     * @return string A human-readable string representation of the byte value
+     */
     public function humanBytes(int $bytes): string
     {
         $units = ['B', 'KB', 'MB', 'GB', 'TB'];
@@ -441,6 +623,20 @@ final class BrowserUploadManager
         return rtrim(rtrim(number_format($value, 2, '.', ''), '0'), '.') . ' ' . $units[$i];
     }
 
+    /**
+     * Processes standard file uploads for multiple files.
+     *
+     * This method handles the complete upload process for one or more files, including:
+     * - Validating each uploaded file against size and type restrictions
+     * - Checking total size limits across all files
+     * - Moving valid files to their final destination
+     * - Returning structured results with file information
+     *
+     * @param array $files The array of files from $_FILES
+     * @param array $meta Additional metadata for the files
+     * @param bool $multiple Flag indicating if multiple files are being processed
+     * @return array An array containing either a success or error result with all processed files
+     */
     private function processStandardUpload(array $files, array $meta, bool $multiple): array
     {
         $results = [];
@@ -472,6 +668,21 @@ final class BrowserUploadManager
         ]);
     }
 
+    /**
+     * Processes the movement of an uploaded file to its final destination.
+     *
+     * This method handles the complete process of moving an uploaded file from the temporary
+     * location to the final destination, including:
+     * - Validating the upload status and file integrity
+     * - Sanitizing the filename and extracting metadata
+     * - Performing size and type validations
+     * - Generating appropriate file paths
+     * - Moving the file with proper error handling
+     *
+     * @param array $file The uploaded file data from $_FILES
+     * @param array $meta Additional metadata for the file
+     * @return array An array containing either a success or error result with file information
+     */
     private function moveUploadedFile(array $file, array $meta): array
     {
         if (($file['error'] ?? UPLOAD_ERR_NO_FILE) !== UPLOAD_ERR_OK) {
@@ -529,6 +740,22 @@ final class BrowserUploadManager
         ]);
     }
 
+    /**
+     * Validates an uploaded file against multiple criteria.
+     *
+     * This method performs comprehensive validation on an uploaded file, checking for:
+     * - Upload errors
+     * - File integrity (temporary file validation)
+     * - File name validity
+     * - File size constraints
+     * - Allowed file extensions
+    * Allowed MIME types
+    * File title validation
+    *
+    * @param array $file The uploaded file data from $_FILES
+    * @param array $meta Additional metadata for the file
+    * @return array An array containing either a success or error result
+    */
     private function validateUploadedFile(array $file, array $meta = []): array
     {
         if (($file['error'] ?? UPLOAD_ERR_NO_FILE) !== UPLOAD_ERR_OK) {
@@ -568,6 +795,17 @@ final class BrowserUploadManager
         return $this->ok([]);
     }
 
+    /**
+     * Validates and sanitizes a title string.
+     *
+     * This method processes a title by trimming whitespace, replacing multiple consecutive
+     * whitespace characters with a single space, and performing validation checks.
+     * It ensures the title meets basic quality requirements for length and non-emptiness.
+     *
+     * @param string $title The title to validate and sanitize
+     * @return string The sanitized title (trimmed and with normalized whitespace)
+     * @throws \RuntimeException If the title is empty after trimming or too long
+     */
     private function validateTitle(string $title): string
     {
         $title = trim($title);
@@ -584,13 +822,24 @@ final class BrowserUploadManager
         return $title;
     }
 
+    /**
+     * Normalizes the $_FILES array structure to ensure consistent formatting.
+     *
+     * This method standardizes the structure of the $_FILES superglobal array,
+     * which can have different formats depending on whether multiple files are uploaded
+     * under the same name. It ensures that all file information is presented in a consistent
+     * array format regardless of how many files were uploaded.
+     *
+     * @param array $files The raw $_FILES array or subset of it
+     * @return array An array with normalized file information, where each element represents a single file
+     */
     private function normalizeFilesArray(array $files): array
     {
         if (!isset($files['name'])) {
             return [];
         }
 
-        if (!is_array($files['name'])) {
+        if (!\is_array($files['name'])) {
             return [$files];
         }
 
@@ -610,6 +859,21 @@ final class BrowserUploadManager
         return $normalized;
     }
 
+    /**
+     * Sanitizes a filename by removing/replacing invalid characters and normalizing whitespace.
+     *
+     * This method performs multiple sanitization steps on a filename:
+     * 1. Extracts the basename (removes any directory paths)
+     * 2. Trims whitespace from both ends
+     * 3. Removes or replaces invalid characters like null bytes, carriage returns, etc.
+     * 4. Replaces non-alphanumeric characters (except spaces, dots, and hyphens) with underscores
+     * 5. Normalizes multiple consecutive whitespace characters into a single underscore
+     * 6. Removes or replaces multiple consecutive underscores with a single underscore
+     * 7. Trims dots, hyphens, and spaces from both ends
+     *
+     * @param string $name The original filename to sanitize
+     * @return string The sanitized filename
+     */
     private function sanitizeFilename(string $name): string
     {
         $name = basename(trim($name));
@@ -622,6 +886,16 @@ final class BrowserUploadManager
         return $name;
     }
 
+    /**
+     * Builds the final file path for a file, with optional random name generation.
+     *
+     * This method takes an original filename, sanitizes it, and constructs the final
+     * destination path in the upload directory. If random name generation is enabled,
+     * it appends a random 16-character hexadecimal string to the filename to prevent conflicts.
+     *
+     * @param string $originalName The original filename provided by the user
+     * @return string The complete file path where the file should be stored
+     */
     private function buildFinalPath(string $originalName): string
     {
         $safe = $this->sanitizeFilename($originalName);
@@ -639,6 +913,16 @@ final class BrowserUploadManager
         return $this->uploadDir . '/' . $safe;
     }
 
+    /**
+     * Builds a unique final file path by appending a random suffix to prevent filename conflicts.
+     *
+     * This method takes an original filename, sanitizes it, and appends a random 12-character
+     * hexadecimal string to create a unique filename. It handles both files with and without
+     * extensions by preserving the original extension when one exists.
+     *
+     * @param string $originalName The original filename provided by the user
+     * @return string A unique file path that helps prevent filename conflicts
+     */
     private function buildUniqueFinalPath(string $originalName): string
     {
         $safe = $this->sanitizeFilename($originalName);
@@ -653,26 +937,73 @@ final class BrowserUploadManager
         return $this->uploadDir . '/' . $base . '_' . $rand . ($ext !== '' ? '.' . $ext : '');
     }
 
+    /**
+     * Generates a unique upload ID.
+     *
+     * This method creates a cryptographically secure random identifier
+     * using binary-to-hexadecimal conversion of random bytes for use
+     * as a unique identifier for upload sessions.
+     *
+     * @return string A hexadecimal encoded random string
+     */
     private function generateUploadId(): string
     {
         return bin2hex(random_bytes(16));
     }
 
+    /**
+     * Generates the file path for a session file.
+     *
+     * This method creates a complete file path for a session data file
+     * by combining the temporary directory path with the upload ID and JSON extension.
+     *
+     * @param string $uploadId The unique identifier for the upload session
+     * @return string The complete file path for the session file
+     */
     private function sessionPath(string $uploadId): string
     {
         return $this->tempDir . '/' . $uploadId . '.json';
     }
 
+    /**
+     * Generates the directory path for chunk files.
+     *
+     * This method creates a directory path for storing chunk files
+     * by combining the temporary directory path with the upload ID.
+     *
+     * @param string $uploadId The unique identifier for the upload session
+     * @return string The complete directory path for the chunks
+     */
     private function chunkDir(string $uploadId): string
     {
         return $this->tempDir . '/' . $uploadId;
     }
 
+    /**
+     * Generates the file path for a specific chunk file.
+     *
+     * This method creates a unique file path for a chunk file by combining
+     * the chunks directory path with the chunk index and .part extension.
+     *
+     * @param string $uploadId The unique identifier for the upload session
+     * @param int $chunkIndex The index/position of the chunk
+     * @return string The complete file path for the chunk
+     */
     private function chunkPath(string $uploadId, int $chunkIndex): string
     {
         return $this->chunkDir($uploadId) . '/' . $chunkIndex . '.part';
     }
 
+    /**
+     * Loads session data from a file.
+     *
+     * This method retrieves stored session data (such as upload progress information)
+     * from a JSON file in the temporary directory based on the upload ID.
+     * It reads the file, decodes the JSON data, and returns the parsed array.
+     *
+     * @param string $uploadId The unique identifier for the upload session
+     * @return array|null The session data if successful, null otherwise
+     */
     private function loadSession(string $uploadId): ?array
     {
         $path = $this->sessionPath($uploadId);
@@ -689,6 +1020,17 @@ final class BrowserUploadManager
         return \is_array($data) ? $data : null;
     }
 
+    /**
+     * Saves session data to a file.
+     *
+     * This method stores the session data (such as upload progress information)
+     * to a JSON file in the temporary directory. The session data includes
+     * information about uploaded chunks, total chunks, and other relevant metadata.
+     *
+     * @param string $uploadId The unique identifier for the upload session
+     * @param array $session The session data to save
+     * @return void
+     */
     private function saveSession(string $uploadId, array $session): void
     {
         $this->ensureDirectory($this->tempDir);
@@ -696,6 +1038,16 @@ final class BrowserUploadManager
         file_put_contents($path, json_encode($session, JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT), LOCK_EX);
     }
 
+    /**
+     * Deletes chunk files associated with a specific upload.
+     *
+     * This method removes all temporary chunk files and the directory for a given upload ID.
+     * It first checks if the directory exists, then iterates through all .part files
+     * in the directory and unlinks them one by one. Finally, it removes the directory itself.
+     *
+     * @param string $uploadId The unique identifier for the upload
+     * @return void
+     */
     private function deleteChunkFiles(string $uploadId): void
     {
         $dir = $this->chunkDir($uploadId);
@@ -707,6 +1059,15 @@ final class BrowserUploadManager
         }
     }
 
+    /**
+     * Calculates the progress percentage from session data.
+     *
+     * This method determines the progress of a multi-part file upload or operation
+     * by comparing the number of received chunks with the total number of expected chunks.
+     *
+     * @param array $session Session data containing chunk information
+     * @return int The progress percentage (0-100), or 0 if no valid data
+     */
     private function getProgressFromSession(array $session): int
     {
         $total = (int)($session['total_chunks'] ?? 0);
@@ -718,6 +1079,15 @@ final class BrowserUploadManager
         return (int)floor(($received / $total) * 100);
     }
 
+    /**
+     * The ensureDirectory method ensures that a specified directory exists.
+     * If the directory doesn't exist, it attempts to create it with the appropriate permissions.
+     * If the directory creation fails, it throws a RuntimeException.
+     * 
+     * @param string $dir The directory path to check or create
+     * @throws \RuntimeException Thrown when directory creation fails
+     * @return void
+     */
     private function ensureDirectory(string $dir): void
     {
         if (!is_dir($dir) && !mkdir($dir, 0775, true) && !is_dir($dir)) {
@@ -725,6 +1095,12 @@ final class BrowserUploadManager
         }
     }
 
+    /**
+     * The uploadErrorMessage method returns an error message based on the file upload error code.
+     * 
+     * @param int $code The file upload error code
+     * @return string The appropriate error message to display
+     */
     private function uploadErrorMessage(int $code): string
     {
         return match ($code) {
@@ -739,6 +1115,12 @@ final class BrowserUploadManager
         };
     }
 
+    /**
+     * The ok method is used to return the success of an operation.
+     *
+     * @param array $data Data to return on success
+     * @return array Array containing the success information
+     */
     private function ok(array $data): array
     {
         return [
@@ -747,6 +1129,13 @@ final class BrowserUploadManager
         ];
     }
 
+    /**
+     * The fail method is used to return the failure of an operation.
+     *
+     * @param string $message Error message
+     * @param array $extra Additional error information
+     * @return array Array containing the failure information
+     */
     private function fail(string $message, array $extra = []): array
     {
         return [

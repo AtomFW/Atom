@@ -1,9 +1,11 @@
 <?php
 
+declare(strict_types=1);
+
 use Pdo\Mysql;
 
 /**
- * Szablon konfiguracji bazy danych
+ * Database configuration template
  */
 
 return [

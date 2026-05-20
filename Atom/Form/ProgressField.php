@@ -6,6 +6,11 @@ namespace Atom\form;
 
 use Atom\Model;
 
+/**
+ * Class representing a progress field in a form
+ *
+ * @package Atom\form
+ */
 class ProgressField extends BaseField
 {
     public const TYPE_PROGRESS = 'progress';
@@ -22,6 +27,11 @@ class ProgressField extends BaseField
         parent::__construct($model, $attribute);
     }
 
+    /**
+     * Render a progress input field.
+     *
+     * @return string
+     */
     public function renderInput(): string
     {
         $classAttrubute = $this->model->getProperty($this->attribute, 'class');

@@ -1,9 +1,11 @@
 <?php
 
+declare(strict_types=1);
+
 use Atom\Config\EnvironmentVariables;
 
 /**
- * Pobiera wartość z $_ENV dla podanego klucza lub zwraca wartość domyślną.
+ * Gets the value from $_ENV for the given key or returns the default value.
  *
  * @param string $key
  * @param mixed $default

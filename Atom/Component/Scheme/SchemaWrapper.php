@@ -80,7 +80,7 @@ final class SchemaWrapper
             return new static($obj);
         }
 
-        throw new \BadMethodCallException(sprintf('No static factory %s::%s()', Schema::class, $name));
+        throw new \BadMethodCallException(\sprintf('No static factory %s::%s()', Schema::class, $name));
     }
 
     /**
@@ -100,9 +100,9 @@ final class SchemaWrapper
 
         if (!method_exists($this->instance, $name)) {
             throw new \BadMethodCallException(
-                sprintf('Method %s not found on underlying instance of %s',
+                \sprintf('Method %s not found on underlying instance of %s',
                 $name,
-                get_class($this->instance))
+                \get_class($this->instance))
             );
         }
 
@@ -308,8 +308,8 @@ final class SchemaWrapper
     public function debugInfo(): array
     {
         return [
-            'class' => get_class($this->instance),
-            'graph_count' => count($this->graph),
+            'class' => \get_class($this->instance),
+            'graph_count' => \count($this->graph),
         ];
     }
 

@@ -1,7 +1,14 @@
 <?php
 
+declare(strict_types=1);
+
 namespace Atom\Exception\IO;
 
+/**
+ * AbsolutePathException
+ *
+ * @package Atom\Exception\IO
+ */
 class AbsolutePathException extends \Exception implements
     \Stringable,
     \Throwable

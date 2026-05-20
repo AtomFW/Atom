@@ -1,4 +1,5 @@
 <?php
+
 declare(strict_types=1);
 
 namespace Atom\Generate\Manifest;
@@ -122,7 +123,7 @@ final class WebAppManifest
 
     public function addCategory(string $category): static
     {
-        if (!in_array($category, $this->data['categories'], true)) {
+        if (!\in_array($category, $this->data['categories'], true)) {
             $this->data['categories'][] = $category;
         }
         return $this;
@@ -156,7 +157,7 @@ final class WebAppManifest
 
         // merge additional attributes
         foreach ($attrs as $k => $v) {
-            if ($v === null) {
+            if ($v == null) {
                 continue;
             }
             $icon[$k] = $v;
@@ -188,7 +189,7 @@ final class WebAppManifest
             return $this;
         }
 
-        if (is_string($srcOrCallable)) {
+        if (\is_string($srcOrCallable)) {
             $this->data['icons'] = array_values(array_filter($this->data['icons'], fn($i) => !isset($i['src']) || $i['src'] !== $srcOrCallable));
             return $this;
         }
@@ -308,7 +309,7 @@ final class WebAppManifest
         $out = [];
         foreach ($this->data as $k => $v) {
             if ($v === null) continue;
-            if (is_array($v)) {
+            if (\is_array($v)) {
                 // remove empty arrays
                 if ($v === [] || $v === ['']) continue;
             }

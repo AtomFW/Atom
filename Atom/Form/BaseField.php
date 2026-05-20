@@ -6,6 +6,11 @@ namespace Atom\form;
 
 use Atom\Model;
 
+/**
+ * Base class for form fields
+ *
+ * @package Atom\form
+ */
 abstract class BaseField
 {
 
@@ -25,16 +30,21 @@ abstract class BaseField
         $this->attribute = $attribute;
     }
 
+    /**
+     * Returns the HTML representation of the field including label, input and error message.
+     *
+     * @return string
+     */
     public function __toString(): string
     {
-        $outerType = $this->model->getInputOuterType();
+        $outerType = $this->model->getInputOuterType() ?? "div";
         $outerAttrs = $this->model->getInputOuterAttributes();
         $outerAttrClass = $this->model->getInputOuterAttribute('class');
         if(!$outerAttrClass) {
             $outerAttrClass = 'form-group';
         }
 
-        $innerType = $this->model->getInputInnerType();
+        $innerType = $this->model->getInputInnerType() ?? "label";
         $innerAttrs = $this->model->getInputInnerAttributes();
         $innerAttrClass = $this->model->getInputInnerAttribute('class');
         if($innerAttrClass) {
@@ -66,5 +76,10 @@ abstract class BaseField
         );
     }
 
+    /**
+     * Render the input field.
+     *
+     * @return string
+     */
     abstract public function renderInput();
 }

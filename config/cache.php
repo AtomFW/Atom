@@ -1,7 +1,9 @@
 <?php
 
+declare(strict_types=1);
+
 /**
- * Szablon konfiguracji systemu cache
+ * Cache system configuration template
  */
 
 return [
@@ -33,7 +35,7 @@ return [
             'driver' => 'file',
             // 'path' => realpath(env('CACHE_FILE_PATH', '../runtime/cache/aplication')), // Path to the cache file
             // 'path' => env('CACHE_FILE_PATH', '../runtime/cache/aplication'), // Path to the cache file
-            'path' => realpath(env('CACHE_FILE_PATH', '../runtime/cache')), // Path to the cache file
+            'path' => realpath(env('CACHE_FILE_PATH', __DIR__ . '/../runtime/cache/')), // Path to the cache file
         ],
 
         /**

@@ -21,7 +21,6 @@ final class SchemeGenerate
      */
     public static function autoGenerate(array $option, object $data): string
     {
-        var_dump($option, $data->uri);
         $scheme = SchemaWrapper::webPage()
         ->url($data->uri)
         ->image($data->image . $option["iconSvg"])

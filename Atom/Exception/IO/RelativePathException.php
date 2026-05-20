@@ -1,7 +1,14 @@
 <?php
 
+declare(strict_types=1);
+
 namespace Atom\Exception\IO;
 
+/**
+ * RelativePathException
+ *
+ * @package Atom\Exception\IO
+ */
 class RelativePathException extends \Exception implements
     \Stringable,
     \Throwable

@@ -383,6 +383,11 @@ final class BotDetector
         }
     }
 
+    /**
+     * Get the user agent string for the current request
+     *
+     * @return string The user agent string from the HTTP headers
+     */
     public function getUserAgent(): string
     {
         return $this->userAgent;

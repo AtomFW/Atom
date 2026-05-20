@@ -1,7 +1,9 @@
 <?php
 
+declare(strict_types=1);
+
 /**
- * Szablon konfiguracji systemu plików.
+ * File system configuration template.
  */
 
 return [

@@ -206,7 +206,7 @@ final class Dom extends simple_html_dom
             $nodeClass = $node->class ?? ($node->getAttribute ? $node->getAttribute('class') : ($node->class ?? ''));
             $nodeClassList = preg_split('/\s+/', trim((string)$nodeClass)) ?: [];
             foreach ($classes as $c) {
-                if (!in_array($c, $nodeClassList, true)) {
+                if (!\in_array($c, $nodeClassList, true)) {
                     return false;
                 }
             }
@@ -247,7 +247,7 @@ final class Dom extends simple_html_dom
             return (string)$node->{$name};
         }
         // try attributes array
-        if (isset($node->attr) && is_array($node->attr) && array_key_exists($name, $node->attr)) {
+        if (isset($node->attr) && \is_array($node->attr) && \array_key_exists($name, $node->attr)) {
             return (string)$node->attr[$name];
         }
         return null;

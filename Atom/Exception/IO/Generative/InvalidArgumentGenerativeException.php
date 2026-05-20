@@ -7,6 +7,11 @@ namespace Atom\Exception\IO\Generative;
 use Atom\Exception\Interface\Generative\GenerativeExceptionInterface;
 use Atom\Exception\Trait\Generative\GenerativeExceptionTrait;
 
+/**
+ * InvalidArgumentGenerativeException
+ *
+ * @package Atom\Exception\IO\Generative
+ */
 class InvalidArgumentGenerativeException extends \Exception implements
     GenerativeExceptionInterface,
     \Stringable,

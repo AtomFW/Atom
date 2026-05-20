@@ -2,6 +2,23 @@
 
 declare(strict_types=1);
 
+namespace Atom\FileSytem;
+
+use DateInterval;
+use DateTimeImmutable;
+use DateTimeInterface;
+use FilesystemIterator;
+use finfo;
+use InvalidArgumentException;
+use RecursiveDirectoryIterator;
+use RecursiveIteratorIterator;
+use RuntimeException;
+use SplFileInfo;
+
+/**
+ * Manages upload folders in the filesystem
+ * Provides methods for creating, validating, and managing upload directories
+ */
 final class UploadFolderManager
 {
     private string $baseDir;
@@ -58,6 +75,10 @@ final class UploadFolderManager
      * Creates a directory structure and saves JSON metadata.
      * If $temporary=true, the base directory will have a unique ID,
      * and the metadata will go to a JSON file in temp_storage_dir.
+     *
+     * @param bool $temporary Whether to create a temporary directory with unique ID
+     * @param string|null $tempId Unique identifier for temporary directories
+     * @return array Information about the created structure
      */
     public function createStructure(bool $temporary = false, ?string $tempId = null): array
     {
@@ -114,6 +135,9 @@ final class UploadFolderManager
 
     /**
      * Loads the structure from the JSON file generated for the temporary folder.
+     *
+     * @param string $jsonPath Path to the JSON metadata file
+     * @return array Information about the loaded structure
      */
     public function loadFromTempJson(string $jsonPath): array
     {
@@ -139,20 +163,33 @@ final class UploadFolderManager
         return $this->getStructureInfo();
     }
 
+    /**
+     * Gets the path to the main directory.
+     *
+     * @return string Main directory path
+     */
     public function getMainPath(): string
     {
         $this->assertCreated();
         return $this->mainPath;
     }
 
-    /** @return array<int, string> */
+    /**
+     * Gets paths of all related directories.
+     *
+     * @return array<int, string> Array of directory paths
+     */
     public function getRelatedPaths(): array
     {
         $this->assertCreated();
         return $this->relatedPaths;
     }
 
-    /** @return array<string, string> */
+    /**
+     * Gets paths of all directories in the structure.
+     *
+     * @return array<string, string> Associative array with directory identifiers and their paths
+     */
     public function getAllPaths(): array
     {
         $this->assertCreated();
@@ -165,11 +202,21 @@ final class UploadFolderManager
         return $paths;
     }
 
+    /**
+     * Gets path to the temporary JSON metadata file.
+     *
+     * @return string|null Path to JSON file or null if not applicable
+     */
     public function getTempJsonPath(): ?string
     {
         return $this->tempJsonPath;
     }
 
+    /**
+     * Gets comprehensive information about the current structure.
+     *
+     * @return array Structure information
+     */
     public function getStructureInfo(): array
     {
         $this->assertCreated();
@@ -190,6 +237,11 @@ final class UploadFolderManager
         ];
     }
 
+    /**
+     * Checks if the temporary directory has expired.
+     *
+     * @return bool True if expired, false otherwise
+     */
     public function isExpired(): bool
     {
         if ($this->tempJsonPath === null || !is_file($this->tempJsonPath)) {
@@ -204,6 +256,11 @@ final class UploadFolderManager
         return new DateTimeImmutable((string)$meta['expiresAt']) <= new DateTimeImmutable('now');
     }
 
+    /**
+     * Cleans up expired temporary directories and metadata files.
+     *
+     * @return bool True if cleanup was performed, false otherwise
+     */
     public function cleanupExpiredTemp(): bool
     {
         if (!$this->isExpired() || $this->mainPath === null) {
@@ -219,18 +276,38 @@ final class UploadFolderManager
         return true;
     }
 
+    /**
+     * Checks if a directory exists in the structure.
+     *
+     * @param string|null $folderKey Identifier for the folder to check
+     * @return bool True if directory exists, false otherwise
+     */
     public function folderExists(?string $folderKey = 'main'): bool
     {
         $path = $this->resolveFolderPath($folderKey);
         return $path !== null && is_dir($path);
     }
 
+    /**
+     * Checks if a file exists in the structure.
+     *
+     * @param string $fileName Name of the file to check
+     * @param string|null $folderKey Identifier for the folder to search in
+     * @return bool True if file exists, false otherwise
+     */
     public function fileExists(string $fileName, ?string $folderKey = 'main'): bool
     {
         $path = $this->getAbsoluteFilePath($fileName, $folderKey);
         return is_file($path);
     }
 
+    /**
+     * Gets absolute path for a file.
+     *
+     * @param string $fileName Name of the file
+     * @param string|null $folderKey Identifier for the folder to search in
+     * @return string Absolute path to the file
+     */
     public function getAbsoluteFilePath(string $fileName, ?string $folderKey = 'main'): string
     {
         $folderPath = $this->resolveFolderPath($folderKey);
@@ -241,7 +318,13 @@ final class UploadFolderManager
         return $this->normalizePath($folderPath . DIRECTORY_SEPARATOR . ltrim($fileName, DIRECTORY_SEPARATOR));
     }
 
-    /** @return array<int, string> */
+    /**
+     * Gets list of all files in specified folders.
+     *
+     * @param bool $recursive Whether to include subdirectories
+     * @param string|null $folderKey Identifier for the folder to search in
+     * @return array<int, string> Array of file paths
+     */
     public function getAllFilesPaths(bool $recursive = true, ?string $folderKey = null): array
     {
         $paths = [];
@@ -254,12 +337,25 @@ final class UploadFolderManager
         return $paths;
     }
 
+    /**
+     * Counts files in specified folders.
+     *
+     * @param bool $recursive Whether to include subdirectories
+     * @param string|null $folderKey Identifier for the folder to search in
+     * @return int Number of files found
+     */
     public function countFiles(bool $recursive = true, ?string $folderKey = null): int
     {
         return count($this->getAllFilesPaths($recursive, $folderKey));
     }
 
-    /** @return array<string, array<int, array<string, mixed>>> */
+    /**
+     * Groups files by file extension.
+     *
+     * @param bool $recursive Whether to include subdirectories
+     * @param string|null $folderKey Identifier for the folder to search in
+     * @return array<string, array<int, array<string, mixed>>> Files grouped by file extension
+     */
     public function filesByExtension(bool $recursive = true, ?string $folderKey = null): array
     {
         $map = [];
@@ -275,7 +371,13 @@ final class UploadFolderManager
         return $map;
     }
 
-    /** @return array<string, array<int, array<string, mixed>>> */
+    /**
+     * Groups files by MIME type.
+     *
+     * @param bool $recursive Whether to include subdirectories
+     * @param string|null $folderKey Identifier for the folder to search in
+     * @return array<string, array<int, array<string, mixed>>> Files grouped by MIME type
+     */
     public function filesByMime(bool $recursive = true, ?string $folderKey = null): array
     {
         $map = [];
@@ -292,14 +394,18 @@ final class UploadFolderManager
     }
 
     /**
-     * @return array<int, array<string, mixed>>
-     * sortBy: added_at|alphabetical|reverse_alphabetical
+     * Lists files in a directory sorted by specified criteria.
+     *
+     * @param string $sortBy Sorting criteria: added_at|alphabetical|reverse_alphabetical
+     * @param bool $recursive Whether to include subdirectories
+     * @param string|null $folderKey Identifier for the folder to search in
+     * @return array<int, array<string, mixed>> Array of file information
      */
     public function listFiles(string $sortBy = 'added_at', bool $recursive = true, ?string $folderKey = null): array
     {
         $files = [];
         foreach ($this->resolveSelectedFolders($folderKey) as $folder) {
-            $files = array_merge($files, $this->collectFiles($folder, $recursive));
+            $files = \array_merge($files, $this->collectFiles($folder, $recursive));
         }
 
         usort($files, function (array $a, array $b) use ($sortBy): int {
@@ -313,7 +419,14 @@ final class UploadFolderManager
         return $files;
     }
 
-    /** @return array<int, array<string, mixed>> */
+    /**
+     * Lists files sorted by added date.
+     *
+     * @param bool $desc Whether to sort in descending order
+     * @param bool $recursive Whether to include subdirectories
+     * @param string|null $folderKey Identifier for the folder to search in
+     * @return array<int, array<string, mixed>> Array of file information
+     */
     public function listFilesByAddedDate(bool $desc = true, bool $recursive = true, ?string $folderKey = null): array
     {
         $files = $this->listFiles('added_at', $recursive, $folderKey);
@@ -324,18 +437,37 @@ final class UploadFolderManager
         return $files;
     }
 
-    /** @return array<int, array<string, mixed>> */
+    /**
+     * Lists files sorted alphabetically.
+     *
+     * @param bool $desc Whether to sort in descending order
+     * @param bool $recursive Whether to include subdirectories
+     * @param string|null $folderKey Identifier for the folder to search in
+     * @return array<int, array<string, mixed>> Array of file information
+     */
     public function listFilesAlphabetically(bool $desc = false, bool $recursive = true, ?string $folderKey = null): array
     {
         return $this->listFiles($desc ? 'reverse_alphabetical' : 'alphabetical', $recursive, $folderKey);
     }
 
-    /** @return array<int, array<string, mixed>> */
+    /**
+     * Lists files sorted in reverse alphabetical order.
+     *
+     * @param bool $recursive Whether to include subdirectories
+     * @param string|null $folderKey Identifier for the folder to search in
+     * @return array<int, array<string, mixed>> Array of file information
+     */
     public function listFilesReverseAlphabetically(bool $recursive = true, ?string $folderKey = null): array
     {
         return $this->listFiles('reverse_alphabetical', $recursive, $folderKey);
     }
 
+    /**
+     * Gets creation date for a directory.
+     *
+     * @param string|null $folderKey Identifier for the folder to check
+     * @return DateTimeImmutable|null Creation timestamp or null if not found
+     */
     public function getCreatedAt(?string $folderKey = 'main'): ?DateTimeImmutable
     {
         $path = $this->resolveFolderPath($folderKey);
@@ -350,6 +482,12 @@ final class UploadFolderManager
         return (new DateTimeImmutable())->setTimestamp((int)@filectime($path));
     }
 
+    /**
+     * Gets last modified date for a directory.
+     *
+     * @param string|null $folderKey Identifier for the folder to check
+     * @return DateTimeImmutable|null Modification timestamp or null if not found
+     */
     public function getModifiedAt(?string $folderKey = 'main'): ?DateTimeImmutable
     {
         $path = $this->resolveFolderPath($folderKey);
@@ -360,6 +498,13 @@ final class UploadFolderManager
         return (new DateTimeImmutable())->setTimestamp((int)@filemtime($path));
     }
 
+    /**
+     * Gets date of last file addition to a directory.
+     *
+     * @param string|null $folderKey Identifier for the folder to check
+     * @param bool $recursive Whether to include subdirectories
+     * @return DateTimeImmutable|null Last added timestamp or null if not found
+     */
     public function getLastAddedAt(?string $folderKey = null, bool $recursive = true): ?DateTimeImmutable
     {
         $files = $this->listFiles('added_at', $recursive, $folderKey);
@@ -371,19 +516,38 @@ final class UploadFolderManager
         return (new DateTimeImmutable())->setTimestamp((int)$last['modifiedTimestamp']);
     }
 
+    /**
+     * Gets permissions for directory.
+     *
+     * @param string|null $folderKey Identifier for the folder to check
+     * @return string|null String representation of permissions or null if not found
+     */
     public function getFolderPermissions(?string $folderKey = 'main'): ?string
     {
         $path = $this->resolveFolderPath($folderKey);
-        return ($path !== null && file_exists($path)) ? sprintf('%04o', fileperms($path) & 0777) : null;
+        return ($path !== null && file_exists($path)) ? \sprintf('%04o', fileperms($path) & 0777) : null;
     }
 
+    /**
+     * Gets permissions for a file.
+     *
+     * @param string $fileName Name of the file
+     * @param string|null $folderKey Identifier for the folder to check in
+     * @return string|null String representation of permissions or null if not found
+     */
     public function getFilePermissions(string $fileName, ?string $folderKey = 'main'): ?string
     {
         $path = $this->getAbsoluteFilePath($fileName, $folderKey);
-        return is_file($path) ? sprintf('%04o', fileperms($path) & 0777) : null;
+        return is_file($path) ? \sprintf('%04o', fileperms($path) & 0777) : null;
     }
 
-    /** @return array<string, mixed> */
+    /**
+     * Gets information about a specific file.
+     *
+     * @param string $fileName Name of the file
+     * @param string|null $folderKey Identifier for the folder to check in
+     * @return array<string, mixed> File information
+     */
     public function getFileInfo(string $fileName, ?string $folderKey = 'main'): array
     {
         $path = $this->getAbsoluteFilePath($fileName, $folderKey);
@@ -394,7 +558,12 @@ final class UploadFolderManager
         return $this->buildFileRecord(new SplFileInfo($path));
     }
 
-    /** @return array<string, mixed> */
+    /**
+     * Gets information about a specific directory.
+     *
+     * @param string|null $folderKey Identifier for the folder to check
+     * @return array<string, mixed> Directory information
+     */
     public function getFolderInfo(?string $folderKey = 'main'): array
     {
         $folder = $this->resolveFolderPath($folderKey);
@@ -415,22 +584,45 @@ final class UploadFolderManager
         ];
     }
 
+    /**
+     * Checks if a related directory exists.
+     *
+     * @param int $index Index of the related directory to check
+     * @return bool True if directory exists, false otherwise
+     */
     public function hasRelatedFolder(int $index): bool
     {
         return isset($this->relatedPaths[$index]);
     }
 
+    /**
+     * Gets path of a specific related directory.
+     *
+     * @param int $index Index of the related directory to retrieve
+     * @return string|null Path to the directory or null if it doesn't exist
+     */
     public function getRelatedFolderPath(int $index): ?string
     {
         return $this->relatedPaths[$index] ?? null;
     }
 
+    /**
+     * Updates timestamp for a directory.
+     *
+     * @param string|null $folderKey Identifier for the folder to touch
+     * @return bool True if successful, false otherwise
+     */
     public function touchFolder(?string $folderKey = 'main'): bool
     {
         $folder = $this->resolveFolderPath($folderKey);
         return $folder !== null && is_dir($folder) ? @touch($folder) : false;
     }
 
+    /**
+     * Refreshes metadata in temporary JSON file.
+     *
+     * @return bool True if successful, false otherwise
+     */
     public function refreshTempMetadata(): bool
     {
         if ($this->tempJsonPath === null || $this->meta === null) {
@@ -444,6 +636,11 @@ final class UploadFolderManager
         ) !== false;
     }
 
+    /**
+     * Gets temporary metadata from JSON file.
+     *
+     * @return array|null Array of metadata or null if not found
+     */
     public function getTempMetadata(): ?array
     {
         if ($this->meta !== null) {
@@ -458,21 +655,33 @@ final class UploadFolderManager
         return null;
     }
 
-    /** @return array<int, string> */
+    /**
+     * Gets the directory schema.
+     *
+     * @return array<int, string> Directory schema components
+     */
     public function getSchema(): array
     {
         return $this->schema;
     }
 
-    /** @return array<int, array<int, string>|string> */
+    /**
+     * Gets all related schemas.
+     *
+     * @return array<int, array<int, string>|string> Related schemas
+     */
     public function getRelatedSchemas(): array
     {
         return $this->meta['relatedSchemas'] ?? [];
     }
 
     /**
-     * Useful when creating files by this class or from outside.
-     * Saves the file and sets permissions.
+     * Saves a file to the structure.
+     *
+     * @param string $relativeFileName Name of the file to save
+     * @param string $content Content to write to the file
+     * @param string|null $folderKey Identifier for the folder to save in
+     * @return string Path to the saved file
      */
     public function saveFile(string $relativeFileName, string $content, ?string $folderKey = 'main'): string
     {
@@ -486,7 +695,12 @@ final class UploadFolderManager
         return $path;
     }
 
-    /** @return array<int, string> */
+    /**
+     * Resolves folder paths based on key.
+     *
+     * @param string|null $folderKey Identifier for the folder to resolve
+     * @return array<int, string> Array of resolved folder paths
+     */
     private function resolveSelectedFolders(?string $folderKey): array
     {
         $this->assertCreated();
@@ -511,6 +725,12 @@ final class UploadFolderManager
         throw new InvalidArgumentException('Unknown folder key.');
     }
 
+    /**
+     * Resolves a folder path based on key.
+     *
+     * @param string|null $folderKey Identifier for the folder to resolve
+     * @return string|null Resolved folder path or null if not found
+     */
     private function resolveFolderPath(?string $folderKey): ?string
     {
         $this->assertCreated();
@@ -523,7 +743,13 @@ final class UploadFolderManager
         };
     }
 
-    /** @return array<int, array<string, mixed>> */
+    /**
+     * Collects files from a directory.
+     *
+     * @param string $folder Path to the directory
+     * @param bool $recursive Whether to include subdirectories
+     * @return array<int, array<string, mixed>> Array of file information
+     */
     private function collectFiles(string $folder, bool $recursive): array
     {
         $result = [];
@@ -550,7 +776,12 @@ final class UploadFolderManager
         return $result;
     }
 
-    /** @return array<string, mixed> */
+    /**
+     * Builds file record from SplFileInfo.
+     *
+     * @param SplFileInfo $file File information object
+     * @return array<string, mixed> Formatted file information
+     */
     private function buildFileRecord(SplFileInfo $file): array
     {
         $path = $this->normalizePath($file->getPathname());
@@ -572,6 +803,12 @@ final class UploadFolderManager
         ];
     }
 
+    /**
+     * Detects MIME type for a file.
+     *
+     * @param string $path Path to the file
+     * @return string Detected MIME type or default type
+     */
     private function detectMimeType(string $path): string
     {
         if (!is_file($path)) {
@@ -581,16 +818,18 @@ final class UploadFolderManager
         $finfo = new finfo(FILEINFO_MIME_TYPE);
         $mime = $finfo->file($path);
 
-        return is_string($mime) && $mime !== '' ? $mime : 'application/octet-stream';
+        return \is_string($mime) && $mime !== '' ? $mime : 'application/octet-stream';
     }
 
     /**
-     * @param array<int, string>|string $schema
-     * @return array<int, string>
+     * Normalizes directory schema.
+     *
+     * @param array<int, string>|string $schema Directory schema to normalize
+     * @return array<int, string> Normalized schema components
      */
     private function normalizeSchema(array|string $schema): array
     {
-        if (is_string($schema)) {
+        if (\is_string($schema)) {
             $schema = array_values(array_filter(
                 array_map('trim', explode('/', trim($schema, '/'))),
                 static fn ($v) => $v !== ''
@@ -604,6 +843,13 @@ final class UploadFolderManager
         return array_map(static fn (string $part): string => trim($part, DIRECTORY_SEPARATOR . " "), $schema);
     }
 
+    /**
+     * Builds directory path from schema.
+     *
+     * @param array<int, string> $schema Schema to use for building
+     * @param DateTimeInterface $date Date to use in path construction
+     * @return string Built directory path
+     */
     private function buildSchemaPath(array $schema, DateTimeInterface $date): string
     {
         $parts = [];
@@ -614,6 +860,13 @@ final class UploadFolderManager
         return implode(DIRECTORY_SEPARATOR, array_filter($parts, static fn ($v) => $v !== ''));
     }
 
+    /**
+     * Replaces tokens in a path segment.
+     *
+     * @param string $part Path segment with potential placeholders
+     * @param DateTimeInterface $date Date to use for replacements
+     * @return string Processed path segment
+     */
     private function replaceTokens(string $part, DateTimeInterface $date): string
     {
         $map = [
@@ -636,6 +889,12 @@ final class UploadFolderManager
         return $this->sanitizePathSegment($part);
     }
 
+    /**
+     * Sanitizes a path segment.
+     *
+     * @param string $segment Segment to sanitize
+     * @return string Sanitized segment
+     */
     private function sanitizePathSegment(string $segment): string
     {
         $segment = trim($segment);
@@ -645,6 +904,12 @@ final class UploadFolderManager
         return trim($segment, " .-");
     }
 
+    /**
+     * Normalizes file system path.
+     *
+     * @param string $path Path to normalize
+     * @return string Normalized path
+     */
     private function normalizePath(string $path): string
     {
         $path = str_replace(['/', '\\'], DIRECTORY_SEPARATOR, $path);
@@ -667,6 +932,13 @@ final class UploadFolderManager
         return $prefix . implode(DIRECTORY_SEPARATOR, $parts);
     }
 
+    /**
+     * Ensures directory exists with specified permissions.
+     *
+     * @param string $path Path to the directory
+     * @param int $permissions Permissions to set
+     * @return void
+     */
     private function ensureDirectory(string $path, int $permissions): void
     {
         if (!is_dir($path) && !mkdir($path, $permissions, true) && !is_dir($path)) {
@@ -676,6 +948,16 @@ final class UploadFolderManager
         @chmod($path, $permissions);
     }
 
+    /**
+     * Deletes a directory and all its contents recursively.
+     *
+     * This method removes files and subdirectories within the specified directory,
+     * then removes the directory itself. It handles nested directory structures
+     * by using RecursiveIteratorIterator to process each file/directory in order.
+     *
+     * @param string $dir The path to the directory to delete.
+     * @return void
+     */
     private function deleteDirectoryRecursively(string $dir): void
     {
         if (!is_dir($dir)) {
@@ -698,6 +980,12 @@ final class UploadFolderManager
         @rmdir($dir);
     }
 
+    /**
+     * Calculates the total size of a directory in bytes.
+     *
+     * @param string $dir The path to the directory.
+     * @return int The total size in bytes.
+     */
     private function calculateFolderSize(string $dir): int
     {
         $size = 0;
@@ -719,6 +1007,15 @@ final class UploadFolderManager
         return $size;
     }
 
+    /**
+     * Counts the number of subfolders within a given directory.
+     *
+     * This method recursively counts how many subdirectories are present
+     * in the specified directory, excluding '.' and '..' entries.
+     *
+     * @param string $dir The directory path to count subfolders for.
+     * @return int Returns the number of subdirectories found.
+     */
     private function countSubfolders(string $dir): int
     {
         if (!is_dir($dir)) {
@@ -735,16 +1032,40 @@ final class UploadFolderManager
         return $count;
     }
 
+    /**
+     * Generates a unique identifier for temporary directories.
+     *
+     * This method creates a cryptographically secure random hexadecimal string
+     * that can be used as a unique identifier for files or folders.
+     *
+     * @return string A hexadecimal string representation of 16 bytes (32 characters long).
+     */
     private function generateId(): string
     {
         return bin2hex(random_bytes(8));
     }
 
+    /**
+     * Generates a consistent temporary JSON filename for a given main path.
+     *
+     * This method creates a unique but deterministic name for the JSON metadata file
+     * associated with a temporary directory identified by its main path. The generated
+     * name incorporates a hash of the main path and timestamp to ensure uniqueness.
+     *
+     * @param string $mainPath The absolute path of the main directory for which the JSON is being created.
+     * @return string A unique filename (without extension) for the temporary metadata file.
+     */
     private function generateTempJsonName(string $mainPath): string
     {
         return 'upload-folder-' . substr(hash('sha256', $mainPath . '|' . microtime(true)), 0, 24);
     }
 
+    /**
+     * Asserts that structure has been created.
+     *
+     * @return void
+     * @throws RuntimeException If createStructure() hasn't been called
+     */
     private function assertCreated(): void
     {
         if ($this->mainPath === null) {

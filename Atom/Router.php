@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace Atom;
 
 use Atom\Exception\NotFoundException;
@@ -76,7 +78,7 @@ class Router
             // Test and match current route against $routeRegex
             if (preg_match_all($routeRegex, $url, $valueMatches)) {
                 $values = [];
-                for ($i = 1; $i < count($valueMatches); $i++) {
+                for ($i = 1; $i < \count($valueMatches); $i++) {
                     $values[] = $valueMatches[$i][0];
                 }
                 $routeParams = array_combine($routeNames, $values);
@@ -101,10 +103,10 @@ class Router
                 throw new NotFoundException();
             }
         }
-        if (is_string($callback)) {
+        if (\is_string($callback)) {
             return $this->renderView($callback);
         }
-        if (is_array($callback)) {
+        if (\is_array($callback)) {
             /**
              * @var Controller
              */
@@ -119,7 +121,7 @@ class Router
             $callback[0] = $controller;
         }
 
-        return call_user_func($callback, $this->request, $this->response);
+        return \call_user_func($callback, $this->request, $this->response);
     }
 
     public function renderView($view, $params = [])

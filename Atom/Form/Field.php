@@ -6,13 +6,17 @@ namespace Atom\form;
 
 use Atom\Model;
 
+/**
+ * The Field class extends BaseField and handles form fields.
+ * It contains methods for creating different types of form fields.
+ */
 class Field extends BaseField
 {
     public const TYPE_TEXT = 'text';
     public const TYPE_PASSWORD = 'password';
     public const TYPE_FILE = 'file';
     public const TYPE_HIDDEN = 'hidden';
-    public const  TYPE_CHECKBOX = 'checkbox';
+    public const TYPE_CHECKBOX = 'checkbox';
     public const TYPE_RADIO = 'radio';
     public const TYPE_DATE = 'date';
     public const TYPE_TIME = 'time';
@@ -44,6 +48,11 @@ class Field extends BaseField
         parent::__construct($model, $attribute);
     }
 
+    /**
+     * Renders the HTML for the form field.
+     *
+     * @return string The HTML code for the form field
+     */
     public function renderInput(): string
     {
         $classAttrubute = $this->model->getProperty($this->attribute, 'class');
@@ -64,35 +73,66 @@ class Field extends BaseField
         );
     }
 
+    /**
+     * Sets the field type to password.
+     *
+     * @return Field
+     */
     public function passwordField(): Field
     {
         $this->type = self::TYPE_PASSWORD;
         return $this;
     }
 
+    /**
+     * Sets the field type to file.
+     *
+     * @return Field
+     */
     public function fileField(): Field
     {
         $this->type = self::TYPE_FILE;
         return $this;
     }
 
+    /**
+     * Sets the field type to email.
+     *
+     * @return Field
+     */
     public function emailField(): Field
     {
         $this->type = self::TYPE_EMAIL;
         return $this;
     }
 
+    /**
+     * Sets the field type to hidden.
+     *
+     * @return Field
+     */
     public function hiddenField(): Field
     {
         $this->type = self::TYPE_HIDDEN;
         return $this;
     }
 
+    /**
+     * Sets the field type to checkbox.
+     *
+     * @return Field
+     */
     public function checkboxField(): Field
     {
         $this->type = self::TYPE_CHECKBOX;
         return $this;
     }
+
+    /**
+     * Sets the field type to radio button.
+     *
+     * @return Field
+     */
 
     public function radioField(): Field
     {
@@ -100,90 +140,166 @@ class Field extends BaseField
         return $this;
     }
 
+    /**
+     * Sets the field type to date.
+     *
+     * @return Field
+     */
     public function dateField(): Field
     {
         $this->type = self::TYPE_DATE;
         return $this;
     }
 
+    /**
+     * Sets the field type to time.
+     *
+     * @return Field
+     */
     public function timeField(): Field
     {
         $this->type = self::TYPE_TIME;
         return $this;
     }
 
+    /**
+     * Sets the field type to URL.
+     *
+     * @return Field
+     */
     public function urlField(): Field
     {
         $this->type = self::TYPE_URL;
         return $this;
     }
 
+    /**
+     * Sets the field type to number.
+     *
+     * @return Field
+     */
     public function numberField(): Field
     {
         $this->type = self::TYPE_NUMBER;
         return $this;
     }
-    
+
+    /**
+     * Sets the field type to range.
+     *
+     * @return Field
+     */
     public function rangeField(): Field
     {
         $this->type = self::TYPE_RANGE;
         return $this;
     }
-    
+
+    /**
+     * Sets the field type to search.
+     *
+     * @return Field
+     */
     public function searchField(): Field
     {
         $this->type = self::TYPE_SEARCH;
         return $this;
     }
-    
+
+    /**
+     * Sets the field type to color.
+     *
+     * @return Field
+     */
     public function colorField(): Field
     {
         $this->type = self::TYPE_COLOR;
         return $this;
     }
 
+    /**
+     * Sets the field type to telephone.
+     *
+     * @return Field
+     */
     public function telField(): Field
     {
         $this->type = self::TYPE_TEL;
         return $this;
     }
-    
+
+    /**
+     * Sets the field type to month.
+     *
+     * @return Field
+     */
+
     public function monthField(): Field
     {
         $this->type = self::TYPE_MONTH;
         return $this;
     }
-    
+
+    /**
+     * Sets the field type to week.
+     *
+     * @return Field
+     */
     public function weekField(): Field
     {
         $this->type = self::TYPE_WEEK;
         return $this;
     }
-    
+
+    /**
+     * Sets the field type to datetime-local.
+     *
+     * @return Field
+     */
     public function datetimeLocalField(): Field
     {
         $this->type = self::TYPE_DATETIME_LOCAL;
         return $this;
     }
-    
+
+    /**
+     * Sets the field type to submit.
+     *
+     * @return Field
+     */
     public function submitField(): Field
     {
         $this->type = self::TYPE_SUBMIT;
         return $this;
     }
-    
+
+    /**
+     * Sets the field type to reset.
+     *
+     * @return Field
+     */
     public function resetField(): Field
     {
         $this->type = self::TYPE_RESET;
         return $this;
     }
-    
+
+    /**
+     * Sets the field type to button.
+     *
+     * @return Field
+     */
     public function buttonField(): Field
     {
         $this->type = self::TYPE_BUTTON;
         return $this;
     }
-    
+
+    /**
+     * Sets the field type to image.
+     *
+     * @return Field
+     */
     public function imageField(): Field
     {
         $this->type = self::TYPE_IMAGE;

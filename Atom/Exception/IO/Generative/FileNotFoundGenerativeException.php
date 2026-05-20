@@ -1,10 +1,17 @@
 <?php
 
+declare(strict_types=1);
+
 namespace Atom\Exception\IO\Generative;
 
 use Atom\Exception\Interface\Generative\GenerativeExceptionInterface;
 use Atom\Exception\Trait\Generative\GenerativeExceptionTrait;
 
+/**
+ * FileNotFoundGenerativeException
+ *
+ * @package Atom\Exception\IO\Generative
+ */
 final class FileNotFoundGenerativeException extends \Exception implements
     GenerativeExceptionInterface,
     \Stringable,

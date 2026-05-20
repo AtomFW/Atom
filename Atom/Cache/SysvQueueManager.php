@@ -1,4 +1,5 @@
 <?php
+
 declare(strict_types=1);
 
 namespace Atom\Cache;
@@ -52,7 +53,7 @@ final class SysvQueueManager
         $this->queue = msg_get_queue($key, $this->permissions, true);
 
         if (!$this->queue) {
-            throw new SysvIpcException('Nie udało się utworzyć kolejki msg_get_queue().');
+            throw new SysvIpcException('Failed to create queue msg_get_queue().');
         }
     }
 
@@ -156,13 +157,13 @@ final class SysvQueueManager
                 return null;
             }
 
-            if ($discardExpired && is_array($message) && SysvIpcSupport::isExpired($message['expires_at'] ?? null)) {
+            if ($discardExpired && \is_array($message) && SysvIpcSupport::isExpired($message['expires_at'] ?? null)) {
                 continue;
             }
 
             return [
                 'type' => $receivedType,
-                'message' => is_array($message) ? ($message['payload'] ?? $message) : $message,
+                'message' => \is_array($message) ? ($message['payload'] ?? $message) : $message,
                 'raw' => $message,
             ];
         }

@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace Atom\Config;
 
 use Atom\Config\LoadEnvironmentVariables;
@@ -7,7 +9,26 @@ use Atom\Config\EnvironmentVariables;
 
 use Atom\Exception\IO\Generative\FileNotFoundGenerativeException;
 
-class Config extends EnvironmentVariables
+/**
+ * Class Config
+ * @package Atom\Config
+ *
+ * The Config class extends EnvironmentVariables to provide a centralized configuration
+ * management system. It handles loading environment variables from .env files, normalizing
+ * their values, and ensuring required environment variables are set for different config sections.
+ * 
+ * This class acts as the main entry point for accessing configuration values in the application
+ * and provides methods for working with environment variables in a standardized way.
+ *
+ * Key features:
+ * - Loads environment variables from .env files using the Dotenv library
+ * - Provides methods to access and normalize environment variable values
+ * - Ensures required environment variables are set before allowing access
+ * - Maintains compatibility with standard PHP $_ENV superglobal
+ *
+ * The class is designed to be extended or used directly for configuration management.
+ */
+final class Config extends EnvironmentVariables
 {
 
     /**

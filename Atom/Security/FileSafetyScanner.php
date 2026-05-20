@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace Security;
+namespace Atom\Security;
 
 use Psr\Log\LoggerInterface;
 use Psr\Log\NullLogger;
@@ -127,7 +127,7 @@ final class FileSafetyScanner
     {
         $max = 0;
         foreach ($this->signatures as $s) {
-            if (is_array($s) && isset($s['regex'])) {
+            if (\is_array($s) && isset($s['regex'])) {
                 // roughly estimate regex length as 256 (can't know); make overlap conservative
                 $len = 256;
             } else {

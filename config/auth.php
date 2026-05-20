@@ -1,7 +1,9 @@
 <?php
 
+declare(strict_types=1);
+
 /**
- * Szablon konfiguracji autoryzacji
+ * Authorization configuration template
  */
 
 return [

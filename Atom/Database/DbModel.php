@@ -140,6 +140,24 @@ abstract class DbModel extends Model
 
         return $data;
     }
+
+    /**
+     * Binds values from class properties to their corresponding keys and applies type casting
+     * 
+     * This private static method takes a model instance and maps its properties to a key-value array,
+     * applying type conversions based on specified attribute types and property-level cast attributes.
+     * It's designed to prepare data for database operations, API responses, or data transfer scenarios.
+     * 
+     * The method performs several operations:
+     * 1. Processes attributesTypes array to map values with proper type conversion
+     * 2. Uses Reflection to inspect and validate properties before processing
+     * 3. Respects #[Cast] attributes for specialized value conversions
+     * 
+     * @param object $modelClass The model instance containing properties to be processed
+     * @param array $classProperty Associative array of property names and their values
+     * @param array $attributesTypes Array mapping property names to their expected types for conversion
+     * @return array Returns an associative array with property names as keys and converted values
+     */
     private static function bindValuesToKeys(object $modelClass, array $classProperty, array $attributesTypes)
     {
         $temp = [];
@@ -184,6 +202,26 @@ abstract class DbModel extends Model
         return $temp;
     }
 
+    /**
+     * Binds data to a static class instance by mapping array data to object properties
+     * 
+     * This private static method takes an associative array of data and maps it to the properties
+     * of the current class. It provides flexible data binding with optional type casting and
+     * automatic restriction of which properties can be set. The method offers two modes:
+     * 1. Auto-restrict mode (default) - Only allows properties that exist in the class
+     * 2. Non-auto-restrict mode - Allows setting any property, even if it doesn't exist
+     * 
+     * When autoRestrict is true and data is provided:
+     * - For each data key-value pair, it attempts to map values based on type information
+     * - Uses Reflection to inspect class properties and their types
+     * - Applies automatic type conversion through the AutoMapped::mapValueFromDB() method
+     * - Respects property-level #[Cast] attributes for specialized casting
+     * 
+     * @param array $data Associative array of data to bind to object properties
+     * @param array|null $attributesTypes Optional array of attribute type mappings for type checking
+     * @param bool $autoRestrict If true, only allows setting properties that exist in the class
+     * @return static Returns a new instance of the calling class with bound data
+     */
     private static function bindDataToStaticClass(array $data, ?array $attributesTypes, bool $autoRestrict = true): static
     {
         if (!$autoRestrict) {

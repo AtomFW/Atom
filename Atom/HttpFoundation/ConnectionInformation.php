@@ -75,7 +75,6 @@ final class ConnectionInformation
         if ($extends && self::$browscap === null) {
             $this->initBrowscap($cache, $logger);
         }
-            // var_dump("CI constructor: UA=", $this->userAgent, " extends=", $extends);
 
         $this->parsed = $this->parse();
         self::$cache[$key] = $this->parsed;
@@ -130,14 +129,7 @@ final class ConnectionInformation
 
     private function parseBrowscap(): array
     {
-        // try {
         return (array) self::$browscap?->getBrowser($this->userAgent);
-            // var_dump ("CI parseBrowscap: data=", (array)$data );
-        // return \is_array($data) ? $data : null;
-        // } catch (Throwable) {
-        //     var_dump ("CI parseBrowscap: failed to parse with browscap");
-        //     return null;
-        // }
     }
 
     private function normalizeWhichBrowser(WhichBrowserParser $parser): array

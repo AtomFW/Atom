@@ -472,17 +472,6 @@ final class CacheWrapper implements CacheItemPoolInterface, CacheInterface
     /**
      * Tag support
      */
-    // public function tag(string|array $tags): CacheWrapper
-    // {
-    //     if (!self::$tagAware) {
-    //         throw new \RuntimeException('Tag support is not enabled.');
-    //     }
-
-    //     $item = self::ensureAdapter()->getItem('__tag_tmp_' . uniqid());
-    //     $item->tag((array)$tags);
-
-    //     return $item;
-    // }
 
     /**
      * Tag an item (if supported). Returns true on success.

@@ -6,8 +6,16 @@ namespace Atom\form;
 
 use Atom\Model;
 
+/**
+ * Class representing a measurement field in the form.
+ * Extends the base form field with measurement-specific functionalities.
+ */
 class MeterField extends BaseField
 {
+    /**
+     * Constant representing a meter type measurement.
+     * Used for defining meter field configurations.
+     */
     public const TYPE_METER = 'meter';
 
     /**
@@ -22,6 +30,11 @@ class MeterField extends BaseField
         parent::__construct($model, $attribute);
     }
 
+    /**
+     * Render a meter input field with proper class handling and value assignment
+     *
+     * @return string HTML markup for the meter input element
+     */
     public function renderInput(): string
     {
         $classAttrubute = $this->model->getProperty($this->attribute, 'class');

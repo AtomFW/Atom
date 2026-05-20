@@ -259,13 +259,13 @@ final class HtmlPurifierWrapper
         // Also allow calling methods on the config object via "config::<method>" notation
         // e.g. $wrapper->config_set('HTML.DefinitionID', 'myid');
         if (str_starts_with($name, 'config_')) {
-            $configMethod = substr($name, strlen('config_'));
+            $configMethod = substr($name, \strlen('config_'));
             if (method_exists($this->config, $configMethod)) {
                 return $this->config->{$configMethod}(...$arguments);
             }
         }
 
-        throw new InvalidArgumentException(sprintf('Method %s::%s does not exist.', self::class, $name));
+        throw new InvalidArgumentException(\sprintf('Method %s::%s does not exist.', self::class, $name));
     }
 
     /**

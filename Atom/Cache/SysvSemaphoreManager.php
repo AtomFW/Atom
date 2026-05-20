@@ -1,4 +1,5 @@
 <?php
+
 declare(strict_types=1);
 
 namespace Atom\Cache;
@@ -7,6 +8,7 @@ use Atom\Cache\SysvIpcException;
 use Atom\Cache\SysvIpcSupport;
 use Atom\Cache\SysvQueueManager;
 use Atom\Cache\SysvSharedMemoryManager;
+use SysvSemaphore;
 
 /**
  * System V IPC (Inter-Process Communication) semaphore manager
@@ -51,7 +53,7 @@ final class SysvSemaphoreManager
         $this->semaphore = sem_get($key, 1, $this->permissions, true);
 
         if (!$this->semaphore) {
-            throw new SysvIpcException('Nie udało się utworzyć/semafora sem_get().');
+            throw new SysvIpcException('Failed to create/semaphore sem_get().');
         }
     }
 
@@ -112,7 +114,7 @@ final class SysvSemaphoreManager
     public function withLock(callable $callback, bool $nowait = false): mixed
     {
         if (!$this->acquire($nowait)) {
-            throw new SysvIpcException('Nie udało się przejąć semafora.');
+            throw new SysvIpcException('Failed to capture the semaphore.');
         }
 
         try {
@@ -152,6 +154,6 @@ final class SysvSemaphoreManager
     public function remove(): bool
     {
         SysvIpcSupport::requireFunction('sem_remove', 'sysvsem');
-        return sem_remove($this->semaphore);
+        return \sem_remove($this->semaphore);
     }
 }

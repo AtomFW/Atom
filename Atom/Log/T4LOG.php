@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 /*
     the all log | constructor
     by Timonix
@@ -575,7 +577,7 @@ final class T4LOG implements LoggerInterface
             $priority = $this->priority;
         }
 
-        return in_array($priority, [
+        return \in_array($priority, [
             self::PRIORITY_EMERG,
             self::PRIORITY_ALERT,
             self::PRIORITY_CRIT,
@@ -607,13 +609,29 @@ final class T4LOG implements LoggerInterface
         );
     }
 
+    /**
+     * Filters special characters from a file name or path.
+     *
+     * This function removes or replaces characters that are not safe for use in file systems.
+     * It's designed to prevent potential issues with file creation or access due to invalid characters.
+     *
+     * @param string $raw The input string (file name or path) to be filtered.
+     * @return string The filtered string, safe for use as a file name or path component.
+     */
     private function filterFillName(string $raw): string
     {
-        $raw = str_replace(array(
+        // Remove control characters (ASCII 0-31)
+        $raw = str_replace(
+            [
             "\x00", "\x01", "\x02", "\x03", "\x04", "\x05", "\x06", "\x07", "\x08", "\x0B", "\x0C", "\x0E", "\x0F",
             "\x10", "\x11", "\x12", "\x13", "\x14", "\x15", "\x16", "\x17", "\x18", "\x19", "\x1A", "\x1B", "\x1C",
-            "\x1D", "\x1E", "\x1F",
-        ), '', $raw);
+                "\x1D", "\x1E", "\x1F"
+            ],
+            '',
+            $raw
+        );
+
+        // Escape special characters that might be problematic in filesystems (if any remain)
         return addslashes($raw);
     }
 
@@ -696,6 +714,12 @@ final class T4LOG implements LoggerInterface
         return $this;
     }
 
+    /**
+     * Logs application start/stop events to the specified log file.
+     *
+     * @param string $EGV The event type, e.g., "START" or "STOP".
+     * @return bool True on success, false on failure.
+     */
     private function t4LOGLooger(string $EGV): bool
     {
         return $this->saveLog(
@@ -724,6 +748,9 @@ final class T4LOG implements LoggerInterface
         }
     }
 
+    /**
+     * @return array
+     */
     public function getParams(): array
     {
         return $this->params;

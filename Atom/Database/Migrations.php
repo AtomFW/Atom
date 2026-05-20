@@ -8,10 +8,36 @@ use Atom\Atom;
 use Atom\Database\Database;
 use Atom\DateTime\DateTime;
 
+/**
+ * Class Migrations
+ * 
+ * The Migrations class is responsible for handling database migration operations.
+ * It provides functionality to adapt SQL migration queries by replacing placeholders
+ * with actual values and manages the underlying database configuration and datetime
+ * operations required for migration processes.
+ * 
+ * This class serves as a utility for database schema evolution, allowing developers
+ * to version control database changes and apply them systematically across different
+ * environments through placeholder replacement and configuration management.
+ * 
+ * @package Atom\Database\Migrations
+ */
 final class Migrations
 {
     public array $config;
 
+    /**
+     * Class constructor
+     * 
+     * Initializes a new instance of the class and stores references to the database and datetime objects.
+     * This constructor accepts two dependencies through the parameters and assigns them to
+     * their respective class properties, ensuring that the class has access to database
+     * configuration and datetime functionality.
+     * 
+     * @param Database $database The database instance used for database operations
+     * @param DateTime $datetime The datetime instance used for date/time operations
+     * @return void
+     */
     public function __construct(public Database $database, public DateTime $datetime) {
         $this->config = $this->database->getConfig();
     }
@@ -172,6 +198,25 @@ final class Migrations
         return $this->database->pdo->prepare($sql);
     }
 
+    /**
+     * Adapts SQL migration queries by replacing placeholders with actual values
+     * 
+     * This public method takes an SQL statement as a string and replaces various
+     * placeholders with actual database and system information. It's commonly used
+     * in database migration scripts to make them dynamic and environment-specific.
+     * 
+     * Placeholders replaced:
+     * - {{prefix}} - Database table prefix from configuration
+     * - {{hostname}} - Hostname of the server
+     * - {{osname}} - Operating system name
+     * - {{osversion}} - Operating system version
+     * - {{osip}} - Server IP address
+     * - {{datetimeutcsql}} - Current UTC datetime in SQL format
+     * - {{domain}} - Database URI from configuration
+     * 
+     * @param string $sql The SQL statement containing placeholders to be replaced
+     * @return string The SQL statement with all placeholders replaced with actual values
+     */
     public function adaptMigration (string $sql): string
     {
         return str_replace(
@@ -196,6 +241,17 @@ final class Migrations
         , $sql);
     }
 
+    /**
+     * Logs a message with a timestamp to the console
+     * 
+     * This private method takes a message as input and outputs it with a timestamp
+     * in the format [YYYY-MM-DD HH:MM:SS] followed by a new line character.
+     * The method uses PHP's built-in date() function to generate the current timestamp
+     * and outputs the formatted message using echo.
+     * 
+     * @param string $message The message to be logged with timestamp
+     * @return void
+     */
     private function log($message)
     {
         echo "[" . date("Y-m-d H:i:s") . "] - " . $message . PHP_EOL;

@@ -7,6 +7,33 @@ namespace Atom\DataBase;
 use Atom\Atom;
 use Atom\Types\Point;
 
+/**
+ * The AutoMapped class is a database abstraction layer that provides:
+ * - Database connection management with configuration support
+ * - Table name handling with prefix functionality
+ * - Type conversion utilities for database operations
+ * - Query building assistance through method chaining
+ * - Transaction handling capabilities
+ * - Identifier quoting and escaping
+ * 
+ * This class serves as a foundation for database interactions in PHP applications,
+ * abstracting away low-level database specifics while providing convenient utility methods.
+ * It's designed to work with Doctrine DBAL for database operations and provides
+ * additional helpful methods for common database tasks.
+ * 
+ * Key features include:
+ * - Dynamic table name resolution with prefix support
+ * - Type conversion between PHP and database formats
+ * - Automated transaction handling
+ * - Flexible column/property name mapping
+ * - Support for different database drivers through Doctrine DBAL
+ * 
+ * Usage example:
+ * ```php
+ * $db = new AutoMapped($config);
+ * $users = $db->table('users')->where('active', 1)->fetchAll();
+ * ```
+ */
 class AutoMapped
 {
     /**

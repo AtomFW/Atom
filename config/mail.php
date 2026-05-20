@@ -1,7 +1,9 @@
 <?php
 
+declare(strict_types=1);
+
 /**
- * Szablon konfiguracji mail
+ * Email configuration template
  */
 
 return [

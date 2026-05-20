@@ -6,13 +6,13 @@ namespace Atom\Head\Enum;
 
 enum OpenGraphTag: string
 {
-    // Tagi Podstawowe (Basic)
+    // Basic Tags (Basic)
     case TITLE = 'title';
     case TYPE = 'type';
     case IMAGE = 'image';
     case URL = 'url';
 
-    // Tagi Uzupełniające (Optional)
+    // Supplemental Tags (Optional)
     case DESCRIPTION = 'description';
     case SITE_NAME = 'site_name';
     case LOCALE = 'locale';
@@ -23,7 +23,7 @@ enum OpenGraphTag: string
     case BOOK = 'book';
     case PROFILE = 'profile';
 
-    // Artykuły (Article)
+    // Articles (Article)
     case ARTICLE = 'article';
     case ARTICLE_PUBLISHED_TIME = 'article:published_time';
     case ARTICLE_MODIFIED_TIME = 'article:modified_time';
@@ -31,7 +31,7 @@ enum OpenGraphTag: string
     case ARTICLE_SECTION = 'article:section';
     case ARTICLE_TAG = 'article:tag';
 
-    // Multimedia - Obrazy (Image Details)
+    // Multimedia - Pictures (Image Details)
     case IMAGE_SECURE_URL = 'image:secure_url';
     case IMAGE_TYPE = 'image:type';
     case IMAGE_WIDTH = 'image:width';
@@ -53,7 +53,7 @@ enum OpenGraphTag: string
     case AUDIO_TYPE = 'audio:type';
     case AUDIO_DURATION = 'audio:duration';
 
-    // Muzyka (Music)
+    // Music (Music)
     case MUSIC_DURATION = 'music:duration';
     case MUSIC_ALBUM = 'music:album';
     case MUSIC_MUSICIAN = 'music:musician';

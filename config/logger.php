@@ -1,7 +1,9 @@
 <?php
 
+declare(strict_types=1);
+
 /**
- * Szablon konfiguracji systemu logów
+ * Log system configuration template
  */
 
 return [
@@ -30,7 +32,7 @@ return [
     'choices' => [
         'log' => [
             'driver' => 'log',
-            'path' => realpath(env('LOG_PATH', '../runtime/log')) . DIRECTORY_SEPARATOR,
+            'path' => realpath(env('LOG_PATH', __DIR__ . '/../runtime/log/')) . DIRECTORY_SEPARATOR,
             // 'path' => realpath(env('LOG_PATH', env('APP_URL', 'http://localhost') . '/runtime/log')),
             'level' => env('LOG_LEVEL', 'debug'), // log level: debug, info, notice, warning, error, critical, alert, emergency
         ],
@@ -43,7 +45,7 @@ return [
         ],
         'emergency' => [
             'driver' => 'emergency',
-           'path' => realpath(env('LOG_EMERGENCY_PATH', '../runtime/log')) . DIRECTORY_SEPARATOR,
+           'path' => realpath(env('LOG_EMERGENCY_PATH', __DIR__ . '/../runtime/log/')) . DIRECTORY_SEPARATOR,
         ],
     ], 
 ];

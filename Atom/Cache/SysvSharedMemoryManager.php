@@ -8,6 +8,7 @@ use Atom\Cache\SysvIpcException;
 use Atom\Cache\SysvIpcSupport;
 use Atom\Cache\SysvQueueManager;
 use Atom\Cache\SysvSemaphoreManager;
+use SysvSharedMemory;
 
 /**
  * Final class that manages shared memory operations for Sysv IPC implementation
@@ -68,14 +69,14 @@ final class SysvSharedMemoryManager
         SysvIpcSupport::requireFunction('shm_remove', 'sysvshm');
 
         if ($this->shmSize <= 0) {
-            throw new SysvIpcException('shmSize musi być większe od 0.');
+            throw new SysvIpcException('shmSize must be greater than 0.');
         }
 
         $key = SysvIpcSupport::deriveKey($this->baseKey, $this->namespace, 'shm');
         $this->shm = shm_attach($key, $this->shmSize, $this->permissions);
 
         if (!$this->shm) {
-            throw new SysvIpcException('Nie udało się podłączyć pamięci współdzielonej shm_attach().');
+            throw new SysvIpcException('Failed to attach shared memory shm_attach().');
         }
 
         $this->lock = new SysvSemaphoreManager($this->baseKey, $this->permissions, $this->namespace);
@@ -340,7 +341,7 @@ final class SysvSharedMemoryManager
             $current = $this->get($key, 0);
 
             if (!is_int($current) && !is_float($current) && !is_numeric($current)) {
-                throw new SysvIpcException("Wartość '{$key}' nie jest liczbą.");
+                throw new SysvIpcException("The value '{$key}' is not a number.");
             }
 
             $newValue = (int)$current + $by;
@@ -383,7 +384,7 @@ final class SysvSharedMemoryManager
             $current = $this->get($key, []);
 
             if (!\is_array($current)) {
-                throw new SysvIpcException("Wartość '{$key}' nie jest tablicą.");
+                throw new SysvIpcException("The value '{$key}' is not an array.");
             }
 
             $current[] = $value;
@@ -433,7 +434,7 @@ final class SysvSharedMemoryManager
             $current = $this->get($key, []);
 
             if (!\is_array($current)) {
-                throw new SysvIpcException("Wartość '{$key}' nie jest tablicą.");
+                throw new SysvIpcException("The value '{$key}' is not an array.");
             }
 
             array_unshift($current, $value);

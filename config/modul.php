@@ -1,7 +1,9 @@
 <?php
 
+declare(strict_types=1);
+
 /**
- * Szablon konfiguracji załaczania modułów zwiększającej funkcjonalność atoma
+ * Template for configuring modules that extend Atom's functionality
  */
 
 return [

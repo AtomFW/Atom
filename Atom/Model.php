@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace Atom;
 
 class Model
@@ -10,12 +12,6 @@ class Model
     public const RULE_MAX = 'max';
     public const RULE_MATCH = 'match';
     public const RULE_UNIQUE = 'unique';
-
-    // public function __set($name, $value) {
-    //     // PHP nie wyrzuci błędu, jeśli zdefiniujesz tę metodę
-    //     $this->data[$name] = $value;
-    //     self::[$name] = $value;
-    // }
 
     public array $errors = [];
 
@@ -28,7 +24,7 @@ class Model
         }
     }
 
-    public function attributes()
+    public static function attributes()
     {
         return [];
     }
@@ -54,7 +50,7 @@ class Model
             $value = $this->{$attribute};
             foreach ($rules as $rule) {
                 $ruleName = $rule;
-                if (!is_string($rule)) {
+                if (!\is_string($rule)) {
                     $ruleName = $rule[0];
                 }
                 if ($ruleName === self::RULE_REQUIRED && !$value) {
@@ -76,14 +72,47 @@ class Model
                     $className = $rule['class'];
                     $uniqueAttr = $rule['attribute'] ?? $attribute;
                     $tableName = $className::tableName();
+                    $primaryKey = $className::primaryKey();
                     $db = Atom::$app->db;
-                    $statement = $db->prepare("SELECT * FROM $tableName WHERE $uniqueAttr = :$uniqueAttr");
-                    $statement->bindValue(":$uniqueAttr", $value);
-                    $statement->execute();
-                    $record = $statement->fetchObject();
-                    if ($record) {
+                    $select = $db->selectFrom($tableName, $primaryKey)->where("t.$uniqueAttr = :$uniqueAttr")->setParameters(["$uniqueAttr" => $value]);
+                    // $a = $db->selectFrom($tableName)->where("t.$uniqueAttr = :$uniqueAttr")->setParameters(["$uniqueAttr" => $value]);
+                    // $a = $db->selectFrom($tableName)->where("$uniqueAttr = $value");
+                    // var_dump($a->getSQL());
+                    $result = $select->executeQuery();
+                    // var_dump($re->rowCount());
+                    // var_dump($re->fetchAllAssociative());
+
+                    if ($result->rowCount() > 0) {
                         $this->addErrorByRule($attribute, self::RULE_UNIQUE);
                     }
+
+                    // var_dump($a->executeQuery()->fetchAllAssociative());
+                    // var_dump($db->selectFrom($tableName)->where([$uniqueAttr => $value])->limit(1)->fetchObject());
+
+// $queryBuilder
+//     ->select('u.id', 'u.username', 'u.email')
+//     ->from('users', 'u')
+//     ->where('u.id = :id')
+//     ->andWhere('u.status = :status')
+//     ->setParameter('id', 1)
+//     ->setParameter('status', 'active')
+//     ->orderBy('u.username', 'ASC')
+//     ->setMaxResults(10); // LIMIT
+
+// // Wykonanie zapytania
+// $result = $queryBuilder->executeQuery();
+
+// // Pobranie danych jako tablicy asocjacyjnej
+// $user = $result->fetchAssociative();
+
+                    // die();
+                    // $statement = $db->prepare("SELECT * FROM $tableName WHERE $uniqueAttr = :$uniqueAttr");
+                    // $statement->bindValue(":$uniqueAttr", $value);
+                    // $statement->execute();
+                    // $record = $statement->fetchObject();
+                    // if ($record) {
+                    //     $this->addErrorByRule($attribute, self::RULE_UNIQUE);
+                    // }
                 }
             }
         }
@@ -131,5 +160,154 @@ class Model
     {
         $errors = $this->errors[$attribute] ?? [];
         return $errors[0] ?? '';
+    }
+
+    public function property(string $attribute): string
+    {
+        if (!isset(($this->form()[$attribute]))) {
+            return '';
+        }
+
+        $attr = [];
+        foreach ($this->form()[$attribute] as $key => $value) {
+            $key = strtolower($key);
+            if (\in_array($key, ['value', 'class', 'options'])) {
+                continue;
+            }
+            $attr[] = "{$key}=\"{$value}\"";
+        }
+
+        return implode(' ', $attr);
+    }
+
+    public function getProperty(string $attribute, string $property): string|false
+    {
+        if (isset(($this->form()[$attribute][$property]))) {
+            return $this->form()[$attribute][$property];
+        }
+
+        return false;
+    }
+    
+    public function form(): array
+    {
+        return [];
+    }
+
+    public function getInputOuterType(): string|false
+    {
+        if (!isset(($this->form()["base"]["outer"]["type"]))) {
+            return "div";
+        }
+
+        return $this->form()["base"]["outer"]["type"];
+    }
+
+    public function getInputOuterAttributes(): string|false
+    {
+        if (!isset($this->form()["base"]["outer"]["attr"])) {
+            return false;
+        }
+
+        $attr = [];
+        foreach ($this->form()["base"]["outer"]["attr"] as $key => $value) {
+            $key = strtolower($key);
+            if (\in_array($key, ['class'])) {
+                continue;
+            }
+            $attr[] = "{$key}=\"{$value}\"";
+        }
+
+        return implode(' ', $attr);
+    }
+
+    public function getInputOuterAttribute(string $property): string|false
+    {
+        if (isset(($this->form()["base"]["outer"]["attr"][$property]))) {
+            return $this->form()["base"]["outer"]["attr"][$property];
+        }
+
+        return false;
+    }
+
+    public function getInputInnerType(): string|false
+    {
+        if (!isset(($this->form()["base"]["inner"]["type"]))) {
+            return "div";
+        }
+
+        return $this->form()["base"]["inner"]["type"];
+    }
+
+    public function getInputInnerAttributes(): string|false
+    {
+        if (!isset($this->form()["base"]["inner"]["attr"])) {
+            return false;
+        }
+
+        $attr = [];
+        foreach ($this->form()["base"]["inner"]["attr"] as $key => $value) {
+            $key = strtolower($key);
+            if (\in_array($key, ['class'])) {
+                continue;
+            }
+            $attr[] = "{$key}=\"{$value}\"";
+        }
+
+        return implode(' ', $attr);
+    }
+
+    public function getInputInnerAttribute(string $property): string|false
+    {
+        if (isset(($this->form()["base"]["inner"]["attr"][$property]))) {
+            return $this->form()["base"]["inner"]["attr"][$property];
+        }
+
+        return false;
+    }
+
+    public function getInputTargetType(): string|false
+    {
+        if (!isset(($this->form()["base"]["target"]["type"]))) {
+            return "div";
+        }
+
+        return $this->form()["base"]["target"]["type"];
+    }
+
+    public function getInputTargetAttributes(): string|false
+    {
+        if (!isset($this->form()["base"]["target"]["attr"])) {
+            return false;
+        }
+
+        $attr = [];
+        foreach ($this->form()["base"]["target"]["attr"] as $key => $value) {
+            $key = strtolower($key);
+            if (\in_array($key, ['class'])) {
+                continue;
+            }
+            $attr[] = "{$key}=\"{$value}\"";
+        }
+
+        return implode(' ', $attr);
+    }
+
+    public function getInputTargetAttribute(string $property): string|false
+    {
+        if (isset(($this->form()["base"]["target"]["attr"][$property]))) {
+            return $this->form()["base"]["target"]["attr"][$property];
+        }
+
+        return false;
+    }
+
+    public function getOptionSelects(string $attribute): array|false
+    {
+        if (!isset(($this->form()[$attribute]["options"]))) {
+            return false;
+        }
+
+        return $this->form()[$attribute]["options"];
     }
 }

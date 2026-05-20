@@ -746,7 +746,7 @@ final class ImageTransformer
     // -------------------------
     public function getAvgColor(): string
     {
-        // Imagick (najdokładniejsze)
+        // Imagick (most accurate)
         if ($this->isUsingImagick()) {
             $tmp = clone $this->imagick;
             $tmp->resizeImage(1, 1, \Imagick::FILTER_BOX, 1);
@@ -781,7 +781,7 @@ final class ImageTransformer
         $g = ($rgb >> 8) & 0xFF;
         $b = $rgb & 0xFF;
 
-        // PHP 8.5 – nie używamy imagedestroy
+        // PHP 8.5 – we do not use imagedestroy
         $tmp = null;
 
         return \sprintf('#%02x%02x%02x', $r, $g, $b);
@@ -805,7 +805,7 @@ final class ImageTransformer
     private function colorAlloc($gd, string $hex)
     {
         $hex = ltrim($hex, '#');
-        if (strlen($hex) === 3) {
+        if (\strlen($hex) === 3) {
             $r = hexdec(str_repeat($hex[0], 2));
             $g = hexdec(str_repeat($hex[1], 2));
             $b = hexdec(str_repeat($hex[2], 2));
@@ -820,7 +820,7 @@ final class ImageTransformer
     private function hexColorAllocate($gd, string $hex, float $opacity = 1.0)
     {
         $hex = ltrim($hex, '#');
-        if (strlen($hex) === 3) {
+        if (\strlen($hex) === 3) {
             $r = hexdec(str_repeat($hex[0], 2));
             $g = hexdec(str_repeat($hex[1], 2));
             $b = hexdec(str_repeat($hex[2], 2));
@@ -909,14 +909,14 @@ final class ImageTransformer
 
     public function getDominantColor(int $paletteSize = 8): string
     {
-        // Imagick (najlepsza jakość)
+        // Imagick (best quality)
         if ($this->isUsingImagick()) {
             $tmp = clone $this->imagick;
 
-            // zmniejszamy obraz dla wydajności
+            // we reduce the image for efficiency
             $tmp->resizeImage(64, 64, \Imagick::FILTER_BOX, 1, true);
 
-            // redukcja kolorów
+            // color reduction
             $tmp->quantizeImage($paletteSize, \Imagick::COLORSPACE_RGB, 0, false, false);
 
             $histogram = $tmp->getImageHistogram();
@@ -969,7 +969,7 @@ final class ImageTransformer
                 $g = ($rgb >> 8) & 0xFF;
                 $b = $rgb & 0xFF;
 
-                // lekkie zaokrąglenie kolorów (quantization)
+                // slight color rounding (quantization)
                 $r = (int)(round($r / 32) * 32);
                 $g = (int)(round($g / 32) * 32);
                 $b = (int)(round($b / 32) * 32);

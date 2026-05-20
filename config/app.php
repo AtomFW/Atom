@@ -5,7 +5,7 @@ declare(strict_types=1);
 use Atom\Head\Enum\ColorScheme;
 
 /**
- * Szablon konfiguracji aplikacji
+ * Application configuration template
  */
 
 return [
@@ -360,5 +360,11 @@ return [
         'colorTheme' => env('APP_WEB_MANIFEST_COLOR_THEME', '#000000'),
         'backgroundColor' => env('APP_WEB_MANIFEST_COLOR_THEME', '#000000'),
         'autoSave' => env('APP_WEB_MANIFEST_AUTO_SAVE', true),
+    ],
+
+    'webPush' => [
+        'mail' => env('APP_WEB_PUSH_EMAIL', "example@example.com"),
+        'publicKey' => env('APP_WEB_PUSH_PUBLIC_KEY'),
+        'privateKey' => env('APP_WEB_PUSH_PRIVATE_KEY'),
     ]
 ];

@@ -49,7 +49,6 @@ final class ResourcesPath
     public function __construct(private ?string $path = null, private ?array $configShring = null)
     {
         if ($this->path === null) {
-            // use static path
             return;
         }
 

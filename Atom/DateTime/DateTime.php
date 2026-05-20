@@ -5,6 +5,11 @@ declare(strict_types=1);
 namespace Atom\DateTime;
 
 use Carbon\Carbon;
+use Carbon\Traits\Date;
+use Carbon\CarbonTimeZone;
+use Carbon\Month;
+use Carbon\Translator;
+use Carbon\WeekDay;
 use DateTimeInterface;
 use IntlDateFormatter;
 

@@ -41,7 +41,7 @@ self.addEventListener('notificationclick', event => {
 
 // Installation - this is where we usually cache files
 self.addEventListener('install', (event) => {
-  console.log('Service Worker: Instalowanie...');
+  console.log('Service Worker: Instaled...');
 });
 
 // Activation

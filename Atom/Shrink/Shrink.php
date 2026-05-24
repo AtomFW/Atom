@@ -341,7 +341,7 @@ final class Shrink
             );
             $path .= ".min.css";
 
-            if (!\file_exists($path)) {
+            if (!\file_exists(\dirname($path))) {
                 \mkdir(\dirname($path), 0755, true);
             }
             $css->minify($path);
@@ -359,7 +359,7 @@ final class Shrink
             );
             $path .= ".min.js";
 
-            if (!\file_exists($path)) {
+            if (!\file_exists(\dirname($path))) {
                 \mkdir(\dirname($path), 0755, true);
             }
             $js->minify($path);

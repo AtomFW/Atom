@@ -30,6 +30,7 @@ final class a0002_initial_servers {
             `last_online_at` datetime(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) COMMENT 'UTC time when the server was last active',
             `updated_at` datetime(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3) COMMENT 'time when the data was updated',
             `added_at` datetime(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) COMMENT 'UTC time when the entry was added',
+			`description` varchar(4096) CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_bin NULL COMMENT 'description of what the server is for, etc.',
             `metadata` json DEFAULT NULL COMMENT 'other servers data'
             ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_bin COMMENT='Registry of all servers/instances';";
         $SQL = $this->db->adaptMigration($SQL);

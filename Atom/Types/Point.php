@@ -53,6 +53,11 @@ readonly class Point
      */
     public function toSql(): string
     {
-        return "POINT({$this->latitude} {$this->longitude})";
+        return "POINT({$this->latitude}, {$this->longitude})";
+    }
+
+    public function toPrepareSql(string $xName, string $yName): string
+    {
+        return "POINT(:{$xName}, :{$yName})";
     }
 }

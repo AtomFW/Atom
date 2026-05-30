@@ -92,10 +92,16 @@ class AutoMapped
      * @param string $type The expected data type for mapping (e.g., 'string', 'int', 'datetime').
      * @return mixed The value after being processed or converted according to the specified type.
      */
-    public static function mapValueFromPHP(int|string $value, string $type) {
-        if (\in_array($type, ['point', 'location', 'gps'])) {
-            sscanf($value, "POINT(%f %f)", $longitude, $latitude);
+    public static function mapValueFromPHP(int|string|object|array|null $value, string $type): mixed
+    {
+        if ($value == null) {
+            return $value;
         }
+
+        if (\in_array($type, ['point', 'location', 'gps'])) {
+            sscanf($value, "%f,%f", $longitude, $latitude);
+        }
+
         if (substr_count($type, "\\") >= 3) {
             if (class_exists($type)) {
                 $class = new $type();
@@ -106,7 +112,7 @@ class AutoMapped
         return match($type) {
             'datetime','date', 'time' => Atom::$app->datetime->toSQL($value),
             'json'          => json_encode($value),
-            'point', 'location', 'gps' => new Point((float)$latitude, (float)$longitude),
+            'point', 'location', 'gps' => new Point((float)$latitude, (float)$longitude)->toSql(),
             'raw_point', 'raw_location', 'raw_gps' => (object)$value,
             'uuid'          => str_replace('-', "", pack('H8a/H4b/H4c/H4d/H12e', $value)),
             'class' => $class->toSQL($value),

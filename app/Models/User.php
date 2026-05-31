@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace App\models;
 
 use Atom\Atom;
@@ -97,70 +99,62 @@ class User extends UserModel
             ]],
             'password' => [self::RULE_REQUIRED, [self::RULE_MIN, 'min' => 8]],
             'passwordConfirm' => [[self::RULE_MATCH, 'match' => 'password']],
-            // 'textarea' => [self::RULE_REQUIRED],
         ];
     }
 
     // public function formatAttributes(): array
-    public function form(): array
-    {
-        return [
-            "base" => [
-                "outer" => [
-                    "type" => "div",
-                    "attr" => [
-                        "class" => "row mb-3"
-                    ]
-                ],
-                'inner' => [
-                    "type" => "label",
-                    "attr" => [
-                        "class" => "col-sm-2 col-form-label"
-                    ]
-                ],
-                'target' => [
-                    "type" => "div",
-                    "attr" => [
-                        "class" => "col-sm-10 tsr red tsr-alert tsr-alert-danger"
-                    ]
-                ]
-            ],
-            "email" => [
-                "timonix" => "najlepszy :D",
-                // "class" => "form-control tsr",
-                "placeholder" => "dawaj meil",
-                "aria-label" => "dawaj meil",
-                "value" => "dawaj meil",
-                ],
-            "passwordConfirm" => [
-                "timonix" => "najlepszy :D",
-                // "class" => "form-control tsr",
-                "placeholder" => "dawaj meil",
-                "aria-label" => "dawaj meil",
-            ],
-            "optionone" => [
-                "timonix" => "najlepszy :D",
-                "class" => "form-control tsr",
-                "placeholder" => "dawaj meil",
-                "value" => "class",
-                "options" => [
-                    "timonix" => "najlepszy :D",
-                    "timonixxd" => ["najlepszy :D", "disabled"],
-                    "class" => ["form-control tsr", "selected"],
-                ]
-            ],
-            "pro" => [
-                "value" => 50,
-                "min" => 10,
-                "max" => 100
-            ],
-            "met" => [
-                "value" => 50,
-                "min" => 10,
-                "max" => 100
-            ]
-        ];
-    }
+    // public function form(): array
+    // {
+    //     return [
+    //         "base" => [
+    //             "outer" => [
+    //                 "type" => "div",
+    //                 "attr" => [
+    //                     "class" => "row mb-3"
+    //                 ]
+    //             ],
+    //             'inner' => [
+    //                 "type" => "label",
+    //                 "attr" => [
+    //                     "class" => "col-sm-2 col-form-label"
+    //                 ]
+    //             ],
+    //             'target' => [
+    //                 "type" => "div",
+    //                 "attr" => [
+    //                     "class" => "col-sm-10 tsr red tsr-alert tsr-alert-danger"
+    //                 ]
+    //             ]
+    //         ],
+    //         "email" => [
+    //             "timonix" => "yes",
+    //             "placeholder" => "Write your email",
+    //             "aria-label" => "Write your email",
+    //             // "value" => "Write your email",
+    //             ],
+    //         "options" => [
+    //             "timonix" => "yes",
+    //             "class" => "form-control tsr",
+    //             "placeholder" => "select option",
+    //             "value" => "class",
+    //             "options" => [
+    //                 "timonix" => "yes",
+    //                 "timonix-disabled" => ["yes", "disabled"],
+    //                 "class" => ["form-control tsr", "selected"],
+    //             ]
+    //         ],
+    //         "progress" => [
+    //             "value" => 50,
+    //             "min" => 10,
+    //             "max" => 100
+    //         ],
+    //         "meeter" => [
+    //             "value" => 50,
+    //             "min" => 10,
+    //             "max" => 100
+    //         ]
+    //     ];
+    // }
 
     public function save(): bool
     {

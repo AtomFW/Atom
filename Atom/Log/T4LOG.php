@@ -318,7 +318,7 @@ final class T4LOG implements LoggerInterface
      */
     public function critical(string|\Stringable $message, array $context = []): void
     {
-        $this->critical($message, $context);
+        $this->on(self::PRIORITY_CRIT, $message, $context);
     }
     /**
      * Logs with an arbitrary level.

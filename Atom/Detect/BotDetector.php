@@ -440,6 +440,23 @@ final class BotDetector
     }
 
     /**
+     * Return a debug array showing current internal state (safe for logging).
+     *
+     * Be careful not to log sensitive UA in production logs unless necessary.
+     *
+     * @return array<string,mixed>
+     */
+    public function toArray(): array
+    {
+        return [
+            'isBot' => $this->isBot(),
+            'isHuman' => $this->isHuman(),
+            'ua' => $this->userAgent,
+            'detectBotName' => $this->detectBotName(),
+        ];
+    }
+
+    /**
      * Return which detector would be used first (string)
      */
     public function preferredDetector(): string

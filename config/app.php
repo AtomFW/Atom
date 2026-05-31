@@ -366,5 +366,13 @@ return [
         'mail' => env('APP_WEB_PUSH_EMAIL', "example@example.com"),
         'publicKey' => env('APP_WEB_PUSH_PUBLIC_KEY'),
         'privateKey' => env('APP_WEB_PUSH_PRIVATE_KEY'),
-    ]
+    ],
+
+    'connectionSaving' => [
+        'on' => env('APP_CONNECTION_SAVING', true),
+    ],
+
+    'actionEventSaving' => [
+        'on' => env('APP_ACTION_EVENT_SAVING', true),
+    ],
 ];

@@ -110,13 +110,13 @@ class AutoMapped
         }
 
         return match($type) {
-            'datetime','date', 'time' => Atom::$app->datetime->toSQL($value),
-            'json'          => json_encode($value),
-            'point', 'location', 'gps' => new Point((float)$latitude, (float)$longitude)->toSql(),
-            'raw_point', 'raw_location', 'raw_gps' => (object)$value,
-            'uuid'          => str_replace('-', "", pack('H8a/H4b/H4c/H4d/H12e', $value)),
-            'class' => $class->toSQL($value),
-            default    => $value
+            'datetime','date', 'time'               => Atom::$app->datetime->toSQL($value),
+            'json'                                  => json_encode($value),
+            'point', 'location', 'gps'              => new Point((float)$latitude, (float)$longitude)->toSql(),
+            'raw_point', 'raw_location', 'raw_gps'  => (object)$value,
+            'uuid'                                  => str_replace('-', "", pack('H8a/H4b/H4c/H4d/H12e', $value)),
+            'class'                                 => $class->toSQL($value),
+            default                                 => $value
         };
     }
 }

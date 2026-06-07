@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<phpunit xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:noNamespaceSchemaLocation="vendor/phpunit/phpunit/phpunit.xsd"
+         bootstrap="vendor/autoload.php"
+            colors="true">
+    <testsuites>
+        <testsuite name="Atop Test Suite">
+            <directory>tests/Atom</directory>
+        </testsuite>
+        <testsuite name="App Test Suite">
+            <directory>tests/App</directory>
+        </testsuite>
+    </testsuites>
+    <php>
+        <env name="APP_ENV" value="test"/>
+        <env name="DB_NAME" value="test_db"/>
+
+        <ini name="error_reporting" value="-1" />
+        <ini name="display_errors" value="1" />
+    </php>
+</phpunit>

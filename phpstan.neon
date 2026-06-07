@@ -1,0 +1,14 @@
+parameters:
+    level: 5 # Poziom rygoru (0-9)
+    paths:
+        - Atom
+        - app
+    excludePaths:
+        - vendor/*
+        - logs/*
+        - Atom/Lib
+        - Atom/Lib/SimpleHtmlDom
+        analyse:
+            - vendor/*
+    parallel:
+        maximumNumberOfProcesses: 32

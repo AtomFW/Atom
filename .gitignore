@@ -1,25 +1,47 @@
-# CakePHP 3
+# AtomFW 2
+### --- PHP & Composer --- ###
+# Ignorujemy cały folder z bibliotekami zewnętrznymi
+/vendor/
+# Ignorujemy plik phar (jeśli trzymasz go w projekcie)
+composer.phar
+doctum.phar
 
-/vendor/*
-/config/app.php
+### --- Bezpieczeństwo (Wrażliwe dane) --- ###
+# Nigdy nie wysyłaj plików z hasłami do bazy danych!
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
 
-/tmp/cache/models/*
-!/tmp/cache/models/empty
-/tmp/cache/persistent/*
-!/tmp/cache/persistent/empty
-/tmp/cache/views/*
-!/tmp/cache/views/empty
-/tmp/sessions/*
-!/tmp/sessions/empty
-/tmp/tests/*
-!/tmp/tests/empty
+### --- Logi i pliki tymczasowe --- ###
+*.log
+*.t4log
+/runtime/cache/*
+/runtime/temp/*
+/storage/public/**/
+/storage/private/**/
+*.cache
+*.tt
 
-/logs/*
-!/logs/empty
+### --- Systemowe i IDE --- ###
+# Pliki specyficzne dla Windowsa
+Thumbs.db
+ehthumbs.db
+Desktop.ini
 
-# CakePHP 2
+# Konfiguracja VS Code
+.vscode/
 
-/app/tmp/*
-/app/Config/core.php
-/app/Config/database.php
-/vendors/*
+# Konfiguracja PHPStorm
+.idea/
+
+# agent
+.qodo/
+
+### --- atom  --- ###
+autoload.php
+doctum.config.php
+/runtime/docs/*
+/Atom/Report/report_function.php
+/Atom/Report/AutoReport.php

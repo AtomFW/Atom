@@ -1,12 +1,8 @@
 <?php
-use App\controllers\AboutController;
-use App\controllers\SiteController;
+use App\Controllers\AboutController;
+use App\Controllers\SiteController;
 use Atom\Atom;
 
-error_reporting(E_ALL);
-ini_set('display_errors', 1);
-
-// require_once("../autoload.php");
 // Register the Composer autoloader...
 require_once __DIR__ . '/../vendor/autoload.php';
 

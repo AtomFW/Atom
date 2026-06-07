@@ -2,10 +2,10 @@
 
 declare(strict_types=1);
 
-namespace Atom\Database;
+namespace Atom\DataBase;
 
 use Atom\Atom;
-use Atom\Database\Database;
+use Atom\DataBase\Database;
 use Atom\DateTime\DateTime;
 
 /**
@@ -20,7 +20,7 @@ use Atom\DateTime\DateTime;
  * to version control database changes and apply them systematically across different
  * environments through placeholder replacement and configuration management.
  * 
- * @package Atom\Database\Migrations
+ * @package Atom\DataBase\Migrations
  */
 final class Migrations
 {

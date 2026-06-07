@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace Atom\middlewares;
+namespace Atom\Middlewares;
 
 /**
  * Abstract base class for middleware.
@@ -10,7 +10,7 @@ namespace Atom\middlewares;
  * Middleware classes are responsible for performing actions (filtering, logging, etc.)
  * before or after the controller is called.
  *
- * @package Atom\middlewares
+ * @package Atom\Middlewares
  *
  * @abstract
  */

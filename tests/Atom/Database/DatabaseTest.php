@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace Tests\Atom\Database;
+namespace Tests\Atom\DataBase;
 
 use PHPUnit\Framework\TestCase;
 use Doctrine\DBAL\Connection;

@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace App\models;
+namespace App\Models;
 
 use Atom\Atom;
 use Atom\DataBase\DbModel;

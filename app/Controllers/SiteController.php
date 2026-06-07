@@ -1,15 +1,15 @@
 <?php
 
-namespace App\controllers;
+namespace App\Controllers;
 
 use Atom\Atom;
 use Atom\Component\WebPush\WebPushAdapter;
 use Atom\Controller;
-use Atom\middlewares\AuthMiddleware;
+use Atom\Middlewares\AuthMiddleware;
 use Atom\HttpFoundation\Request;
 use Atom\HttpFoundation\Response;
-use App\models\LoginForm;
-use App\models\User;
+use App\Models\LoginForm;
+use App\Models\User;
 
 class SiteController extends Controller
 {

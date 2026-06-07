@@ -16,7 +16,7 @@ class View
         }
         $viewContent = $this->renderViewOnly($view, $params);
         ob_start();
-        include_once Atom::$ROOT_DIR . "/resources/views/layouts/$layoutName.php";
+        include_once rtrim(Atom::$ROOT_DIR, "/") . "/resources/Views/Layouts/$layoutName.php";
         $layoutContent = ob_get_clean();
         return str_replace('{{content}}', $viewContent, $layoutContent);
     }
@@ -27,7 +27,7 @@ class View
             $$key = $value;
         }
         ob_start();
-        include_once Atom::$ROOT_DIR . "/resources/views/$view.php";
+        include_once rtrim(Atom::$ROOT_DIR, "/") . "/resources/Views/$view.php";
         return ob_get_clean();
     }
 }

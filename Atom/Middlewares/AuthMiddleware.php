@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace Atom\middlewares;
+namespace Atom\Middlewares;
 
 use Atom\Atom;
 use Atom\Exception\ForbiddenException;
@@ -13,7 +13,7 @@ use Atom\Exception\ForbiddenException;
  * This middleware is responsible for checking if a user is authenticated.
  * If the user is not authenticated, it will throw a ForbiddenException.
  *
- * @package Atom\middlewares
+ * @package Atom\Middlewares
  */
 final class AuthMiddleware extends BaseMiddleware
 {

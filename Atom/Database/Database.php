@@ -5,7 +5,7 @@ declare(strict_types=1);
 namespace Atom\DataBase;
 
 use Atom\Atom;
-use Atom\Database\Migrations;
+use Atom\DataBase\Migrations;
 use Atom\DateTime\DateTime;
 use DateTimeInterface;
 use InvalidArgumentException;

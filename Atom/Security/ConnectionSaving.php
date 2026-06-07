@@ -165,21 +165,21 @@ final class ConnectionSaving {
         return [
             'ip' => inet_pton($_SERVER["REMOTE_ADDR"]),
             'isp' => gethostbyaddr($_SERVER["REMOTE_ADDR"]),
-            'lang' => $_SERVER["GEOIP_COUNTRY_ISO_CODE"],
-            'city' => $_SERVER["GEOIP_CITY"],
-            'country' => $_SERVER["GEOIP_COUNTRY_NAME"],
-            'user_agent' => $_SERVER["HTTP_USER_AGENT"],
-            'browser_sec' => $_SERVER["HTTP_SEC_CH_UA"],
+            'lang' => $_SERVER["GEOIP_COUNTRY_ISO_CODE"] ?? $_SERVER["GEOIP_COUNTRY_CODE"] ?? "",
+            'city' => $_SERVER["GEOIP_CITY"] ?? "",
+            'country' => $_SERVER["GEOIP_COUNTRY_NAME"] ?? "",
+            'user_agent' => $_SERVER["HTTP_USER_AGENT"] ?? "",
+            'browser_sec' => $_SERVER["HTTP_SEC_CH_UA"] ?? null,
             'coordinates' => $geolocation,
-            'area_code' => $_SERVER["GEOIP_AREA_CODE"] ?? $_SERVER["GEOIP_SUBDIVISION_GEONAME_ID"],
-            'dma_code' => $_SERVER["GEOIP_DMA_CODE"] ?? $_SERVER["GEOIP_CONTINENT_GEONAME_ID"],
-            'region' => $_SERVER["GEOIP_REGION"] ?? $_SERVER["GEOIP_REGISTERED_COUNTRY_GEONAME_ID"],
-            'unique_id' => $_SERVER["GEOIP_UNIQUE_ID"] ?? $_SERVER["REQUEST_TIME"],
+            'area_code' => $_SERVER["GEOIP_AREA_CODE"] ?? $_SERVER["GEOIP_SUBDIVISION_GEONAME_ID"] ?? null,
+            'dma_code' => $_SERVER["GEOIP_DMA_CODE"] ?? $_SERVER["GEOIP_CONTINENT_GEONAME_ID"] ?? null,
+            'region' => $_SERVER["GEOIP_REGION"] ?? $_SERVER["GEOIP_REGISTERED_COUNTRY_GEONAME_ID"] ?? 0,
+            'unique_id' => $_SERVER["GEOIP_UNIQUE_ID"] ?? $_SERVER["UNIQUE_ID"] ?? $_SERVER["REQUEST_TIME"],
             'server_id' => $idServer,
             'datetime' => $datetime,
             'raw_details' => $data,
-            'x' => $_SERVER["GEOIP_LOCATION_LATITUDE"],
-            'y' => $_SERVER["GEOIP_LOCATION_LONGITUDE"]
+            'x' => $_SERVER["GEOIP_LOCATION_LATITUDE"] ?? $_SERVER["GEOIP_LATITUDE"] ?? 0,
+            'y' => $_SERVER["GEOIP_LOCATION_LONGITUDE"] ?? $_SERVER["GEOIP_LONGITUDE"] ?? 0,
         ];
     }
 

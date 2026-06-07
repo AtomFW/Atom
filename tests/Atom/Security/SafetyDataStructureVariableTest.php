@@ -5,7 +5,7 @@ declare(strict_types=1);
 namespace Tests\Atom\Security;
 
 use Atom\Component\Cache\CacheWrapper;
-use Atom\Data\Base\Database;
+use Atom\DataBase\Database;
 use Atom\DataBase\Database as AtomDatabase;
 use PHPUnit\Framework\TestCase;
 use PHPUnit\Framework\MockObject\MockObject;

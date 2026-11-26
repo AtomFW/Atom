@@ -6,6 +6,9 @@ namespace Tests\Atom\Form;
 
 use PHPUnit\Framework\TestCase;
 
+/**
+ * Test suite for the BaseField component.
+ */
 class BaseFieldTest extends TestCase
 {
     private $model;
@@ -27,12 +30,14 @@ class BaseFieldTest extends TestCase
         $this->model->method('getLabel')->with('test')->willReturn('Test Label');
         $this->model->method('getFirstError')->with('test')->willReturn('');
 
-        $this->field = $this->createPartialMock(\Atom\form\BaseField::class, ['renderInput']);
-        $this->field->expects($this->any())
-                   ->method('renderInput')
+        $this->field = $this->getMockBuilder(\Atom\form\BaseField::class)->setConstructorArgs([$this->model, 'test'])->onlyMethods(['renderInput'])->getMock();
+        $this->field->method('renderInput')
                    ->willReturn('<input type="text" name="test" value="">');
     }
 
+    /**
+     * Test constructor sets properties.
+     */
     public function testConstructorSetsProperties()
     {
         $model = $this->createMock(\Atom\Model::class);
@@ -46,6 +51,9 @@ class BaseFieldTest extends TestCase
         $this->assertEquals('test', $field->attribute);
     }
 
+    /**
+     * Test to string returns correct string.
+     */
     public function testToStringReturnsCorrectString()
     {
         $result = (string)$this->field;
@@ -55,10 +63,4 @@ class BaseFieldTest extends TestCase
         $this->assertStringContainsString('<input type="text" name="test" value="">', $result);
     }
 
-    public function testToStringHandlesEmptyLabel()
-    {
-        // This would require a different approach to test due to the way
-        // the model methods are called in the parent class
-        $this->markTestSkipped('Method requires more complex mocking');
-    }
 }

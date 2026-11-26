@@ -435,7 +435,11 @@ final class FileSystem
             $targetDir = strtr($targetDir, '/', '\\');
 
             if ($copyOnWindows) {
-                $this->mirror($originDir, $targetDir);
+                if (is_dir($originDir)) {
+                    $this->mirror($originDir, $targetDir);
+                } else {
+                    $this->copy($originDir, $targetDir);
+                }
 
                 return;
             }
@@ -727,14 +731,14 @@ final class FileSystem
             $target = $targetDir . substr($file->getPathname(), $originDirLen);
             $filesCreatedWhileMirroring[$target] = true;
 
-            if (!$copyOnWindows && is_link($file)) {
+            if (!$copyOnWindows && $file->isLink()) {
                 $this->symlink($file->getLinkTarget(), $target);
-            } elseif (is_dir($file)) {
+            } elseif ($file->isDir()) {
                 $this->mkdir($target);
-            } elseif (is_file($file)) {
-                $this->copy($file, $target, $options['override'] ?? false);
+            } elseif ($file->isFile()) {
+                $this->copy($file->getPathname(), $target, $options['override'] ?? false);
             } else {
-                throw new IOGenerativeException(\sprintf('Unable to guess "%s" file type.', $file), 0, null, $file);
+                throw new IOGenerativeException(\sprintf('Unable to guess "%s" file type.', $file->getPathname()), 0, null, $file->getPathname());
             }
         }
     }
@@ -924,8 +928,7 @@ final class FileSystem
         self::assertFunctionExists($func);
 
         self::$lastError = null;
-        // TODO zweryfikować czy to było potrzebne
-        // set_error_handler(__CLASS__ . '::handleError', E_ALL);
+        set_error_handler([__CLASS__, 'handleError']);
         try {
             return $func(...$args);
         } finally {
@@ -940,9 +943,10 @@ final class FileSystem
      *
      * @internal
      */
-    public static function handleError(string $msg): void
+    public static function handleError(int $type, string $msg): bool
     {
         self::$lastError = $msg;
+        return true;
     }
 
     /**

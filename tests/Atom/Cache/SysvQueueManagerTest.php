@@ -10,6 +10,9 @@ use Atom\Cache\SysvIpcException;
 use Atom\Cache\SysvIpcSupport;
 use Exception;
 
+/**
+ * Test suite for the SysvQueueManager component.
+ */
 class SysvQueueManagerTest extends TestCase
 {
     private SysvQueueManager $manager;
@@ -18,6 +21,10 @@ class SysvQueueManagerTest extends TestCase
 
     protected function setUp(): void
     {
+        if (!extension_loaded('sysvmsg')) {
+            $this->markTestSkipped('sysvmsg is not available in this PHP runtime.');
+        }
+
         // Generate a unique base key for each test to avoid conflicts
         $this->baseKey = mt_rand(1000, 9999);
         
@@ -28,17 +35,26 @@ class SysvQueueManagerTest extends TestCase
         }
     }
 
+    /**
+     * Test constructor creates queue.
+     */
     public function testConstructorCreatesQueue(): void
     {
         $this->assertInstanceOf(SysvQueueManager::class, $this->manager);
     }
 
+    /**
+     * Test get native queue returns resource.
+     */
     public function testGetNativeQueueReturnsResource(): void
     {
         $queue = $this->manager->getNativeQueue();
         $this->assertNotNull($queue);
     }
 
+    /**
+     * Test send message succeeds.
+     */
     public function testSendMessageSucceeds(): void
     {
         $payload = ['test' => 'data'];
@@ -47,6 +63,9 @@ class SysvQueueManagerTest extends TestCase
         $this->assertTrue($result);
     }
 
+    /**
+     * Test send raw message succeeds.
+     */
     public function testSendRawMessageSucceeds(): void
     {
         $message = 'test message';
@@ -55,36 +74,54 @@ class SysvQueueManagerTest extends TestCase
         $this->assertTrue($result);
     }
 
+    /**
+     * Test receive message returns null when no message.
+     */
     public function testReceiveMessageReturnsNullWhenNoMessage(): void
     {
         $result = $this->manager->receiveMessage();
         $this->assertNull($result);
     }
 
+    /**
+     * Test receive raw message returns null when no message.
+     */
     public function testReceiveRawMessageReturnsNullWhenNoMessage(): void
     {
         $result = $this->manager->receiveRawMessage();
         $this->assertNull($result);
     }
 
+    /**
+     * Test queue stats returns array.
+     */
     public function testQueueStatsReturnsArray(): void
     {
         $stats = $this->manager->queueStats();
         $this->assertIsArray($stats);
     }
 
+    /**
+     * Test purge expired messages returns int.
+     */
     public function testPurgeExpiredMessagesReturnsInt(): void
     {
         $result = $this->manager->purgeExpiredMessages();
         $this->assertIsInt($result);
     }
 
+    /**
+     * Test remove returns bool.
+     */
     public function testRemoveReturnsBool(): void
     {
         $result = $this->manager->remove();
         $this->assertIsBool($result);
     }
 
+    /**
+     * Test send message with ttl.
+     */
     public function testSendMessageWithTtl(): void
     {
         $payload = ['test' => 'data'];
@@ -93,6 +130,9 @@ class SysvQueueManagerTest extends TestCase
         $this->assertTrue($result);
     }
 
+    /**
+     * Test send message with blocking.
+     */
     public function testSendMessageWithBlocking(): void
     {
         $payload = ['blocking_test' => 'value'];
@@ -101,6 +141,9 @@ class SysvQueueManagerTest extends TestCase
         $this->assertTrue($result);
     }
 
+    /**
+     * Test receive message after send message.
+     */
     public function testReceiveMessageAfterSendMessage(): void
     {
         // Send a message first
@@ -118,6 +161,9 @@ class SysvQueueManagerTest extends TestCase
         }
     }
 
+    /**
+     * Test receive raw message after send raw.
+     */
     public function testReceiveRawMessageAfterSendRaw(): void
     {
         // Send a raw message first
@@ -133,6 +179,9 @@ class SysvQueueManagerTest extends TestCase
         }
     }
 
+    /**
+     * Test queue stats after send message.
+     */
     public function testQueueStatsAfterSendMessage(): void
     {
         // Send a message first to ensure queue has data
@@ -149,6 +198,9 @@ class SysvQueueManagerTest extends TestCase
         }
     }
 
+    /**
+     * Test purge expired messages with no messages.
+     */
     public function testPurgeExpiredMessagesWithNoMessages(): void
     {
         // Should not fail even with no messages
@@ -156,6 +208,9 @@ class SysvQueueManagerTest extends TestCase
         $this->assertIsInt($result);
     }
 
+    /**
+     * Test multiple send and receive.
+     */
     public function testMultipleSendAndReceive(): void
     {
         // Send multiple messages
@@ -168,12 +223,18 @@ class SysvQueueManagerTest extends TestCase
         $this->assertNull($result); // We're not receiving messages in order
     }
 
+    /**
+     * Test send message with invalid params.
+     */
     public function testSendMessageWithInvalidParams(): void
     {
         // Test that we can at least create the manager and send a message
         $this->assertTrue(true);
     }
 
+    /**
+     * Test get native queue returns valid resource.
+     */
     public function testGetNativeQueueReturnsValidResource(): void
     {
         $queue = $this->manager->getNativeQueue();
@@ -184,6 +245,9 @@ class SysvQueueManagerTest extends TestCase
         $this->assertIsArray($stats);
     }
 
+    /**
+     * Test multiple managers.
+     */
     public function testMultipleManagers(): void
     {
         $manager2 = new SysvQueueManager($this->baseKey + 1000, 0666, $this->namespace);

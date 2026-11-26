@@ -44,8 +44,13 @@ return [
         ],
         'redis' => [
             'driver' => 'redis',
-            'host' => env('REDIS_HOST', '127.0.0.1'),
-            'port' => env('REDIS_PORT', 6379),
+            'host' => env('SESSION_REDIS_HOST', env('REDIS_HOST', '127.0.0.1')),
+            'port' => (int) env('SESSION_REDIS_PORT', env('REDIS_PORT', 6379)),
+            'username' => env('SESSION_REDIS_USERNAME', env('REDIS_USERNAME', null)),
+            'password' => env('SESSION_REDIS_PASSWORD', env('REDIS_PASSWORD', null)),
+            'database' => (int) env('SESSION_REDIS_DATABASE', 1),
+            'prefix' => env('SESSION_REDIS_PREFIX', 'atom_sess:'),
+            'timeout' => (float) env('SESSION_REDIS_TIMEOUT', 1.5),
         ],
     ],
 
@@ -80,12 +85,27 @@ return [
     /**
      * Whether a new session should be created when a user logs in.
      *
-     * If true, a new session will be created when a user logs in.
+     * If true, a new session ID will be regenerated when a user logs in (prevents session fixation).
      *
      * @var bool
      */
-    'newSessionWhenLogin' => env('SESSION_NEW_SESSION_WHEN_LOGIN', false),
+    'newSessionWhenLogin' => (bool) env('SESSION_NEW_SESSION_WHEN_LOGIN', true),
 
+    /**
+     * Enforce strict session mode (aligned with PHP 8.6 hardened session defaults).
+     *
+     * Rejects uninitialized session IDs supplied by clients to prevent session fixation.
+     *
+     * @var bool
+     */
+    'useStrictMode' => (bool) env('SESSION_USE_STRICT_MODE', true),
+
+    /**
+     * Length of generated session IDs for high entropy in stateless token/Redis stores.
+     *
+     * @var int
+     */
+    'sidLength' => (int) env('SESSION_SID_LENGTH', 48),
 
     /**
      * Path of the session cookie.
@@ -110,11 +130,11 @@ return [
     /**
      * Whether the session cookie should be marked as secure.
      *
-     * If true, the cookie will be marked as secure.
+     * Supports both SESSION_SECURE and SESSION_SECURE_COOKIE environment variables.
      *
      * @var bool
      */
-    'secure' => env('SESSION_SECURE', false),
+    'secure' => (bool) env('SESSION_SECURE', env('SESSION_SECURE_COOKIE', true)),
 
     /**
      * Whether the session cookie should be marked as HTTP only.

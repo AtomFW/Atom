@@ -631,9 +631,9 @@ final class MailerProxy extends PHPMailer
     {
         $list = [];
         try {
-            if (!empty($this->getToAddresses())) {
+            if (method_exists(parent::class, 'getToAddresses')) {
                 // some PHPMailer versions expose getToAddresses method
-                $addresses = self::getToAddresses();
+                $addresses = parent::getToAddresses();
                 foreach ($addresses as $a) {
                     $list[] = \is_array($a) ? ($a[0] ?? '') : (string)$a;
                 }

@@ -14,16 +14,22 @@ use Atom\Dom\Dom;
 
 require_once __DIR__ . "/../../../Atom/Lib/SimpleHtmlDom/simple_html_dom.php";
 
+/**
+ * Test suite for the Dom component.
+ */
 class DomTest extends TestCase
 {
+    /**
+     * Test tidy clean html.
+     */
     public function testTidyCleanHtml()
     {
         $html = '<!DOCTYPE html><html><body><p>Test</p></body></html>';
         $dom = new Dom();
         // $dom->load($html);
-        $this->assertEquals($html, $dom->tidyCleanHtml(
+        $this->assertSame('<p>Test</p>', trim($dom->tidyCleanHtml(
             $html,
-            ['clean' => false, 'indent-spaces' => 0, 'indent' => false, 'tidy-mark' => false, 'wrap' => 0, 'vertical-space' => false, 'break-before-br' => false]
-        ));
+            ['clean' => false, 'indent-spaces' => 0, 'indent' => false, 'tidy-mark' => false, 'wrap' => 0, 'vertical-space' => false, 'break-before-br' => false, 'show-body-only' => true]
+        )));
     }
 }

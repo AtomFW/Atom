@@ -7,27 +7,38 @@ namespace Tests\Atom\FileSystem;
 use PHPUnit\Framework\TestCase;
 use Atom\FileSytem\ResourcesPath;
 
+/**
+ * Test suite for the ResourcesPath component.
+ */
 class ResourcesPathTest extends TestCase
 {
     protected function setUp(): void
     {
-        // Clean up any existing static properties
         $reflection = new \ReflectionClass(ResourcesPath::class);
+        $ds = DIRECTORY_SEPARATOR;
         
-        // Reset static properties to default values
-        $properties = [
-            'pathSource', 'resources', 'assets', 'cssPath', 'jsPath',
-            'fontPath', 'imagePath', 'moviePath', 'soundPath', 
-            'svgPath', 'webManifest'
+        $defaults = [
+            'pathSource' => '',
+            'resources' => $ds . 'resources' . $ds,
+            'assets' => $ds . 'storage' . $ds . 'assets' . $ds,
+            'cssPath' => 'css' . $ds,
+            'jsPath' => 'js' . $ds,
+            'fontPath' => 'font' . $ds,
+            'imagePath' => 'image' . $ds,
+            'moviePath' => 'movie' . $ds,
+            'soundPath' => 'sound' . $ds,
+            'svgPath' => 'svg' . $ds,
+            'webManifest' => 'manifest' . $ds . 'manifest.json'
         ];
         
-        foreach ($properties as $prop) {
-            if ($reflection->hasStaticPropertyValue($prop)) {
-                $reflection->setStaticPropertiesEnabled($prop, '');
-            }
+        foreach ($defaults as $prop => $val) {
+            $reflection->setStaticPropertyValue($prop, $val);
         }
     }
 
+    /**
+     * Test constructor sets correct properties.
+     */
     public function test_constructor_sets_correct_properties(): void
     {
         // Arrange
@@ -46,6 +57,9 @@ class ResourcesPathTest extends TestCase
         $this->assertInstanceOf(ResourcesPath::class, $resourcesPath);
     }
 
+    /**
+     * Test all method returns correct array.
+     */
     public function test_all_method_returns_correct_array(): void
     {
         // Arrange
@@ -76,6 +90,9 @@ class ResourcesPathTest extends TestCase
         $this->assertArrayHasKey('webManifest', $result);
     }
 
+    /**
+     * Test to string returns correct string.
+     */
     public function test___toString_returns_correct_string(): void
     {
         // Arrange
@@ -93,9 +110,12 @@ class ResourcesPathTest extends TestCase
         $result = (string)$resourcesPath;
 
         // Assert
-        $this->assertEquals('/test/path', $result);
+        $this->assertEquals('/test/path' . DIRECTORY_SEPARATOR . 'resources' . DIRECTORY_SEPARATOR, $result);
     }
 
+    /**
+     * Test get returns correct value.
+     */
     public function test___get_returns_correct_value(): void
     {
         // Arrange
@@ -110,10 +130,13 @@ class ResourcesPathTest extends TestCase
         $resourcesPath = new ResourcesPath($path, $config);
 
         // Act & Assert
-        $this->assertEquals('/test/path', $resourcesPath->path);
-        $this->assertEquals('/test/path', $resourcesPath->{'path'});
+        $this->assertEquals('/test/path' . DIRECTORY_SEPARATOR . 'resources' . DIRECTORY_SEPARATOR, $resourcesPath->path);
+        $this->assertEquals('/test/path' . DIRECTORY_SEPARATOR . 'resources' . DIRECTORY_SEPARATOR, $resourcesPath->{'path'});
     }
 
+    /**
+     * Test get with invalid key returns default.
+     */
     public function test___get_with_invalid_key_returns_default(): void
     {
         // Arrange
@@ -128,9 +151,13 @@ class ResourcesPathTest extends TestCase
         $resourcesPath = new ResourcesPath($path, $config);
 
         // Act & Assert
-        $this->assertEquals('/test/path', $resourcesPath->invalid_key);
+        $this->expectException(\TypeError::class);
+        $result = $resourcesPath->invalid_key;
     }
 
+    /**
+     * Test constructor handles null path.
+     */
     public function test_constructor_handles_null_path(): void
     {
         // Arrange & Act
@@ -141,6 +168,9 @@ class ResourcesPathTest extends TestCase
         $this->assertInstanceOf(ResourcesPath::class, $resourcesPath);
     }
 
+    /**
+     * Test all method returns correct structure.
+     */
     public function test_all_method_returns_correct_structure(): void
     {
         // Arrange
@@ -168,6 +198,9 @@ class ResourcesPathTest extends TestCase
         }
     }
 
+    /**
+     * Test constructor with config sets correctly.
+     */
     public function test_constructor_with_config_sets_correctly(): void
     {
         // Arrange
@@ -188,6 +221,9 @@ class ResourcesPathTest extends TestCase
         $this->assertInstanceOf(ResourcesPath::class, $resourcesPath);
     }
 
+    /**
+     * Test getter returns correct values for different properties.
+     */
     public function test_getter_returns_correct_values_for_different_properties(): void
     {
         // Arrange
@@ -202,7 +238,7 @@ class ResourcesPathTest extends TestCase
         $resourcesPath = new ResourcesPath($path, $config);
 
         // Act & Assert
-        $this->assertEquals('/test/path', $resourcesPath->resources);
-        $this->assertEquals('/test/path', $resourcesPath->{'resources'});
+        $this->assertEquals('/test/path' . DIRECTORY_SEPARATOR . 'resources' . DIRECTORY_SEPARATOR, $resourcesPath->resources);
+        $this->assertEquals('/test/path' . DIRECTORY_SEPARATOR . 'resources' . DIRECTORY_SEPARATOR, $resourcesPath->{'resources'});
     }
 }

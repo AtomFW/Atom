@@ -14,7 +14,7 @@ final class ConnectionInformationTest extends TestCase
     private function makeLogger(): T4LOG
     {
         // T4LOG requires a path; use runtime dir to avoid permissions issues
-        return new T4LOG(__DIR__ . '/../../../../runtime');
+        return new T4LOG(['logRootDir' => __DIR__ . '/../../../../runtime']);
     }
 
     private function makeCache(): CacheInterface
@@ -22,17 +22,20 @@ final class ConnectionInformationTest extends TestCase
         // Use a simple in-memory cache stub implementing PSR-16 for tests
         return new class implements CacheInterface {
             private array $store = [];
-            public function get($key, $default = null) { return $this->store[$key] ?? $default; }
-            public function set($key, $value, $ttl = null) { $this->store[$key] = $value; return true; }
-            public function delete($key) { unset($this->store[$key]); return true; }
-            public function clear() { $this->store = []; return true; }
-            public function getMultiple($keys, $default = null) { $out=[]; foreach ($keys as $k){$out[$k]=$this->get($k,$default);} return $out; }
-            public function setMultiple($values, $ttl = null) { foreach ($values as $k=>$v){$this->set($k,$v,$ttl);} return true; }
-            public function deleteMultiple($keys) { foreach ($keys as $k){$this->delete($k);} return true; }
-            public function has($key) { return array_key_exists($key, $this->store); }
+            public function get(string $key, mixed $default = null): mixed { return $this->store[$key] ?? $default; }
+            public function set(string $key, mixed $value, int|\DateInterval|null $ttl = null): bool { $this->store[$key] = $value; return true; }
+            public function delete(string $key): bool { unset($this->store[$key]); return true; }
+            public function clear(): bool { $this->store = []; return true; }
+            public function getMultiple(iterable $keys, mixed $default = null): iterable { $out=[]; foreach ($keys as $k){$out[$k]=$this->get($k,$default);} return $out; }
+            public function setMultiple(iterable $values, int|\DateInterval|null $ttl = null): bool { foreach ($values as $k=>$v){$this->set($k,$v,$ttl);} return true; }
+            public function deleteMultiple(iterable $keys): bool { foreach ($keys as $k){$this->delete($k);} return true; }
+            public function has(string $key): bool { return array_key_exists($key, $this->store); }
         };
     }
 
+    /**
+     * Test to array structure without browscap.
+     */
     public function testToArrayStructureWithoutBrowscap(): void
     {
         $ua = 'TestAgent/1.0';
@@ -45,6 +48,9 @@ final class ConnectionInformationTest extends TestCase
         $this->assertIsArray($arr['combined']);
     }
 
+    /**
+     * Test getters have safe defaults.
+     */
     public function testGettersHaveSafeDefaults(): void
     {
         $ci = new ConnectionInformation($this->makeCache(), $this->makeLogger(), 'UA/2.0', false);
@@ -56,6 +62,9 @@ final class ConnectionInformationTest extends TestCase
         $this->assertTrue(is_bool($ci->isDesktop()));
     }
 
+    /**
+     * Test version comparison handles null version.
+     */
     public function testVersionComparisonHandlesNullVersion(): void
     {
         $ci = new ConnectionInformation($this->makeCache(), $this->makeLogger(), 'UA/3.0', false);
@@ -64,6 +73,9 @@ final class ConnectionInformationTest extends TestCase
         $this->assertFalse($ci->isBrowserVersionAtLeast('100'));
     }
 
+    /**
+     * Test supports heuristics.
+     */
     public function testSupportsHeuristics(): void
     {
         $ci = new ConnectionInformation($this->makeCache(), $this->makeLogger(), 'UA/4.0', false);
@@ -74,6 +86,9 @@ final class ConnectionInformationTest extends TestCase
         $this->assertTrue(is_bool($ci->supportsCssLevel(3)));
     }
 
+    /**
+     * Test caching by user agent.
+     */
     public function testCachingByUserAgent(): void
     {
         $cache = $this->makeCache();

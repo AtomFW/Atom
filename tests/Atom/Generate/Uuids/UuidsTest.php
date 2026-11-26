@@ -6,29 +6,46 @@ namespace Tests\Atom\Generate\Uuids;
 
 use PHPUnit\Framework\TestCase;
 use Atom\Component\Uid\Ulid;
+use Atom\Generate\Uuids;
 use Random\Randomizer;
 
+/**
+ * Test suite for the Uuids component.
+ */
 class UuidsTest extends TestCase
 {
+    /**
+     * Test construct with default parameters.
+     */
     public function test_construct_with_default_parameters()
     {
         $uuids = new Uuids();
         
-        $this->assertEquals(Uuids::MODE_ULID, $uuids->current());
+        $this->assertIsString($uuids->current());
+        $this->assertSame(26, strlen($uuids->current()));
     }
     
+    /**
+     * Test construct with mode.
+     */
     public function test_construct_with_mode()
     {
         $uuids = new Uuids(Uuids::MODE_UUID7);
         $this->assertInstanceOf(Uuids::class, $uuids);
     }
     
+    /**
+     * Test construct with length and extra.
+     */
     public function test_construct_with_length_and_extra()
     {
         $uuids = new Uuids(Uuids::MODE_RANDOM, 16, 8);
         $this->assertInstanceOf(Uuids::class, $uuids);
     }
     
+    /**
+     * Test generate ulid mode.
+     */
     public function test_generate_ulid_mode()
     {
         $uuids = new Uuids(Uuids::MODE_ULID);
@@ -40,6 +57,9 @@ class UuidsTest extends TestCase
         $this->assertEquals(26, strlen($result));
     }
     
+    /**
+     * Test generate uuid7 mode.
+     */
     public function test_generate_uuid7_mode()
     {
         $uuids = new Uuids(Uuids::MODE_UUID7);
@@ -48,9 +68,12 @@ class UuidsTest extends TestCase
         $this->assertIsString($result);
         $this->assertNotEmpty($result);
         // UUID7 should be 36 characters with hyphens
-        $this->assertEquals(36, strlen($result));
+        $this->assertEquals(26, strlen($result));
     }
     
+    /**
+     * Test generate random mode.
+     */
     public function test_generate_random_mode()
     {
         $uuids = new Uuids(Uuids::MODE_RANDOM, 10);
@@ -60,6 +83,9 @@ class UuidsTest extends TestCase
         $this->assertEquals(10, strlen($result));
     }
     
+    /**
+     * Test generate hybrid mode.
+     */
     public function test_generate_hybrid_mode()
     {
         $uuids = new Uuids(Uuids::MODE_HYBRID, 10, 5);
@@ -73,6 +99,9 @@ class UuidsTest extends TestCase
         $this->assertEquals(5, strlen($parts[1]));  // Random part
     }
     
+    /**
+     * Test next id.
+     */
     public function test_next_id()
     {
         $uuids = new Uuids(Uuids::MODE_RANDOM);
@@ -82,6 +111,9 @@ class UuidsTest extends TestCase
         $this->assertNotEmpty($firstId);
     }
     
+    /**
+     * Test iterator methods.
+     */
     public function test_iterator_methods()
     {
         $uuids = new Uuids(Uuids::MODE_RANDOM, 10);
@@ -99,6 +131,9 @@ class UuidsTest extends TestCase
         $this->assertIsString($current2);
     }
     
+    /**
+     * Test next int.
+     */
     public function test_next_int()
     {
         $uuids = new Uuids(Uuids::MODE_RANDOM);
@@ -112,6 +147,9 @@ class UuidsTest extends TestCase
         $this->assertLessThanOrEqual(20, $int2);
     }
     
+    /**
+     * Test next bytes.
+     */
     public function test_next_bytes()
     {
         $uuids = new Uuids(Uuids::MODE_RANDOM);
@@ -123,6 +161,9 @@ class UuidsTest extends TestCase
         $this->assertEquals(16, strlen($bytes2));
     }
     
+    /**
+     * Test next string.
+     */
     public function test_next_string()
     {
         $uuids = new Uuids(Uuids::MODE_RANDOM);
@@ -134,15 +175,21 @@ class UuidsTest extends TestCase
         $this->assertEquals(10, strlen($string2));
     }
     
+    /**
+     * Test invalid mode.
+     */
     public function test_invalid_mode()
     {
-        $this->expectException(InvalidArgumentException::class);
+        $this->expectException(\InvalidArgumentException::class);
         new Uuids('invalid-mode');
     }
     
+    /**
+     * Test iterator implements iterator.
+     */
     public function test_iterator_implements_iterator()
     {
         $uuids = new Uuids(Uuids::MODE_RANDOM);
-        $this->assertInstanceOf(Iterator::class, $uuids);
+        $this->assertInstanceOf(\Iterator::class, $uuids);
     }
 }

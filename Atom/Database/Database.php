@@ -36,7 +36,7 @@ use function PHPUnit\Framework\matches;
  *
  * @final
  */
-final class Database extends Connection
+class Database extends Connection
 {
     /**
      * The PDO instance for the database connection.
@@ -939,8 +939,9 @@ final class Database extends Connection
         $attributes = array_filter(
             $attributes,
             fn($key) =>
-                !isset($attributesTypes[$key]) || (!stristr($attributesTypes[$key], "ignore") && $attributesTypes[$key] !== null)
-            );
+                !isset($attributesTypes[$key]) || (!stristr($attributesTypes[$key], "ignore") && $attributesTypes[$key] !== null),
+            ARRAY_FILTER_USE_KEY
+        );
 
         return \array_merge($temp, $attributes);
     }

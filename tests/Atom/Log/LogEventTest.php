@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Tests\Atom\Log;
 
 use Atom\Account\Account;
+use Atom\Atom;
 use Atom\Component\Cache\CacheWrapper;
 use Atom\DataBase\Database;
 use Atom\DateTime\DateTime;
@@ -14,13 +15,16 @@ use PHPUnit\Framework\MockObject\MockObject;
 use PHPUnit\Framework\TestCase;
 use Psr\Log\LoggerInterface;
 
+/**
+ * Test suite for the LogEvent component.
+ */
 class LogEventTest extends TestCase
 {
     private Database|MockObject $database;
     private MockObject $log;
     private DateTime|MockObject $datetime;
     private SafetyDataStructureVariable|MockObject $cache;
-    private MockObject $account;
+    private Account $account;
     private LogEvent $logEvent;
 
     protected function setUp(): void
@@ -28,12 +32,17 @@ class LogEventTest extends TestCase
         parent::setUp();
         
         $this->database = $this->createMock(Database::class);
-        $this->log = $this->createMock(LoggerInterface::class);
-        $this->datetime = $this->createMock(DateTime::class);
-        $this->cache = $this->createMock(SafetyDataStructureVariable::class);
-        $this->account = $this->createMock(Account::class);
+        $this->log = $this->createMock(\Atom\Log\T4LOG::class);
+        $this->datetime = new DateTime();
+        $this->datetime::setMacro();
+        $app = (new \ReflectionClass(Atom::class))->newInstanceWithoutConstructor();
+        $app->db = $this->database;
+        $app->datetime = $this->datetime;
+        Atom::$app = $app;
+        $this->cache = new SafetyDataStructureVariable($this->database);
+        $this->account = new Account();
 
-        $this->logEvent = new class(
+        $this->logEvent = new LogEvent(
             $this->database,
             $this->log,
             $this->datetime,
@@ -41,33 +50,28 @@ class LogEventTest extends TestCase
             true,
             1,
             1,
-            1
-        ) extends LogEvent {
-            public function __construct(
-                Database $database,
-                LoggerInterface $log,
-                DateTime $datetime,
-                SafetyDataStructureVariable $cache,
-                bool $account,
-                int $idUser,
-                int $connectionIpId,
-                int $serverId
-            ) {
-                parent::__construct($database, $log, $datetime, $cache, $account, $idUser, $connectionIpId, $serverId);
-            }
-
-            public function getTableName(): string
-            {
-                return 'system_events';
-            }
-        };
+            1,
+            'system_events'
+        );
     }
 
+    private function invokePrivate(string $method, array $arguments = []): mixed
+    {
+        $reflection = new \ReflectionMethod(LogEvent::class, $method);
+        return $reflection->invokeArgs($this->logEvent, $arguments);
+    }
+
+    /**
+     * Test constructor sets properties.
+     */
     public function testConstructorSetsProperties(): void
     {
         $this->assertInstanceOf(LogEvent::class, $this->logEvent);
     }
 
+    /**
+     * Test add stores event successfully.
+     */
     public function testAddStoresEventSuccessfully(): void
     {
         $entityType = 'server';
@@ -76,13 +80,16 @@ class LogEventTest extends TestCase
         $actorTypeId = 3;
         $description = 'Test event';
 
-        $this->database->expects($this->once())
-            ->method('attributesToBindsProperty')
-            ->willReturn(['event_type' => ':event_type']);
-
-        $this->database->expects($this->once())
-            ->method('insertInto')
-            ->willReturn($this->createMock(\Doctrine\DBAL\Query\QueryBuilder::class));
+        $query = $this->createMock(\Doctrine\DBAL\Query\QueryBuilder::class);
+        $statement = $this->createMock(\Doctrine\DBAL\Result::class);
+        $query->method('values')->willReturnSelf();
+        $query->method('setParameters')->willReturnSelf();
+        $query->method('executeQuery')->willReturn($statement);
+        $statement->method('rowCount')->willReturn(1);
+        $statement->expects($this->once())->method('free');
+        $this->database->method('attributesToBindsProperty')->willReturn(['event_time' => ':event_time']);
+        $this->database->method('insertInto')->willReturn($query);
+        $this->database->method('lastInsertId')->willReturn('42');
 
         $result = $this->logEvent->add(
             $entityType,
@@ -95,6 +102,9 @@ class LogEventTest extends TestCase
         $this->assertIsInt($result);
     }
 
+    /**
+     * Test add handles exception and logs it.
+     */
     public function testAddHandlesExceptionAndLogsIt(): void
     {
         $entityType = 'server';
@@ -112,7 +122,7 @@ class LogEventTest extends TestCase
             ->method('error')
             ->with(
                 $this->stringContains('Failed to store event.'),
-                $this->isType('array')
+                $this->isArray()
             );
 
         $this->logEvent->add(
@@ -124,68 +134,63 @@ class LogEventTest extends TestCase
         );
     }
 
+    /**
+     * Test data structure returns proper array.
+     */
     public function testDataStructureReturnsProperArray(): void
     {
-        $entityType = 'server';
-        $eventTypeId = 1;
-        $severityId = 2;
-        $actorTypeId = 3;
-        $description = 'Test event';
-        $actorName = 'Test Actor';
-
-        $this->datetime->expects($this->once())
-            ->method('now')
-            ->willReturn(new \DateTimeImmutable());
-
-        $result = $this->logEvent->add(
-            $entityType,
-            $eventTypeId,
-            $severityId,
-            $actorTypeId,
-            $description,
-            $actorName
-        );
-
+        $result = $this->invokePrivate('dataStructure', ['server', 1, 2, 3, 'Test event', 'Test Actor']);
         $this->assertIsArray($result);
+        $this->assertSame('server', $result['entity_type']);
+        $this->assertSame('Test Actor', $result['actor_name']);
     }
 
+    /**
+     * Test verify data validates correctly.
+     */
     public function testVerifyDataValidatesCorrectly(): void
     {
         // This method is private, so we just verify it doesn't break
         $this->assertTrue(true);
     }
 
+    /**
+     * Test encode context returns null for empty array.
+     */
     public function testEncodeContextReturnsNullForEmptyArray(): void
     {
-        $result = $this->logEvent->add(
-            'server',
-            1,
-            2,
-            3,
-            'Test event'
-        );
-
-        $this->assertNull($result);
+        $this->assertNull($this->invokePrivate('encodeContext', [[]]));
     }
 
+    /**
+     * Test now returns date time immutable.
+     */
     public function testNowReturnsDateTimeImmutable(): void
     {
-        $result = new \DateTimeImmutable('now', new \DateTimeZone('UTC'));
-        $this->assertInstanceOf(\DateTimeImmutable::class, $result);
+        $this->assertInstanceOf(\DateTimeImmutable::class, $this->invokePrivate('now'));
     }
 
+    /**
+     * Test assert name validates correctly.
+     */
     public function testAssertNameValidatesCorrectly(): void
     {
         // This is a private method that's tested through add()
         $this->assertTrue(true);
     }
 
+    /**
+     * Test assert id validates correctly.
+     */
     public function testAssertIdValidatesCorrectly(): void
     {
         // This is a private method that's tested through add()
         $this->assertTrue(true);
     }
 
+    /**
+     * Test assert array validates correctly.
+     */
     public function testAssertArrayValidatesCorrectly(): void
     {
         // This is a private method that's tested through add()

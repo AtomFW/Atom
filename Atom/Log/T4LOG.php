@@ -15,7 +15,7 @@ use ErrorException;
 use TypeError;
 use Psr\Log\LoggerInterface;
 
-final class T4LOG implements LoggerInterface
+class T4LOG implements LoggerInterface
 {
     /**
      * @readonly
@@ -118,6 +118,9 @@ final class T4LOG implements LoggerInterface
     private bool|string $systemLog = false;
     private $systemLogSocket;
 
+    private string $currentLogPath;
+    private string $currentDevLogPath;
+
     public function __construct(array $params = [])
     {
         if (\array_key_exists("systemLog", $params)) {
@@ -157,13 +160,13 @@ final class T4LOG implements LoggerInterface
             $this->nameLogFileT4LOG = $this->paramParse($this->logFileDevScheme);
         }
 
-        self::$LOG_ROOT_DEV_DIR =
+        $this->currentDevLogPath =
             self::$LOG_ROOT_DIR .
             $this->paramParse(self::$LOG_ROOT_DEV_DIR) .
         self::filterFillName(
             $this->nameLogFileT4LOG
         );
-        self::$LOG_ROOT_DIR =
+        $this->currentLogPath =
             self::$LOG_ROOT_DIR .
         self::filterFillName(
             $this->nameLogFile
@@ -396,7 +399,9 @@ final class T4LOG implements LoggerInterface
 
             $scheme = self::contextParse($scheme, $context);
 
-            $path = !\is_bool($stering) ? self::$LOG_ROOT_DIR : self::$LOG_ROOT_DEV_DIR;
+            $path = !\is_bool($stering) ? $this->currentLogPath : $this->currentDevLogPath;
+            // The path was already filtered in the constructor, but we'll leave it or remove it?
+            // Since it was already filtered in the constructor when assigning currentLogPath, we don't need to filter it again, but just in case:
             $path = $this->filterFillName($path);
 
             if ($nativeSystemLog && \is_string($this->systemLog)) {
@@ -407,6 +412,12 @@ final class T4LOG implements LoggerInterface
                 \syslog($priority, "$scheme");
 
                 return true;
+            }
+
+            // Ensure directory exists
+            $dir = dirname($path);
+            if (!is_dir($dir)) {
+                @mkdir($dir, 0777, true);
             }
 
             // TODO dodać zapisaywanie logów na raz w register_shutdown_function
@@ -514,8 +525,8 @@ final class T4LOG implements LoggerInterface
                     getmyuid(),
                     getmyinode(),
                     json_encode($_SERVER),
-                    json_encode(getallheaders()),
-                    $_SERVER['REMOTE_ADDR'],
+                    function_exists('getallheaders') ? json_encode(getallheaders()) : "[]",
+                    $_SERVER['REMOTE_ADDR'] ?? '127.0.0.1',
                     date("d_m_Y"),
                     date_default_timezone_get(),
                     DIRECTORY_SEPARATOR,

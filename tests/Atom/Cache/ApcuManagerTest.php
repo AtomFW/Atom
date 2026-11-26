@@ -7,16 +7,26 @@ namespace Tests\Atom\Cache;
 use PHPUnit\Framework\TestCase;
 use Atom\Cache\ApcuManager;
 
-class AutoMappedTest extends TestCase
+/**
+ * Test suite for the ApcuManager component.
+ */
+class ApcuManagerTest extends TestCase
 {
     private $cache;
     
     protected function setUp(): void
     {
+        if (!extension_loaded('apcu') || !function_exists('apcu_enabled') || !apcu_enabled()) {
+            $this->markTestSkipped('APCu is not available in this PHP runtime.');
+        }
         // We set up for testing purposes - we assume that we have access to the cache
         $this->cache = new ApcuManager('test_namespace');
+        $this->cache->clearNamespace();
     }
     
+    /**
+     * Test set and get.
+     */
     public function testSetAndGet()
     {
         $key = 'test_key';
@@ -26,6 +36,9 @@ class AutoMappedTest extends TestCase
         $this->assertEquals($value, $this->cache->get($key));
     }
     
+    /**
+     * Test get non existent.
+     */
     public function testGetNonExistent()
     {
         $key = 'non_existent_key';
@@ -34,6 +47,9 @@ class AutoMappedTest extends TestCase
         $this->assertEquals($default, $this->cache->get($key, $default));
     }
     
+    /**
+     * Test has.
+     */
     public function testHas()
     {
         $key = 'test_key';
@@ -44,6 +60,9 @@ class AutoMappedTest extends TestCase
         $this->assertTrue($this->cache->has($key));
     }
     
+    /**
+     * Test delete.
+     */
     public function testDelete()
     {
         $key = 'test_key';
@@ -56,7 +75,10 @@ class AutoMappedTest extends TestCase
         $this->assertFalse($this->cache->has($key));
     }
     
-    public function testClear()
+    /**
+     * Test flush.
+     */
+    public function testFlush()
     {
         $key1 = 'test_key_1';
         $key2 = 'test_key_2';
@@ -68,13 +90,16 @@ class AutoMappedTest extends TestCase
         $this->assertTrue($this->cache->has($key1));
         $this->assertTrue($this->cache->has($key2));
         
-        $this->assertTrue($this->cache->clear());
+        $this->assertTrue($this->cache->flush());
         
         // After clearing the cache, we cannot be sure that it will be removed from memory
         // But the test checks whether the method executes without errors
         $this->assertTrue(true);
     }
     
+    /**
+     * Test set multiple.
+     */
     public function testSetMultiple()
     {
         $values = [
@@ -89,6 +114,9 @@ class AutoMappedTest extends TestCase
         $this->assertEquals($values, $retrieved);
     }
     
+    /**
+     * Test get multiple.
+     */
     public function testGetMultiple()
     {
         $this->cache->set('key1', 'value1');
@@ -104,6 +132,9 @@ class AutoMappedTest extends TestCase
         $this->assertEquals($expected, $result);
     }
     
+    /**
+     * Test remember.
+     */
     public function testRemember()
     {
         $callbackCalled = 0;
@@ -123,6 +154,9 @@ class AutoMappedTest extends TestCase
         $this->assertEquals(1, $callbackCalled); // It shouldn't increase
     }
     
+    /**
+     * Test increment.
+     */
     public function testIncrement()
     {
         $key = 'increment_key';
@@ -138,6 +172,9 @@ class AutoMappedTest extends TestCase
         $this->assertEquals(8, $result2);
     }
     
+    /**
+     * Test decrement.
+     */
     public function testDecrement()
     {
         $key = 'decrement_key';
@@ -153,6 +190,9 @@ class AutoMappedTest extends TestCase
         $this->assertEquals(5, $result2);
     }
     
+    /**
+     * Test compare and swap.
+     */
     public function testCompareAndSwap()
     {
         $key = 'cas_key';
@@ -167,6 +207,9 @@ class AutoMappedTest extends TestCase
         $this->assertEquals(100, $this->cache->get($key)); // Still the same value
     }
     
+    /**
+     * Test keys.
+     */
     public function testKeys()
     {
         $this->cache->set('test_key_1', 'value1');
@@ -177,6 +220,9 @@ class AutoMappedTest extends TestCase
         $this->assertContains('test_key_2', $keys);
     }
     
+    /**
+     * Test all.
+     */
     public function testAll()
     {
         $this->cache->set('all_test_1', 'value1');
@@ -187,6 +233,9 @@ class AutoMappedTest extends TestCase
         $this->assertArrayHasKey('all_test_2', $all);
     }
     
+    /**
+     * Test purge by prefix.
+     */
     public function testPurgeByPrefix()
     {
         $this->cache->set('prefix_test_1', 'value1');
@@ -198,6 +247,9 @@ class AutoMappedTest extends TestCase
         $this->assertEquals(2, $deleted);
     }
     
+    /**
+     * Test purge by pattern.
+     */
     public function testPurgeByPattern()
     {
         $this->cache->set('pattern_test_1', 'value1');
@@ -208,6 +260,9 @@ class AutoMappedTest extends TestCase
         $this->assertEquals(2, $deleted);
     }
     
+    /**
+     * Test touch.
+     */
     public function testTouch()
     {
         $key = 'touch_test';
@@ -218,6 +273,9 @@ class AutoMappedTest extends TestCase
         $this->assertEquals('value', $this->cache->get($key));
     }
     
+    /**
+     * Test ttl until.
+     */
     public function testTtlUntil()
     {
         $expiresAt = new \DateTime('+1 hour');

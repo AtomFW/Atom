@@ -10,12 +10,18 @@ use Psr\Log\NullLogger;
 
 final class MailerProxyTest extends PHPUnitTestCase
 {
+    /**
+     * Test constructor respects test mode option.
+     */
     public function testConstructorRespectsTestModeOption(): void
     {
         $proxy = new MailerProxy(['testMode' => true], new NullLogger());
         $this->assertTrue($proxy->isTestMode());
     }
 
+    /**
+     * Test set transport switches modes.
+     */
     public function testSetTransportSwitchesModes(): void
     {
         $proxy = new MailerProxy(null, new NullLogger());
@@ -30,6 +36,9 @@ final class MailerProxyTest extends PHPUnitTestCase
         $this->assertSame('sendmail', $proxy->Mailer);
     }
 
+    /**
+     * Test configure s m t p sets common properties.
+     */
     public function testConfigureSMTPSetsCommonProperties(): void
     {
         $proxy = new MailerProxy(null, new NullLogger());
@@ -61,6 +70,9 @@ final class MailerProxyTest extends PHPUnitTestCase
         $this->assertArrayHasKey('ssl', $proxy->SMTPOptions);
     }
 
+    /**
+     * Test set d k i m with incomplete options does not configure.
+     */
     public function testSetDKIMWithIncompleteOptionsDoesNotConfigure(): void
     {
         $proxy = new MailerProxy(null, new NullLogger());
@@ -72,6 +84,9 @@ final class MailerProxyTest extends PHPUnitTestCase
         $this->assertSame('', (string)$proxy->DKIM_private);
     }
 
+    /**
+     * Test set d k i m with complete options configures all.
+     */
     public function testSetDKIMWithCompleteOptionsConfiguresAll(): void
     {
         $proxy = new MailerProxy(null, new NullLogger());
@@ -90,6 +105,9 @@ final class MailerProxyTest extends PHPUnitTestCase
         $this->assertSame('id@example.com', $proxy->DKIM_identity);
     }
 
+    /**
+     * Test send html builds message and returns true in test mode.
+     */
     public function testSendHtmlBuildsMessageAndReturnsTrueInTestMode(): void
     {
         $proxy = new MailerProxy(
@@ -124,6 +142,9 @@ final class MailerProxyTest extends PHPUnitTestCase
         $this->assertNotEmpty($proxy->getCustomHeaders());
     }
 
+    /**
+     * Test send text builds message and returns true in test mode.
+     */
     public function testSendTextBuildsMessageAndReturnsTrueInTestMode(): void
     {
         $proxy = new MailerProxy(
@@ -154,6 +175,9 @@ final class MailerProxyTest extends PHPUnitTestCase
         $this->assertSame('text/plain', $proxy->ContentType);
     }
 
+    /**
+     * Test send loop counts ok and failed.
+     */
     public function testSendLoopCountsOkAndFailed(): void
     {
         $proxy = new MailerProxy(['test_mode' => true], new NullLogger());
@@ -178,11 +202,13 @@ final class MailerProxyTest extends PHPUnitTestCase
         $this->assertSame(['ok' => 2, 'failed' => 0], $result);
     }
 
+    /**
+     * Test split address and name parses correctly.
+     */
     public function testSplitAddressAndNameParsesCorrectly(): void
     {
         $ref = new \ReflectionClass(MailerProxy::class);
         $method = $ref->getMethod('splitAddressAndName');
-        $method->setAccessible(true);
 
         $proxy = new MailerProxy(null, new NullLogger());
 
@@ -193,6 +219,9 @@ final class MailerProxyTest extends PHPUnitTestCase
         $this->assertSame(['plain@example.com', ''], $r2);
     }
 
+    /**
+     * Test get to addresses safe call.
+     */
     public function testGetToAddressesSafeCall(): void
     {
         $proxy = new MailerProxy(['test_mode' => true], new NullLogger());

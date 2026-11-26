@@ -44,11 +44,14 @@ class AutoMapped
      * @return mixed The value properly typed for PHP usage
      */
     public static function mapValueFromDB(int|string $value, string $type) {
+        $longitude = $latitude = 0;
         if ($type == ["point", 'location', 'gps']) {
             \sscanf($value, "POINT(%f %f)", $longitude, $latitude);
         }
-        if (strstr((string)$value, ":") && (substr_count($value, ":") === 1)) {
-            [$value, $valueParameter] = explode(":", $value);
+
+        $valueParameter = 0;
+        if (strstr((string)$type, ":") && (substr_count($type, ":") === 1)) {
+            [$type, $valueParameter] = explode(":", $type);
             if (\intval($valueParameter)) {
                 $valueParameter = (int)$valueParameter;
             }
@@ -56,6 +59,8 @@ class AutoMapped
                 $valueParameter = (float)$valueParameter;
             }
         }
+
+        $class = null;
         if (substr_count($type, "\\") >= 3) {
             if (class_exists($type)) {
                 $class = new $type();
@@ -98,10 +103,12 @@ class AutoMapped
             return $value;
         }
 
+        $longitude = $latitude = 0;
         if (\in_array($type, ['point', 'location', 'gps'])) {
             sscanf($value, "%f,%f", $longitude, $latitude);
         }
 
+        $class = null;
         if (substr_count($type, "\\") >= 3) {
             if (class_exists($type)) {
                 $class = new $type();

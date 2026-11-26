@@ -8,8 +8,14 @@ use PHPUnit\Framework\TestCase;
 use Atom\Model;
 use Atom\Form\Field;
 
+/**
+ * Test suite for the Field component.
+ */
 class FieldTest extends TestCase
 {
+    /**
+     * Test field constructor sets default type.
+     */
     public function testFieldConstructorSetsDefaultType()
     {
         $model = $this->createMock(Model::class);
@@ -19,6 +25,9 @@ class FieldTest extends TestCase
         $this->assertEquals(Field::TYPE_TEXT, $field->type);
     }
 
+    /**
+     * Test password field sets type.
+     */
     public function testPasswordFieldSetsType()
     {
         $model = $this->createMock(Model::class);
@@ -29,6 +38,9 @@ class FieldTest extends TestCase
         $this->assertEquals(Field::TYPE_PASSWORD, $field->type);
     }
 
+    /**
+     * Test file field sets type.
+     */
     public function testFileFieldSetsType()
     {
         $model = $this->createMock(Model::class);
@@ -39,6 +51,9 @@ class FieldTest extends TestCase
         $this->assertEquals(Field::TYPE_FILE, $field->type);
     }
 
+    /**
+     * Test email field sets type.
+     */
     public function testEmailFieldSetsType()
     {
         $model = $this->createMock(Model::class);
@@ -49,6 +64,9 @@ class FieldTest extends TestCase
         $this->assertEquals(Field::TYPE_EMAIL, $field->type);
     }
 
+    /**
+     * Test hidden field sets type.
+     */
     public function testHiddenFieldSetsType()
     {
         $model = $this->createMock(Model::class);
@@ -59,6 +77,9 @@ class FieldTest extends TestCase
         $this->assertEquals(Field::TYPE_HIDDEN, $field->type);
     }
 
+    /**
+     * Test checkbox field sets type.
+     */
     public function testCheckboxFieldSetsType()
     {
         $model = $this->createMock(Model::class);
@@ -69,6 +90,9 @@ class FieldTest extends TestCase
         $this->assertEquals(Field::TYPE_CHECKBOX, $field->type);
     }
 
+    /**
+     * Test radio field sets type.
+     */
     public function testRadioFieldSetsType()
     {
         $model = $this->createMock(Model::class);
@@ -79,6 +103,9 @@ class FieldTest extends TestCase
         $this->assertEquals(Field::TYPE_RADIO, $field->type);
     }
 
+    /**
+     * Test date field sets type.
+     */
     public function testDateFieldSetsType()
     {
         $model = $this->createMock(Model::class);
@@ -89,6 +116,9 @@ class FieldTest extends TestCase
         $this->assertEquals(Field::TYPE_DATE, $field->type);
     }
 
+    /**
+     * Test time field sets type.
+     */
     public function testTimeFieldSetsType()
     {
         $model = $this->createMock(Model::class);
@@ -99,6 +129,9 @@ class FieldTest extends TestCase
         $this->assertEquals(Field::TYPE_TIME, $field->type);
     }
 
+    /**
+     * Test url field sets type.
+     */
     public function testUrlFieldSetsType()
     {
         $model = $this->createMock(Model::class);
@@ -109,6 +142,9 @@ class FieldTest extends TestCase
         $this->assertEquals(Field::TYPE_URL, $field->type);
     }
 
+    /**
+     * Test number field sets type.
+     */
     public function testNumberFieldSetsType()
     {
         $model = $this->createMock(Model::class);
@@ -119,6 +155,9 @@ class FieldTest extends TestCase
         $this->assertEquals(Field::TYPE_NUMBER, $field->type);
     }
 
+    /**
+     * Test range field sets type.
+     */
     public function testRangeFieldSetsType()
     {
         $model = $this->createMock(Model::class);
@@ -129,6 +168,9 @@ class FieldTest extends TestCase
         $this->assertEquals(Field::TYPE_RANGE, $field->type);
     }
 
+    /**
+     * Test search field sets type.
+     */
     public function testSearchFieldSetsType()
     {
         $model = $this->createMock(Model::class);
@@ -139,6 +181,9 @@ class FieldTest extends TestCase
         $this->assertEquals(Field::TYPE_SEARCH, $field->type);
     }
 
+    /**
+     * Test color field sets type.
+     */
     public function testColorFieldSetsType()
     {
         $model = $this->createMock(Model::class);
@@ -149,6 +194,9 @@ class FieldTest extends TestCase
         $this->assertEquals(Field::TYPE_COLOR, $field->type);
     }
 
+    /**
+     * Test tel field sets type.
+     */
     public function testTelFieldSetsType()
     {
         $model = $this->createMock(Model::class);
@@ -159,6 +207,9 @@ class FieldTest extends TestCase
         $this->assertEquals(Field::TYPE_TEL, $field->type);
     }
 
+    /**
+     * Test month field sets type.
+     */
     public function testMonthFieldSetsType()
     {
         $model = $this->createMock(Model::class);
@@ -169,6 +220,9 @@ class FieldTest extends TestCase
         $this->assertEquals(Field::TYPE_MONTH, $field->type);
     }
 
+    /**
+     * Test week field sets type.
+     */
     public function testWeekFieldSetsType()
     {
         $model = $this->createMock(Model::class);
@@ -179,6 +233,9 @@ class FieldTest extends TestCase
         $this->assertEquals(Field::TYPE_WEEK, $field->type);
     }
 
+    /**
+     * Test datetime local field sets type.
+     */
     public function testDatetimeLocalFieldSetsType()
     {
         $model = $this->createMock(Model::class);
@@ -189,6 +246,9 @@ class FieldTest extends TestCase
         $this->assertEquals(Field::TYPE_DATETIME_LOCAL, $field->type);
     }
 
+    /**
+     * Test submit field sets type.
+     */
     public function testSubmitFieldSetsType()
     {
         $model = $this->createMock(Model::class);
@@ -199,6 +259,9 @@ class FieldTest extends TestCase
         $this->assertEquals(Field::TYPE_SUBMIT, $field->type);
     }
 
+    /**
+     * Test reset field sets type.
+     */
     public function testResetFieldSetsType()
     {
         $model = $this->createMock(Model::class);
@@ -209,6 +272,9 @@ class FieldTest extends TestCase
         $this->assertEquals(Field::TYPE_RESET, $field->type);
     }
 
+    /**
+     * Test button field sets type.
+     */
     public function testButtonFieldSetsType()
     {
         $model = $this->createMock(Model::class);
@@ -219,6 +285,9 @@ class FieldTest extends TestCase
         $this->assertEquals(Field::TYPE_BUTTON, $field->type);
     }
 
+    /**
+     * Test image field sets type.
+     */
     public function testImageFieldSetsType()
     {
         $model = $this->createMock(Model::class);
@@ -229,6 +298,9 @@ class FieldTest extends TestCase
         $this->assertEquals(Field::TYPE_IMAGE, $field->type);
     }
 
+    /**
+     * Test render input renders correctly.
+     */
     public function testRenderInputRendersCorrectly()
     {
         $model = $this->createMock(Model::class);
@@ -239,13 +311,11 @@ class FieldTest extends TestCase
                 return null;
             });
         
-        $model->expects($this->any())
-            ->method('hasError')
+        $model->method('hasError')
             ->with('testAttribute')
             ->willReturn(false);
             
-        $model->expects($this->any())
-            ->method('property')
+        $model->method('property')
             ->with('testAttribute')
             ->willReturn('');
             

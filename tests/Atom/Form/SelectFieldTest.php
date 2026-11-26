@@ -8,8 +8,14 @@ use Atom\Model;
 use PHPUnit\Framework\TestCase;
 use Atom\Form\SelectField;
 
+/**
+ * Test suite for the SelectField component.
+ */
 class SelectFieldTest extends TestCase
 {
+    /**
+     * Test render input outputs correct html.
+     */
     public function test_renderInput_outputs_correct_html(): void
     {
         $model = $this->createMock(Model::class);
@@ -35,6 +41,9 @@ class SelectFieldTest extends TestCase
         $this->assertStringContainsString('Option 2', $result);
     }
 
+    /**
+     * Test render input with errors.
+     */
     public function test_renderInput_with_errors(): void
     {
         $model = $this->createMock(Model::class);
@@ -51,9 +60,12 @@ class SelectFieldTest extends TestCase
         $selectField = new SelectField($model, 'testAttribute');
         $result = $selectField->renderInput();
         
-        $this->assertStringContainsString('class="form-control is-invalid"', $result);
+        $this->assertStringContainsString('class="form-control is-invalid custom-class"', $result);
     }
 
+    /**
+     * Test options generates correct html.
+     */
     public function test_options_generates_correct_html(): void
     {
         $model = $this->createMock(Model::class);
@@ -66,10 +78,13 @@ class SelectFieldTest extends TestCase
         
         $result = $selectField->options($options);
         
-        $this->assertStringContainsString('<option value="option1">Option 1</option>', $result);
-        $this->assertStringContainsString('<option value="option2">Option 2</option>', $result);
+        $this->assertStringContainsString('<option value="option1" >Option 1</option>', $result);
+        $this->assertStringContainsString('<option value="option2" >Option 2</option>', $result);
     }
 
+    /**
+     * Test options with attributes.
+     */
     public function test_options_with_attributes(): void
     {
         $model = $this->createMock(Model::class);
@@ -86,6 +101,9 @@ class SelectFieldTest extends TestCase
         $this->assertStringContainsString('value="option2" disabled>Option 2</option>', $result);
     }
 
+    /**
+     * Test render input with empty options.
+     */
     public function test_renderInput_with_empty_options(): void
     {
         $model = $this->createMock(Model::class);
@@ -99,6 +117,9 @@ class SelectFieldTest extends TestCase
         $this->assertStringContainsString('name="testAttribute"', $result);
     }
 
+    /**
+     * Test render input with model property.
+     */
     public function test_renderInput_with_model_property(): void
     {
         $model = $this->createMock(Model::class);

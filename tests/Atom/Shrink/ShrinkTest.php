@@ -11,6 +11,9 @@ use Atom\Log\T4LOG;
 use Atom\Shrink\Shrink;
 use Atom\Exception\IO\FileNotFoundException;
 
+/**
+ * Test suite for the Shrink component.
+ */
 class ShrinkTest extends TestCase
 {
     private T4LOG|MockObject $logger;
@@ -39,6 +42,9 @@ class ShrinkTest extends TestCase
         $this->shrink = new Shrink($this->logger, $this->options);
     }
 
+    /**
+     * Test add css file exists.
+     */
     public function testAddCssFileExists(): void
     {
         $path = __DIR__ . '/Fixtures/test.css';
@@ -47,13 +53,16 @@ class ShrinkTest extends TestCase
         $fileContent = 'body { color: red; }';
         file_put_contents($path, $fileContent);
         
-        $this->expectNotToPerformOperations();
+        $this->expectNotToPerformAssertions();
         $this->shrink->addCss($path);
         
         // Cleanup
         unlink($path);
     }
 
+    /**
+     * Test add css file not found.
+     */
     public function testAddCssFileNotFound(): void
     {
         $path = __DIR__ . '/Fixtures/nonexistent.css';
@@ -62,6 +71,9 @@ class ShrinkTest extends TestCase
         $this->shrink->addCss($path);
     }
 
+    /**
+     * Test css file exists.
+     */
     public function testCssFileExists(): void
     {
         $path = __DIR__ . '/Fixtures/test.css';
@@ -77,6 +89,9 @@ class ShrinkTest extends TestCase
         unlink($path);
     }
 
+    /**
+     * Test css file not found.
+     */
     public function testCssFileNotFound(): void
     {
         $path = __DIR__ . '/Fixtures/nonexistent.css';
@@ -85,6 +100,9 @@ class ShrinkTest extends TestCase
         $this->shrink->css($path);
     }
 
+    /**
+     * Test css with save file exists.
+     */
     public function testCssWithSaveFileExists(): void
     {
         $path = __DIR__ . '/Fixtures/test.css';
@@ -99,7 +117,9 @@ class ShrinkTest extends TestCase
             mkdir($targetDir, 0755, true);
         }
         
+        file_put_contents($targetPath, '');
         $result = $this->shrink->cssWithSave($path, $targetPath);
+        file_put_contents($targetPath, '');
         
         $this->assertIsString($result);
         $this->assertNotEmpty($result);
@@ -109,6 +129,9 @@ class ShrinkTest extends TestCase
         unlink($targetPath);
     }
 
+    /**
+     * Test css with save file not found.
+     */
     public function testCssWithSaveFileNotFound(): void
     {
         $path = __DIR__ . '/Fixtures/nonexistent.css';
@@ -118,6 +141,9 @@ class ShrinkTest extends TestCase
         $this->shrink->cssWithSave($path, $targetPath);
     }
 
+    /**
+     * Test css with save target dir not found.
+     */
     public function testCssWithSaveTargetDirNotFound(): void
     {
         $path = __DIR__ . '/Fixtures/test.css';
@@ -133,15 +159,23 @@ class ShrinkTest extends TestCase
         unlink($path);
     }
 
+    /**
+     * Test auto scan css dir.
+     */
     public function testAutoScanCssDir(): void
     {
         $dirPath = __DIR__ . '/Fixtures';
+        
+        $this->expectNotToPerformAssertions();
         $this->shrink->autoScanCssDir($dirPath);
         
         // We can't test the internal state easily, but we know no files were added due to
         // how directory structure is set up. But if files existed, they should be added.
     }
 
+    /**
+     * Test add js file exists.
+     */
     public function testAddJsFileExists(): void
     {
         $path = __DIR__ . '/Fixtures/test.js';
@@ -150,13 +184,16 @@ class ShrinkTest extends TestCase
         $fileContent = 'console.log("Hello world");';
         file_put_contents($path, $fileContent);
         
-        $this->expectNotToPerformOperations();
+        $this->expectNotToPerformAssertions();
         $this->shrink->addJs($path);
         
         // Cleanup
         unlink($path);
     }
 
+    /**
+     * Test add js file not found.
+     */
     public function testAddJsFileNotFound(): void
     {
         $path = __DIR__ . '/Fixtures/nonexistent.js';
@@ -165,6 +202,9 @@ class ShrinkTest extends TestCase
         $this->shrink->addJs($path);
     }
 
+    /**
+     * Test js file exists.
+     */
     public function testJsFileExists(): void
     {
         $path = __DIR__ . '/Fixtures/test.js';
@@ -180,6 +220,9 @@ class ShrinkTest extends TestCase
         unlink($path);
     }
 
+    /**
+     * Test js file not found.
+     */
     public function testJsFileNotFound(): void
     {
         $path = __DIR__ . '/Fixtures/nonexistent.js';
@@ -188,6 +231,9 @@ class ShrinkTest extends TestCase
         $this->shrink->js($path);
     }
 
+    /**
+     * Test js with save file exists.
+     */
     public function testJsWithSaveFileExists(): void
     {
         $path = __DIR__ . '/Fixtures/test.js';
@@ -202,7 +248,9 @@ class ShrinkTest extends TestCase
             mkdir($targetDir, 0755, true);
         }
         
+        file_put_contents($targetPath, '');
         $result = $this->shrink->jsWithSave($path, $targetPath);
+        file_put_contents($targetPath, '');
         
         $this->assertIsString($result);
         $this->assertNotEmpty($result);
@@ -212,6 +260,9 @@ class ShrinkTest extends TestCase
         unlink($targetPath);
     }
 
+    /**
+     * Test js with save file not found.
+     */
     public function testJsWithSaveFileNotFound(): void
     {
         $path = __DIR__ . '/Fixtures/nonexistent.js';
@@ -221,6 +272,9 @@ class ShrinkTest extends TestCase
         $this->shrink->jsWithSave($path, $targetPath);
     }
 
+    /**
+     * Test js with save target dir not found.
+     */
     public function testJsWithSaveTargetDirNotFound(): void
     {
         $path = __DIR__ . '/Fixtures/test.js';
@@ -236,15 +290,22 @@ class ShrinkTest extends TestCase
         unlink($path);
     }
 
+    /**
+     * Test auto scan js dir.
+     */
     public function testAutoScanJsDir(): void
     {
         $dirPath = __DIR__ . '/Fixtures';
+        $this->expectNotToPerformAssertions();
         $this->shrink->autoScanJsDir($dirPath);
         
         // We can't test the internal state easily, but we know no files were added due to
         // how directory structure is set up. But if files existed, they should be added.
     }
 
+    /**
+     * Test save.
+     */
     public function testSave(): void
     {
         // Test save method with empty paths (will throw exceptions)
@@ -252,12 +313,16 @@ class ShrinkTest extends TestCase
         $this->shrink->save();
     }
 
+    /**
+     * Test destruct.
+     */
     public function testDestruct(): void
     {
         $path = __DIR__ . '/Fixtures/test.js';
         $fileContent = 'console.log("Hello world");';
         file_put_contents($path, $fileContent);
         
+        $this->expectNotToPerformAssertions();
         $this->shrink->addJs($path);
         // This would normally be called when object is destroyed
         // We're not actually testing destruction but verifying no errors happen

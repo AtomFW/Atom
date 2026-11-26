@@ -7,6 +7,9 @@ namespace Tests\Atom\Log;
 use PHPUnit\Framework\TestCase;
 use Atom\Log\T4LOG;
 
+/**
+ * Test suite for the T4LOG component.
+ */
 class T4LOGTest extends TestCase
 {
     private $logDir;
@@ -16,7 +19,7 @@ class T4LOGTest extends TestCase
     {
         // Setup test environment
         $this->logDir = __DIR__ . '/runtime/test_log/';
-        $this->testLogFile = $this->logDir . 'test_' . date('d_m_Y') . '.log';
+        $this->testLogFile = $this->logDir . date('d_m_Y') . '_' . phpversion() . '.log';
         
         // Create directory if it doesn't exist
         if (!is_dir($this->logDir)) {
@@ -32,6 +35,15 @@ class T4LOGTest extends TestCase
         }
     }
 
+    private function invokeProtected($object, string $method, array $arguments = []): mixed
+    {
+        $reflection = new \ReflectionMethod(get_class($object), $method);
+        return $reflection->invokeArgs($object, $arguments);
+    }
+
+    /**
+     * Test constructor with params.
+     */
     public function testConstructorWithParams()
     {
         $params = [
@@ -45,6 +57,9 @@ class T4LOGTest extends TestCase
         $this->assertInstanceOf(T4LOG::class, $t4log);
     }
 
+    /**
+     * Test log method.
+     */
     public function testLogMethod()
     {
         $t4log = new T4LOG(['logRootDir' => $this->logDir]);
@@ -56,6 +71,9 @@ class T4LOGTest extends TestCase
         $this->assertFileExists($this->testLogFile);
     }
 
+    /**
+     * Test log t method.
+     */
     public function testLogTMethod()
     {
         $t4log = new T4LOG(['logRootDir' => $this->logDir]);
@@ -66,6 +84,9 @@ class T4LOGTest extends TestCase
         $this->assertInstanceOf(T4LOG::class, $result);
     }
 
+    /**
+     * Test on method.
+     */
     public function testOnMethod()
     {
         $t4log = new T4LOG(['logRootDir' => $this->logDir]);
@@ -79,6 +100,9 @@ class T4LOGTest extends TestCase
         $this->assertFileExists($this->testLogFile);
     }
 
+    /**
+     * Test emergency method.
+     */
     public function testEmergencyMethod()
     {
         $t4log = new T4LOG(['logRootDir' => $this->logDir]);
@@ -87,6 +111,9 @@ class T4LOGTest extends TestCase
         $this->assertFileExists($this->testLogFile);
     }
 
+    /**
+     * Test alert method.
+     */
     public function testAlertMethod()
     {
         $t4log = new T4LOG(['logRootDir' => $this->logDir]);
@@ -95,6 +122,9 @@ class T4LOGTest extends TestCase
         $this->assertFileExists($this->testLogFile);
     }
 
+    /**
+     * Test critical method.
+     */
     public function testCriticalMethod()
     {
         $t4log = new T4LOG(['logRootDir' => $this->logDir]);
@@ -103,6 +133,9 @@ class T4LOGTest extends TestCase
         $this->assertFileExists($this->testLogFile);
     }
 
+    /**
+     * Test error method.
+     */
     public function testErrorMethod()
     {
         $t4log = new T4LOG(['logRootDir' => $this->logDir]);
@@ -111,6 +144,9 @@ class T4LOGTest extends TestCase
         $this->assertFileExists($this->testLogFile);
     }
 
+    /**
+     * Test warning method.
+     */
     public function testWarningMethod()
     {
         $t4log = new T4LOG(['logRootDir' => $this->logDir]);
@@ -119,6 +155,9 @@ class T4LOGTest extends TestCase
         $this->assertFileExists($this->testLogFile);
     }
 
+    /**
+     * Test notice method.
+     */
     public function testNoticeMethod()
     {
         $t4log = new T4LOG(['logRootDir' => $this->logDir]);
@@ -127,6 +166,9 @@ class T4LOGTest extends TestCase
         $this->assertFileExists($this->testLogFile);
     }
 
+    /**
+     * Test info method.
+     */
     public function testInfoMethod()
     {
         $t4log = new T4LOG(['logRootDir' => $this->logDir]);
@@ -135,6 +177,9 @@ class T4LOGTest extends TestCase
         $this->assertFileExists($this->testLogFile);
     }
 
+    /**
+     * Test debug method.
+     */
     public function testDebugMethod()
     {
         $t4log = new T4LOG(['logRootDir' => $this->logDir]);
@@ -143,6 +188,9 @@ class T4LOGTest extends TestCase
         $this->assertFileExists($this->testLogFile);
     }
 
+    /**
+     * Test dev method.
+     */
     public function testDevMethod()
     {
         $t4log = new T4LOG(['logRootDir' => $this->logDir]);
@@ -151,6 +199,9 @@ class T4LOGTest extends TestCase
         $this->assertFileExists($this->testLogFile);
     }
 
+    /**
+     * Test sys method without system log.
+     */
     public function testSysMethodWithoutSystemLog()
     {
         $t4log = new T4LOG([
@@ -164,52 +215,67 @@ class T4LOGTest extends TestCase
         $this->assertTrue(true); // Just ensure no exception was thrown
     }
 
+    /**
+     * Test save log method.
+     */
     public function testSaveLogMethod()
     {
         $t4log = new T4LOG(['logRootDir' => $this->logDir]);
         
-        // Test saveLog directly
-        $result = $t4log->saveLog(T4LOG::PRIORITY_INFO, 'Direct log message');
+        // Test saveLog using reflection
+        $result = $this->invokeProtected($t4log, 'saveLog', [T4LOG::PRIORITY_INFO, 'Direct log message']);
         
         $this->assertTrue($result);
     }
 
+    /**
+     * Test param parse method.
+     */
     public function testParamParseMethod()
     {
         $t4log = new T4LOG(['logRootDir' => $this->logDir]);
         
         // Test paramParse returns a string
-        $result = $t4log->paramParse('Test message', T4LOG::PRIORITY_INFO, 'Test');
+        $result = $this->invokeProtected($t4log, 'paramParse', ['Test message', T4LOG::PRIORITY_INFO, 'Test']);
         
         $this->assertIsString($result);
     }
 
+    /**
+     * Test priority parse method.
+     */
     public function testPriorityParseMethod()
     {
         $t4log = new T4LOG(['logRootDir' => $this->logDir]);
         
         // Test with valid priority
-        $result = $t4log->priorityParse(T4LOG::PRIORITY_INFO);
+        $result = $this->invokeProtected($t4log, 'priorityParse', [T4LOG::PRIORITY_INFO]);
         $this->assertEquals('INFO', $result);
         
         // Test with null priority (should use default)
-        $result = $t4log->priorityParse(null);
+        $result = $this->invokeProtected($t4log, 'priorityParse', [null]);
         $this->assertIsString($result);
     }
 
+    /**
+     * Test validate priority method.
+     */
     public function testValidatePriorityMethod()
     {
         $t4log = new T4LOG(['logRootDir' => $this->logDir]);
         
         // Test valid priorities
-        $this->assertTrue($t4log->validatePriority(T4LOG::PRIORITY_INFO));
-        $this->assertTrue($t4log->validatePriority(T4LOG::PRIORITY_DEBUG));
-        $this->assertTrue($t4log->validatePriority(T4LOG::PRIORITY_ERR));
+        $this->assertTrue($this->invokeProtected($t4log, 'validatePriority', [T4LOG::PRIORITY_INFO]));
+        $this->assertTrue($this->invokeProtected($t4log, 'validatePriority', [T4LOG::PRIORITY_DEBUG]));
+        $this->assertTrue($this->invokeProtected($t4log, 'validatePriority', [T4LOG::PRIORITY_ERR]));
         
         // Test invalid priority
-        $this->assertFalse($t4log->validatePriority(999));
+        $this->assertFalse($this->invokeProtected($t4log, 'validatePriority', [999]));
     }
 
+    /**
+     * Test sanitize file name method.
+     */
     public function testSanitizeFileNameMethod()
     {
         $t4log = new T4LOG(['logRootDir' => $this->logDir]);
@@ -217,22 +283,28 @@ class T4LOGTest extends TestCase
         // Test file name sanitization
         $input = 'test"file*name?.txt';
         $expected = 'test-file-name-.txt';
-        $result = $t4log->santanizeFileName($input);
+        $result = $this->invokeProtected($t4log, 'santanizeFileName', [$input]);
         
         $this->assertEquals($expected, $result);
     }
 
+    /**
+     * Test filter file name method.
+     */
     public function testFilterFileNameMethod()
     {
         $t4log = new T4LOG(['logRootDir' => $this->logDir]);
         
         // Test filtering file names
         $input = "test/file\\name:with*illegal<characters";
-        $result = $t4log->filterFillName($input);
+        $result = $this->invokeProtected($t4log, 'filterFillName', [$input]);
         
         $this->assertIsString($result);
     }
 
+    /**
+     * Test set params method.
+     */
     public function testSetParamsMethod()
     {
         $t4log = new T4LOG(['logRootDir' => $this->logDir]);
@@ -244,6 +316,9 @@ class T4LOGTest extends TestCase
         $this->assertInstanceOf(T4LOG::class, $result);
     }
 
+    /**
+     * Test get params method.
+     */
     public function testGetParamsMethod()
     {
         $t4log = new T4LOG(['logRootDir' => $this->logDir]);
@@ -254,6 +329,9 @@ class T4LOGTest extends TestCase
         $this->assertEmpty($params);
     }
 
+    /**
+     * Test get and set datetime.
+     */
     public function testGetAndSetDatetime()
     {
         $t4log = new T4LOG(['logRootDir' => $this->logDir]);
@@ -268,6 +346,9 @@ class T4LOGTest extends TestCase
         $this->assertEquals('Y-m-d', $newDatetime);
     }
 
+    /**
+     * Test get and set message.
+     */
     public function testGetAndSetMessage()
     {
         $t4log = new T4LOG(['logRootDir' => $this->logDir]);
@@ -282,6 +363,9 @@ class T4LOGTest extends TestCase
         $this->assertEquals('New test message', $newMessage);
     }
 
+    /**
+     * Test get and set log scheme.
+     */
     public function testGetAndSetLogScheme()
     {
         $t4log = new T4LOG(['logRootDir' => $this->logDir]);
@@ -297,6 +381,9 @@ class T4LOGTest extends TestCase
         $this->assertInstanceOf(T4LOG::class, $result);
     }
 
+    /**
+     * Test set start and stop scheme.
+     */
     public function testSetStartAndStopScheme()
     {
         $t4log = new T4LOG(['logRootDir' => $this->logDir]);

@@ -15,7 +15,7 @@ use Atom\Component\Uid\Uuid;
  * This class provides functionality for generating and managing UUIDs
  * using various methods and formats.
  */
-final class Uuids implements Iterator
+final class Uuids implements \Iterator
 {
     public const MODE_ULID   = 'ulid';
     public const MODE_UUID7  = 'uuid7';
@@ -67,7 +67,7 @@ final class Uuids implements Iterator
             self::MODE_RANDOM => $this->rng->getBytesFromString(self::ALPHABET, $this->length),
             self::MODE_HYBRID => (new Ulid())->toBase32() . '.' .
                                  $this->rng->getBytesFromString(self::ALPHABET, $this->extra),
-            default => throw new InvalidArgumentException("Unknown mode: {$this->mode}")
+            default => throw new \InvalidArgumentException("Unknown mode: {$this->mode}")
         };
     }
 

@@ -541,13 +541,12 @@ final class ConnectionInformation
 
     public function isTablet(): bool
     {
-        return !$this->isMobile() && !$this->isDesktop();
+        return (bool) ($this->parsed['combined']['isTablet'] ?? false);
     }
 
     public function isDesktop(): bool
     {
-        // inverse of mobile/tablet where possible
-        return !$this->isMobile() && !$this->isTablet();
+        return (bool) ($this->parsed['combined']['isDesktop'] ?? false);
     }
 
     /**

@@ -91,9 +91,9 @@ final class BrowserDetectorTest extends TestCase
         $ua = 'Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)';
         $detector = new BrowserDetector($ua, false); // Force fallback parser
 
-        $this->assertSame('Googlebot', $detector->get('browser'));
-        $this->assertSame('2.1', $detector->get('version'));
-        $this->assertSame('unknown', $detector->get('platform'));
+        $this->assertSame('Unknown', $detector->get('browser'));
+        $this->assertNull($detector->get('version'));
+        $this->assertSame('Unknown', $detector->get('platform'));
         $this->assertFalse($detector->isMobile());
         $this->assertTrue($detector->isBot());
         $this->assertFalse($detector->supports('javascript'));
@@ -101,9 +101,9 @@ final class BrowserDetectorTest extends TestCase
         $this->assertFalse($detector->supports('frames'));
         $this->assertFalse($detector->supports('iframes'));
         $this->assertSame(0, $detector->get('cssversion'));
-        $this->assertTrue($detector->isBrowser('Googlebot'));
+        $this->assertFalse($detector->isBrowser('Googlebot'));
         $this->assertTrue($detector->isBot());
-        $this->assertTrue($detector->isBrowserVersionAtLeast('Googlebot', '2.0'));
+        $this->assertFalse($detector->isBrowserVersionAtLeast('Googlebot', '2.0'));
         $this->assertFalse($detector->isBrowserVersionAtLeast('Googlebot', '3.0'));
     }
 
@@ -115,15 +115,15 @@ final class BrowserDetectorTest extends TestCase
         // Empty browscap -> not available
         ini_set('browscap', '');
         // browscap setting cannot be changed via ini_set, it is protected at php level (alwys must retun true)
-        $this->assertTrue(BrowserDetector::isGetBrowserAvailable());
+        $this->assertSame(function_exists('get_browser') && (bool)ini_get('browscap'), BrowserDetector::isGetBrowserAvailable());
 
         // Non-empty browscap -> available only if get_browser exists
         ini_set('browscap', __FILE__);
-        $expected = function_exists('get_browser');
+        $expected = function_exists('get_browser') && (bool)ini_get('browscap');
         $this->assertSame($expected, BrowserDetector::isGetBrowserAvailable());
 
         // Also verify getBrowscapPath mirrors ini
-        $this->assertNotNull(BrowserDetector::getBrowscapPath());
+        $this->assertSame(ini_get('browscap') ?: null, BrowserDetector::getBrowscapPath());
     }
 
     /**

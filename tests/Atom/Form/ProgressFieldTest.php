@@ -7,30 +7,30 @@ namespace Tests\Atom\Form;
 use PHPUnit\Framework\TestCase;
 use Atom\Model;
 use Atom\Form\ProgressField;
-use stdClass;
 
+/**
+ * Test suite for the ProgressField component.
+ */
 class ProgressFieldTest extends TestCase
 {
+    /**
+     * Test render input returns correct html.
+     */
     public function test_renderInput_returns_correct_html()
     {
-        $model = $this->createMock(Model::class);
-        $model->method('getProperty')
-            ->will($this->returnValueMap([
-                ['progress', 'class', null, 'progress-class'],
-                ['progress', 'value', null, '50'],
-            ]));
-        
-        $model->method('hasError')
-            ->with('progress')
-            ->willReturn(false);
+        $model = new class extends Model {
+            public $progress = 75;
             
-        $model->method('property')
-            ->with('progress')
-            ->willReturn('max="100"');
-            
-        $model->expects($this->any())
-            ->method($this->anything(), 'progress')
-            ->willReturn(75);
+            public function form(): array {
+                return [
+                    'progress' => [
+                        'class' => 'progress-class',
+                        'value' => '50',
+                        'max' => '100'
+                    ]
+                ];
+            }
+        };
 
         $field = new ProgressField($model, 'progress');
         $result = $field->renderInput();
@@ -40,26 +40,28 @@ class ProgressFieldTest extends TestCase
         $this->assertEquals($expected, $result);
     }
 
+    /**
+     * Test render input with error.
+     */
     public function test_renderInput_with_error()
     {
-        $model = $this->createMock(Model::class);
-        $model->method('getProperty')
-            ->will($this->returnValueMap([
-                ['progress', 'class', null, 'progress-class'],
-                ['progress', 'value', null, '50'],
-            ]));
-        
-        $model->method('hasError')
-            ->with('progress')
-            ->willReturn(true);
+        $model = new class extends Model {
+            public $progress = 75;
             
-        $model->method('property')
-            ->with('progress')
-            ->willReturn('max="100"');
+            public function hasError($attribute)
+            {
+                return true;
+            }
             
-        $model->expects($this->any())
-            ->method($this->anything(), 'progress')
-            ->willReturn(75);
+            public function form(): array {
+                return [
+                    'progress' => [
+                        'value' => '50',
+                        'max' => '100'
+                    ]
+                ];
+            }
+        };
 
         $field = new ProgressField($model, 'progress');
         $result = $field->renderInput();
@@ -69,26 +71,24 @@ class ProgressFieldTest extends TestCase
         $this->assertEquals($expected, $result);
     }
 
+    /**
+     * Test render input with empty value.
+     */
     public function test_renderInput_with_empty_value()
     {
-        $model = $this->createMock(Model::class);
-        $model->method('getProperty')
-            ->will($this->returnValueMap([
-                ['progress', 'class', null, 'progress-class'],
-                ['progress', 'value', null, '50'],
-            ]));
-        
-        $model->method('hasError')
-            ->with('progress')
-            ->willReturn(false);
+        $model = new class extends Model {
+            public $progress = '';
             
-        $model->method('property')
-            ->with('progress')
-            ->willReturn('max="100"');
-            
-        $model->expects($this->any())
-            ->method($this->anything(), 'progress')
-            ->willReturn('');
+            public function form(): array {
+                return [
+                    'progress' => [
+                        'class' => 'progress-class',
+                        'value' => '50',
+                        'max' => '100'
+                    ]
+                ];
+            }
+        };
 
         $field = new ProgressField($model, 'progress');
         $result = $field->renderInput();

@@ -358,7 +358,7 @@ return [
         'on' => env('APP_WEB_MANIFEST', true),
         'iconSvg' => env('APP_WEB_MANIFEST_ICON_SVG', "svg/favicon.svg"),
         'colorTheme' => env('APP_WEB_MANIFEST_COLOR_THEME', '#000000'),
-        'backgroundColor' => env('APP_WEB_MANIFEST_COLOR_THEME', '#000000'),
+        'backgroundColor' => env('APP_WEB_MANIFEST_BACKGROUND_COLOR', env('APP_WEB_MANIFEST_COLOR_THEME', '#000000')),
         'autoSave' => env('APP_WEB_MANIFEST_AUTO_SAVE', true),
     ],
 
@@ -374,5 +374,328 @@ return [
 
     'actionEventSaving' => [
         'on' => env('APP_ACTION_EVENT_SAVING', true),
+    ],
+
+    /**
+     * Runtime and temporary directory paths configuration.
+     *
+     * All temporary files, generated artifacts, working uploads, and caches
+     * must stay strictly inside the runtime directory.
+     *
+     * @var array
+     */
+    'runtime' => [
+        /**
+         * Base path for all runtime artifacts and temporary data.
+         *
+         * @var string
+         */
+        'basePath' => env('RUNTIME_BASE_PATH', __DIR__ . '/../runtime'),
+
+        /**
+         * Temporary working files directory path.
+         *
+         * @var string
+         */
+        'tempPath' => env('RUNTIME_TEMP_PATH', __DIR__ . '/../runtime/temp'),
+
+        /**
+         * Temporary file uploads directory path before validation and moving to target storage.
+         *
+         * @var string
+         */
+        'tempUploadPath' => env('RUNTIME_TEMP_UPLOAD_PATH', __DIR__ . '/../runtime/tempUpload'),
+
+        /**
+         * Cached artifacts root directory path.
+         *
+         * @var string
+         */
+        'cachePath' => env('RUNTIME_CACHE_PATH', __DIR__ . '/../runtime/cache'),
+
+        /**
+         * Application logs directory path.
+         *
+         * @var string
+         */
+        'logPath' => env('RUNTIME_LOG_PATH', __DIR__ . '/../runtime/log'),
+
+        /**
+         * Generated documentation output directory path.
+         *
+         * @var string
+         */
+        'docsPath' => env('RUNTIME_DOCS_PATH', __DIR__ . '/../runtime/docs'),
+
+        /**
+         * Automatically clean expired temporary files.
+         *
+         * @var bool
+         */
+        'autoCleanTemp' => (bool) env('RUNTIME_AUTO_CLEAN_TEMP', true),
+
+        /**
+         * Maximum lifetime (TTL) in seconds for temporary files before cleanup.
+         *
+         * @var int
+         */
+        'tempTtlSeconds' => (int) env('RUNTIME_TEMP_TTL_SECONDS', 3600),
+    ],
+
+    /**
+     * Security and HTTP hardening configuration.
+     *
+     * Safe defaults protecting against XSS, clickjacking, MIME sniffing,
+     * oversized payloads, and brute-force abuse.
+     *
+     * @var array
+     */
+    'security' => [
+        /**
+         * Whether to automatically emit hardened HTTP security headers.
+         *
+         * @var bool
+         */
+        'on' => (bool) env('APP_SECURITY_HEADERS', true),
+
+        /**
+         * Strict-Transport-Security (HSTS) header value when HTTPS is enabled.
+         *
+         * @var string
+         */
+        'hsts' => env('APP_SECURITY_HSTS', 'max-age=31536000; includeSubDomains'),
+
+        /**
+         * X-Frame-Options header value ('DENY' or 'SAMEORIGIN').
+         *
+         * @var string
+         */
+        'frameOptions' => env('APP_SECURITY_FRAME_OPTIONS', 'SAMEORIGIN'),
+
+        /**
+         * X-Content-Type-Options header value.
+         *
+         * @var string
+         */
+        'contentTypeOptions' => env('APP_SECURITY_CONTENT_TYPE_OPTIONS', 'nosniff'),
+
+        /**
+         * Referrer-Policy header value.
+         *
+         * @var string
+         */
+        'referrerPolicy' => env('APP_SECURITY_REFERRER_POLICY', 'strict-origin-when-cross-origin'),
+
+        /**
+         * Permissions-Policy header value restricting sensitive browser APIs by default.
+         *
+         * @var string
+         */
+        'permissionsPolicy' => env('APP_SECURITY_PERMISSIONS_POLICY', 'camera=(), microphone=(), geolocation=()'),
+
+        /**
+         * CSRF protection settings for state-changing requests.
+         *
+         * @var array
+         */
+        'csrf' => [
+            /**
+             * Enable CSRF token verification.
+             *
+             * @var bool
+             */
+            'on' => (bool) env('APP_SECURITY_CSRF', true),
+
+            /**
+             * CSRF token lifetime in seconds.
+             *
+             * @var int
+             */
+            'ttlSeconds' => (int) env('APP_SECURITY_CSRF_TTL', 7200),
+        ],
+
+        /**
+         * Global rate-limiting defaults (backed by external shared cache/Redis in microservices).
+         *
+         * @var array
+         */
+        'rateLimiter' => [
+            /**
+             * Enable request rate limiting.
+             *
+             * @var bool
+             */
+            'on' => (bool) env('APP_RATE_LIMITER', true),
+
+            /**
+             * Maximum allowed requests within the window.
+             *
+             * @var int
+             */
+            'maxAttempts' => (int) env('APP_RATE_LIMITER_MAX_ATTEMPTS', 120),
+
+            /**
+             * Rate limiter time window in seconds.
+             *
+             * @var int
+             */
+            'decaySeconds' => (int) env('APP_RATE_LIMITER_DECAY_SECONDS', 60),
+        ],
+
+        /**
+         * Trusted reverse proxy / load balancer CIDR ranges (for Swoole / Kubernetes / Nginx ingress).
+         *
+         * @var string
+         */
+        'trustedProxies' => env('APP_TRUSTED_PROXIES', ''),
+
+        /**
+         * Maximum allowed HTTP request body size in bytes (defaults to 10 MB).
+         *
+         * @var int
+         */
+        'maxBodyBytes' => (int) env('APP_MAX_BODY_BYTES', 10485760),
+    ],
+
+    /**
+     * Stateless worker, Swoole coroutine server, and microservice scaling configuration.
+     *
+     * Keeps long-running workers memory-safe and enforces strict inter-service timeouts.
+     *
+     * @var array
+     */
+    'stateless' => [
+        /**
+         * Enforce strict stateless mode (disables local per-instance state assumptions).
+         *
+         * @var bool
+         */
+        'on' => (bool) env('APP_STATELESS', true),
+
+        /**
+         * Runtime execution engine ('fpm', 'swoole', 'frankenphp', 'cli').
+         *
+         * @var string
+         */
+        'runtimeEngine' => env('APP_RUNTIME_ENGINE', 'fpm'),
+
+        /**
+         * Swoole / OpenSwoole HTTP & coroutine worker settings.
+         *
+         * @var array
+         */
+        'swoole' => [
+            /**
+             * Enable Swoole server mode configuration.
+             *
+             * @var bool
+             */
+            'on' => (bool) env('SWOOLE_ON', false),
+
+            /**
+             * Bind host for the Swoole HTTP server.
+             *
+             * @var string
+             */
+            'host' => env('SWOOLE_HOST', '0.0.0.0'),
+
+            /**
+             * Bind port for the Swoole HTTP server.
+             *
+             * @var int
+             */
+            'port' => (int) env('SWOOLE_PORT', 9501),
+
+            /**
+             * Number of worker processes (0 = auto-detect CPU cores).
+             *
+             * @var int
+             */
+            'workerNum' => (int) env('SWOOLE_WORKER_NUM', 0),
+
+            /**
+             * Maximum requests handled by a worker before graceful restart to prevent memory leaks.
+             *
+             * @var int
+             */
+            'maxRequest' => (int) env('SWOOLE_MAX_REQUEST', 10000),
+
+            /**
+             * Graceful worker reload wait time in seconds.
+             *
+             * @var int
+             */
+            'maxWaitTime' => (int) env('SWOOLE_MAX_WAIT_TIME', 30),
+
+            /**
+             * Enable preemptive Swoole coroutine hooks for non-blocking I/O.
+             *
+             * @var bool
+             */
+            'enableCoroutine' => (bool) env('SWOOLE_ENABLE_COROUTINE', true),
+
+            /**
+             * Maximum concurrent coroutines per worker.
+             *
+             * @var int
+             */
+            'maxCoroutine' => (int) env('SWOOLE_MAX_COROUTINE', 100000),
+
+            /**
+             * PID file stored strictly inside the runtime directory.
+             *
+             * @var string
+             */
+            'pidFile' => env('SWOOLE_PID_FILE', __DIR__ . '/../runtime/temp/swoole.pid'),
+        ],
+
+        /**
+         * Microservice communication and health-check settings.
+         *
+         * @var array
+         */
+        'microservice' => [
+            /**
+             * Logical service name in distributed tracing and service mesh.
+             *
+             * @var string
+             */
+            'serviceName' => env('SERVICE_NAME', env('APP_NAME', 'Atom')),
+
+            /**
+             * Unique node/instance identifier (stateless replica ID).
+             *
+             * @var string
+             */
+            'instanceId' => env('SERVICE_INSTANCE_ID', 'node-default'),
+
+            /**
+             * Default outbound HTTP/RPC request timeout in milliseconds.
+             *
+             * @var int
+             */
+            'requestTimeoutMs' => (int) env('SERVICE_REQUEST_TIMEOUT_MS', 3000),
+
+            /**
+             * Default outbound connection timeout in milliseconds.
+             *
+             * @var int
+             */
+            'connectTimeoutMs' => (int) env('SERVICE_CONNECT_TIMEOUT_MS', 1000),
+
+            /**
+             * Maximum automatic retries for idempotent inter-service calls.
+             *
+             * @var int
+             */
+            'maxRetries' => (int) env('SERVICE_MAX_RETRIES', 2),
+
+            /**
+             * Header name propagated across microservices for distributed correlation.
+             *
+             * @var string
+             */
+            'correlationHeader' => env('SERVICE_CORRELATION_HEADER', 'X-Correlation-ID'),
+        ],
     ],
 ];

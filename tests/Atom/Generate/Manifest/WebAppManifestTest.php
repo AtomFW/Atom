@@ -7,8 +7,14 @@ namespace Tests\Atom\Generate\Manifest;
 use PHPUnit\Framework\TestCase;
 use Atom\Generate\Manifest\WebAppManifest;
 
+/**
+ * Test suite for the WebAppManifest component.
+ */
 class WebAppManifestTest extends TestCase
 {
+    /**
+     * Test constructor with initial data.
+     */
     public function testConstructorWithInitialData()
     {
         $data = ['name' => 'Test App', 'short_name' => 'Test'];
@@ -18,6 +24,9 @@ class WebAppManifestTest extends TestCase
         $this->assertEquals('Test', $manifest->getShortName());
     }
 
+    /**
+     * Test from array factory.
+     */
     public function testFromArrayFactory()
     {
         $data = [
@@ -31,6 +40,9 @@ class WebAppManifestTest extends TestCase
         $this->assertEquals('Test', $manifest->getShortName());
     }
 
+    /**
+     * Test merge method.
+     */
     public function testMergeMethod()
     {
         $manifest = new WebAppManifest();
@@ -43,6 +55,9 @@ class WebAppManifestTest extends TestCase
         $this->assertEquals('Test description', $manifest->getDescription());
     }
 
+    /**
+     * Test setters and getters.
+     */
     public function testSettersAndGetters()
     {
         $manifest = new WebAppManifest();
@@ -79,6 +94,9 @@ class WebAppManifestTest extends TestCase
         $this->assertEquals('ltr', $manifest->getDir());
     }
 
+    /**
+     * Test categories.
+     */
     public function testCategories()
     {
         $manifest = new WebAppManifest();
@@ -98,6 +116,9 @@ class WebAppManifestTest extends TestCase
         $this->assertCount(3, $categories); // Should still be 3 items
     }
 
+    /**
+     * Test icons.
+     */
     public function testIcons()
     {
         $manifest = new WebAppManifest();
@@ -121,6 +142,9 @@ class WebAppManifestTest extends TestCase
         $this->assertCount(2, $manifest->getIcons());
     }
 
+    /**
+     * Test remove icons.
+     */
     public function testRemoveIcons()
     {
         $manifest = new WebAppManifest();
@@ -136,6 +160,9 @@ class WebAppManifestTest extends TestCase
         $this->assertEmpty($manifest->getIcons());
     }
 
+    /**
+     * Test shortcuts.
+     */
     public function testShortcuts()
     {
         $shortcut = [
@@ -152,6 +179,9 @@ class WebAppManifestTest extends TestCase
         $this->assertEquals('Open search', $shortcuts[0]['name']);
     }
 
+    /**
+     * Test related applications.
+     */
     public function testRelatedApplications()
     {
         $manifest = new WebAppManifest();
@@ -163,6 +193,9 @@ class WebAppManifestTest extends TestCase
         $this->assertEquals('com.example.app', $apps[0]['id']);
     }
 
+    /**
+     * Test screenshots.
+     */
     public function testScreenshots()
     {
         $manifest = new WebAppManifest();
@@ -173,6 +206,9 @@ class WebAppManifestTest extends TestCase
         $this->assertEquals('/screenshot.png', $screenshots[0]['src']);
     }
 
+    /**
+     * Test share target.
+     */
     public function testShareTarget()
     {
         $manifest = new WebAppManifest();
@@ -186,6 +222,9 @@ class WebAppManifestTest extends TestCase
         $this->assertEquals($config, $manifest->getShareTarget());
     }
 
+    /**
+     * Test to array.
+     */
     public function testToArray()
     {
         $data = [
@@ -202,6 +241,9 @@ class WebAppManifestTest extends TestCase
         $this->assertEquals('Test', $array['short_name']);
     }
 
+    /**
+     * Test to json.
+     */
     public function testToJson()
     {
         $data = [
@@ -218,6 +260,9 @@ class WebAppManifestTest extends TestCase
         $this->assertEquals('Test', $decoded['short_name']);
     }
 
+    /**
+     * Test validation.
+     */
     public function testValidation()
     {
         $manifest = new WebAppManifest();
@@ -232,6 +277,9 @@ class WebAppManifestTest extends TestCase
         $this->assertEmpty($errors);
     }
 
+    /**
+     * Test validation with missing name and short name.
+     */
     public function testValidationWithMissingNameAndShortName()
     {
         $manifest = new WebAppManifest([
@@ -243,6 +291,9 @@ class WebAppManifestTest extends TestCase
         $this->assertContains('Either "name" or "short_name" should be provided.', $errors);
     }
 
+    /**
+     * Test validation with invalid display.
+     */
     public function testValidationWithInvalidDisplay()
     {
         $manifest = new WebAppManifest([
@@ -253,9 +304,12 @@ class WebAppManifestTest extends TestCase
         
         $errors = $manifest->validate();
         $this->assertNotEmpty($errors);
-        $this->assertContains('"display" must be one of:', $errors[0]);
+        $this->assertStringContainsString('"display" must be one of:', $errors[0]);
     }
 
+    /**
+     * Test common setters.
+     */
     public function testCommonSetters()
     {
         $data = [
@@ -274,6 +328,9 @@ class WebAppManifestTest extends TestCase
         $this->assertEquals('Test description', $manifest->getDescription());
     }
 
+    /**
+     * Test to string.
+     */
     public function testToString()
     {
         $manifest = new WebAppManifest([

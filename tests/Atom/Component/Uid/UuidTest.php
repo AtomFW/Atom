@@ -9,8 +9,14 @@ use Atom\Component\Uid\Uuid;
 use Symfony\Component\Uid\Uuid as SymfonyUuid;
 use InvalidArgumentException;
 
+/**
+ * Test suite for the Uuid component.
+ */
 class UuidTest extends TestCase
 {
+    /**
+     * Test constructs with valid uuid.
+     */
     public function testConstructsWith_valid_uuid(): void
     {
         $uuidString = '550e8400-e29b-41d4-a716-446655440000';
@@ -20,6 +26,9 @@ class UuidTest extends TestCase
         $this->assertEquals($uuidString, (string) $uuid);
     }
 
+    /**
+     * Test constructs with invalid uuid.
+     */
     public function testConstructsWith_invalid_uuid(): void
     {
         $this->expectException(InvalidArgumentException::class);
@@ -27,6 +36,9 @@ class UuidTest extends TestCase
         new Uuid('invalid-uuid');
     }
 
+    /**
+     * Test constructs with check variant true.
+     */
     public function testConstructsWith_checkVariant_true(): void
     {
         $uuidString = '550e8400-e29b-41d4-a716-446655440000';
@@ -36,6 +48,9 @@ class UuidTest extends TestCase
         $this->assertEquals($uuidString, (string) $uuid);
     }
 
+    /**
+     * Test to string returns string.
+     */
     public function testToString_returns_string(): void
     {
         $uuidString = '550e8400-e29b-41d4-a716-446655440000';
@@ -45,6 +60,9 @@ class UuidTest extends TestCase
         $this->assertEquals($uuidString, $uuid->__toString());
     }
 
+    /**
+     * Test to string returns same as to string.
+     */
     public function testToString_returns_same_as_toString(): void
     {
         $uuidString = '550e8400-e29b-41d4-a716-446655440000';
@@ -53,6 +71,9 @@ class UuidTest extends TestCase
         $this->assertEquals($uuidString, $uuid->toString());
     }
 
+    /**
+     * Test equals returns true for same uuid.
+     */
     public function testEquals_returns_true_for_same_uuid(): void
     {
         $uuidString = '550e8400-e29b-41d4-a716-446655440000';
@@ -62,6 +83,9 @@ class UuidTest extends TestCase
         $this->assertTrue($uuid1->equals($uuid2));
     }
 
+    /**
+     * Test equals returns false for different uuid.
+     */
     public function testEquals_returns_false_for_different_uuid(): void
     {
         $uuid1 = new Uuid('550e8400-e29b-41d4-a716-446655440000');
@@ -70,6 +94,9 @@ class UuidTest extends TestCase
         $this->assertFalse($uuid1->equals($uuid2));
     }
 
+    /**
+     * Test to string returns valid uuid format.
+     */
     public function testToString_returns_valid_uuid_format(): void
     {
         $uuidString = '550e8400-e29b-41d4-a716-446655440000';
@@ -78,6 +105,9 @@ class UuidTest extends TestCase
         $this->assertMatchesRegularExpression('/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i', $uuid->__toString());
     }
 
+    /**
+     * Test immutability.
+     */
     public function testImmutability(): void
     {
         $uuidString = '550e8400-e29b-41d4-a716-446655440000';
@@ -88,6 +118,9 @@ class UuidTest extends TestCase
         $this->assertNotSame($uuid, $uuidCopy);
     }
 
+    /**
+     * Test extends symfony uuid.
+     */
     public function testExtends_symfony_uuid(): void
     {
         $uuidString = '550e8400-e29b-41d4-a716-446655440000';

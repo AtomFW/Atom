@@ -10,8 +10,20 @@ use Atom\Cache\SysvQueueManager;
 use Atom\Cache\SysvSemaphoreManager;
 use Atom\Cache\SysvSharedMemoryManager;
 
+/**
+ * Test suite for the SysvIpcManager component.
+ */
 class SysvIpcManagerTest extends TestCase
 {
+    private function requireExtension(string $extension): void
+    {
+        if (!extension_loaded($extension)) {
+            $this->markTestSkipped($extension . ' is not available in this PHP runtime.');
+        }
+    }
+    /**
+     * Test constructor.
+     */
     public function testConstructor(): void
     {
         $manager = new SysvIpcManager(
@@ -26,30 +38,48 @@ class SysvIpcManagerTest extends TestCase
         $this->assertInstanceOf(SysvIpcManager::class, $manager);
     }
 
+    /**
+     * Test queue.
+     */
     public function testQueue(): void
     {
+        $this->requireExtension('sysvmsg');
+        $this->requireExtension('sysvmsg');
         $manager = new SysvIpcManager(12345);
         $queueManager = $manager->queue();
 
         $this->assertInstanceOf(SysvQueueManager::class, $queueManager);
     }
 
+    /**
+     * Test semaphore.
+     */
     public function testSemaphore(): void
     {
+        $this->requireExtension('sysvsem');
+        $this->requireExtension('sysvsem');
         $manager = new SysvIpcManager(12345);
         $semaphoreManager = $manager->semaphore();
 
         $this->assertInstanceOf(SysvSemaphoreManager::class, $semaphoreManager);
     }
 
+    /**
+     * Test shared memory.
+     */
     public function testSharedMemory(): void
     {
+        $this->requireExtension('sysvshm');
+        $this->requireExtension('sysvshm');
         $manager = new SysvIpcManager(12345);
         $sharedMemoryManager = $manager->sharedMemory();
 
         $this->assertInstanceOf(SysvSharedMemoryManager::class, $sharedMemoryManager);
     }
 
+    /**
+     * Test constructor with default parameters.
+     */
     public function testConstructorWithDefaultParameters(): void
     {
         $manager = new SysvIpcManager(12345);
@@ -58,8 +88,13 @@ class SysvIpcManagerTest extends TestCase
         $this->assertInstanceOf(SysvIpcManager::class, $manager);
     }
 
+    /**
+     * Test multiple queue instances.
+     */
     public function testMultipleQueueInstances(): void
     {
+        $this->requireExtension('sysvmsg');
+        $this->requireExtension('sysvmsg');
         $manager = new SysvIpcManager(12345);
         $queue1 = $manager->queue();
         $queue2 = $manager->queue();
@@ -72,8 +107,13 @@ class SysvIpcManagerTest extends TestCase
         $this->assertNotSame($queue1, $queue2);
     }
 
+    /**
+     * Test multiple semaphore instances.
+     */
     public function testMultipleSemaphoreInstances(): void
     {
+        $this->requireExtension('sysvsem');
+        $this->requireExtension('sysvsem');
         $manager = new SysvIpcManager(12345);
         $semaphore1 = $manager->semaphore();
         $semaphore2 = $manager->semaphore();
@@ -86,8 +126,13 @@ class SysvIpcManagerTest extends TestCase
         $this->assertNotSame($semaphore1, $semaphore2);
     }
 
+    /**
+     * Test multiple shared memory instances.
+     */
     public function testMultipleSharedMemoryInstances(): void
     {
+        $this->requireExtension('sysvshm');
+        $this->requireExtension('sysvshm');
         $manager = new SysvIpcManager(12345);
         $shm1 = $manager->sharedMemory();
         $shm2 = $manager->sharedMemory();

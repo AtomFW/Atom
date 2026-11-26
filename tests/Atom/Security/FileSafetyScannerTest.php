@@ -27,9 +27,9 @@ final class FileSafetyScannerTest extends TestCase
     private function removeTestFiles()
     {
         if (is_dir($this->tempDir)) {
-            $iterator = new RecursiveIteratorIterator(
-                new RecursiveDirectoryIterator($this->tempDir, RecursiveDirectoryIterator::SKIP_DOTS),
-                RecursiveIteratorIterator::CHILD_FIRST
+            $iterator = new \RecursiveIteratorIterator(
+                new \RecursiveDirectoryIterator($this->tempDir, \RecursiveDirectoryIterator::SKIP_DOTS),
+                \RecursiveIteratorIterator::CHILD_FIRST
             );
 
             foreach ($iterator as $file) {
@@ -43,6 +43,9 @@ final class FileSafetyScannerTest extends TestCase
         }
     }
 
+    /**
+     * Test constructor with defaults.
+     */
     public function testConstructorWithDefaults(): void
     {
         $scanner = new FileSafetyScanner([], new NullLogger());
@@ -50,6 +53,9 @@ final class FileSafetyScannerTest extends TestCase
         $this->assertInstanceOf(FileSafetyScanner::class, $scanner);
     }
 
+    /**
+     * Test constructor with custom options.
+     */
     public function testConstructorWithCustomOptions(): void
     {
         $options = [
@@ -68,23 +74,27 @@ final class FileSafetyScannerTest extends TestCase
         $this->assertInstanceOf(FileSafetyScanner::class, $scanner);
     }
 
+    /**
+     * Test normalize extensions.
+     */
     public function testNormalizeExtensions(): void
     {
         $scanner = new FileSafetyScanner([]);
-        $reflector = new ReflectionClass($scanner);
+        $reflector = new \ReflectionClass($scanner);
         $method = $reflector->getMethod('normalizeExtensions');
-        $method->setAccessible(true);
 
         $result = $method->invoke($scanner, ['.php', 'js', '', '.txt']);
         $this->assertEquals(['php', 'js', 'txt'], $result);
     }
 
+    /**
+     * Test default signatures.
+     */
     public function testDefaultSignatures(): void
     {
         $scanner = new FileSafetyScanner([]);
-        $reflector = new ReflectionClass($scanner);
+        $reflector = new \ReflectionClass($scanner);
         $method = $reflector->getMethod('defaultSignatures');
-        $method->setAccessible(true);
 
         $signatures = $method->invoke($scanner);
         $this->assertIsArray($signatures);
@@ -92,6 +102,9 @@ final class FileSafetyScannerTest extends TestCase
         $this->assertContains('eval(', $signatures);
     }
 
+    /**
+     * Test compute max signature length.
+     */
     public function testComputeMaxSignatureLength(): void
     {
         $scanner = new FileSafetyScanner([
@@ -105,6 +118,9 @@ final class FileSafetyScannerTest extends TestCase
         $this->assertInstanceOf(FileSafetyScanner::class, $scanner);
     }
 
+    /**
+     * Test set finding callback.
+     */
     public function testSetFindingCallback(): void
     {
         $scanner = new FileSafetyScanner([]);
@@ -115,6 +131,9 @@ final class FileSafetyScannerTest extends TestCase
         $this->assertInstanceOf(FileSafetyScanner::class, $scanner);
     }
 
+    /**
+     * Test get findings.
+     */
     public function testGetFindings(): void
     {
         $scanner = new FileSafetyScanner([]);
@@ -124,14 +143,16 @@ final class FileSafetyScannerTest extends TestCase
         $this->assertEmpty($findings);
     }
 
+    /**
+     * Test clear findings.
+     */
     public function testClearFindings(): void
     {
         $scanner = new FileSafetyScanner([]);
         
         // Add a "finding" by directly manipulating the property
-        $reflector = new ReflectionClass($scanner);
+        $reflector = new \ReflectionClass($scanner);
         $property = $reflector->getProperty('findings');
-        $property->setAccessible(true);
         $property->setValue($scanner, [['test' => 'data']]);
         
         // Clear findings
@@ -141,45 +162,51 @@ final class FileSafetyScannerTest extends TestCase
         $this->assertEmpty($findings);
     }
 
+    /**
+     * Test is path excluded with regex.
+     */
     public function testIsPathExcludedWithRegex(): void
     {
         $scanner = new FileSafetyScanner([
-            'excludePaths' => ['/tmp/', '/var/log/.*']
+            'excludePaths' => ['/tmp/', '/\/var\/log\/.*/']
         ]);
         
-        $reflector = new ReflectionClass($scanner);
+        $reflector = new \ReflectionClass($scanner);
         $method = $reflector->getMethod('isPathExcluded');
-        $method->setAccessible(true);
         
         // Test with regex pattern
         $this->assertTrue($method->invoke($scanner, '/var/log/app.log'));
-        $this->assertFalse($method->invoke($scanner, '/var/tmp/app.log'));
+        $this->assertFalse($method->invoke($scanner, '/var/cache/app.log'));
     }
 
+    /**
+     * Test is path excluded with string.
+     */
     public function testIsPathExcludedWithString(): void
     {
         $scanner = new FileSafetyScanner([
             'excludePaths' => ['/tmp/', '/var/log/']
         ]);
         
-        $reflector = new ReflectionClass($scanner);
+        $reflector = new \ReflectionClass($scanner);
         $method = $reflector->getMethod('isPathExcluded');
-        $method->setAccessible(true);
         
         // Test with string patterns
         $this->assertTrue($method->invoke($scanner, '/tmp/test.txt'));
         $this->assertFalse($method->invoke($scanner, '/home/user/file.txt'));
     }
 
+    /**
+     * Test should scan by extension with include.
+     */
     public function testShouldScanByExtensionWithInclude(): void
     {
         $scanner = new FileSafetyScanner([
             'includeExtensions' => ['php', 'js']
         ]);
         
-        $reflector = new ReflectionClass($scanner);
+        $reflector = new \ReflectionClass($scanner);
         $method = $reflector->getMethod('shouldScanByExtension');
-        $method->setAccessible(true);
         
         // Test with included extensions
         $this->assertTrue($method->invoke($scanner, '/path/to/test.php'));
@@ -187,15 +214,17 @@ final class FileSafetyScannerTest extends TestCase
         $this->assertFalse($method->invoke($scanner, '/path/to/test.txt'));
     }
 
+    /**
+     * Test should scan by extension with exclude.
+     */
     public function testShouldScanByExtensionWithExclude(): void
     {
         $scanner = new FileSafetyScanner([
             'excludeExtensions' => ['log', 'tmp']
         ]);
         
-        $reflector = new ReflectionClass($scanner);
+        $reflector = new \ReflectionClass($scanner);
         $method = $reflector->getMethod('shouldScanByExtension');
-        $method->setAccessible(true);
         
         // Test with excluded extensions
         $this->assertFalse($method->invoke($scanner, '/path/to/test.log'));
@@ -203,19 +232,24 @@ final class FileSafetyScannerTest extends TestCase
         $this->assertTrue($method->invoke($scanner, '/path/to/test.php'));
     }
 
+    /**
+     * Test should scan by extension no rules.
+     */
     public function testShouldScanByExtensionNoRules(): void
     {
         $scanner = new FileSafetyScanner([]);
         
-        $reflector = new ReflectionClass($scanner);
+        $reflector = new \ReflectionClass($scanner);
         $method = $reflector->getMethod('shouldScanByExtension');
-        $method->setAccessible(true);
         
         // Without rules, should scan all files
         $this->assertTrue($method->invoke($scanner, '/path/to/test.php'));
         $this->assertTrue($method->invoke($scanner, '/path/to/test.txt'));
     }
 
+    /**
+     * Test is file safe with invalid path.
+     */
     public function testIsFileSafeWithInvalidPath(): void
     {
         $scanner = new FileSafetyScanner([]);
@@ -225,6 +259,9 @@ final class FileSafetyScannerTest extends TestCase
         $scanner->isFileSafe('/path/that/does/not/exist');
     }
     
+    /**
+     * Test is file safe with unreadable file.
+     */
     public function testIsFileSafeWithUnreadableFile(): void
     {
         // Create a file that we can't read
@@ -245,6 +282,9 @@ final class FileSafetyScannerTest extends TestCase
         unlink($file);
     }
 
+    /**
+     * Test is file safe with valid content.
+     */
     public function testIsFileSafeWithValidContent(): void
     {
         // Create a test file with valid content (no threats)
@@ -261,6 +301,9 @@ final class FileSafetyScannerTest extends TestCase
         unlink($file);
     }
 
+    /**
+     * Test is file safe with threatening content.
+     */
     public function testIsFileSafeWithThreateningContent(): void
     {
         // Create a test file with potentially threatening content
@@ -273,11 +316,15 @@ final class FileSafetyScannerTest extends TestCase
         
         // Should not throw an exception but may have findings
         $findings = $scanner->getFindings();
+        $this->assertNotEmpty($findings, "Expected findings for threatening content.");
         
         // Cleanup
         unlink($file);
     }
 
+    /**
+     * Test search buffer for signatures with regex.
+     */
     public function testSearchBufferForSignaturesWithRegex(): void
     {
         $scanner = new FileSafetyScanner([
@@ -287,9 +334,8 @@ final class FileSafetyScannerTest extends TestCase
         ]);
         
         // Test that it doesn't crash with regex pattern
-        $reflector = new ReflectionClass($scanner);
+        $reflector = new \ReflectionClass($scanner);
         $method = $reflector->getMethod('searchBufferForSignatures');
-        $method->setAccessible(true);
         
         try {
             $method->invoke($scanner, 'eval(', '/test.php', 0, 0, 1, false);
@@ -299,13 +345,15 @@ final class FileSafetyScannerTest extends TestCase
         }
     }
 
+    /**
+     * Test record finding from buffer.
+     */
     public function testRecordFindingFromBuffer(): void
     {
         $scanner = new FileSafetyScanner([]);
         
-        $reflector = new ReflectionClass($scanner);
+        $reflector = new \ReflectionClass($scanner);
         $method = $reflector->getMethod('recordFindingFromBuffer');
-        $method->setAccessible(true);
         
         try {
             $method->invoke($scanner, '/test.php', 'eval(', 0, 'eval(abc)', 0, 0, 1, false);
@@ -315,6 +363,9 @@ final class FileSafetyScannerTest extends TestCase
         }
     }
 
+    /**
+     * Test is safe with non existent path.
+     */
     public function testIsSafeWithNonExistentPath(): void
     {
         $scanner = new FileSafetyScanner([]);

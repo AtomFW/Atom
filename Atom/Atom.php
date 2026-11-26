@@ -33,6 +33,7 @@ use Atom\DateTime\DateTime;
 use Atom\FileSytem\WebResourcesPath;
 use Atom\Generate\Manifest\WebAppManifest;
 use Atom\Log\LogEvent;
+use Atom\Modules\Modul;
 use Atom\Security\ConnectionSaving;
 use Atom\Security\SafetyDataStructureVariable;
 use Atom\Security\ServerDataVariable;
@@ -58,6 +59,7 @@ class Atom
     public static string $ROOT_URI;
     public string $userClass;
     public string $layout = 'main';
+    public FileSystem $filesystem;
     public Router $router;
     public Request $request;
     public Response $response;
@@ -88,6 +90,7 @@ class Atom
     public ServerDataVariable $serverDataVariable;
     public array $currentServerData;
     public LogEvent $logEvent;
+    public Modul $modul;
 
     public function __construct(string $rootDir)
     {
@@ -100,6 +103,7 @@ class Atom
         self::$ROOT_DIR .= DIRECTORY_SEPARATOR;
 
         self::$about = require_once __DIR__ . '/AboutAtom.php';
+        $this->filesystem = new FileSystem();
         $this->config = new Config(self::$ROOT_DIR, true);
         $this->log = new T4LOG(["logRootDir" => $this->config->get('logger')['driver']['path']]);
         Atom::$ROOT_URI = $this->config->get('app')["uri"];
@@ -156,6 +160,11 @@ class Atom
         $this->serverDataVariable->touchLastActiveAt($_SERVER['SERVER_ADDR']); // touch last active at
 
         $this->safetyDataStructureVariable = new SafetyDataStructureVariable($this->db, $this->cacheAtom, 3600);
+
+        if (\count((array)$this->currentServerData) === 0) {
+			$this->log->critical("no server data, check if the server configuration is correct in .env and db");
+			throw new Exception("no data about the server");
+		}
 
         if ($this->config->get('app')["connectionSaving"]['on']) {
             ConnectionSaving::changeDatabase($this->db);
@@ -255,6 +264,8 @@ class Atom
             $this->scheme = '';
         }
 
+        $this->modul = new Modul($this->config->get('modul'), $this->filesystem, $this->log);
+
         $this->view = new View();
 
         $userId = Atom::$app->session->get('user');
@@ -263,7 +274,6 @@ class Atom
             $key = $this->userClass::primaryKey();
             $this->user = $this->userClass::findOne([$key => $userId]);
         }
-
     }
 
     public function run()

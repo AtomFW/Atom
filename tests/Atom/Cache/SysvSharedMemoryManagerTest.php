@@ -7,20 +7,32 @@ namespace Tests\Atom\Cache;
 use PHPUnit\Framework\TestCase;
 use Atom\Cache\SysvSharedMemoryManager as SysvIpc;
 
-class SysvIpcTest extends TestCase
+/**
+ * Test suite for the SysvSharedMemoryManager component.
+ */
+class SysvSharedMemoryManagerTest extends TestCase
 {
     private SysvIpc $shm;
 
     protected function setUp(): void
     {
+        if (!extension_loaded('sysvshm')) {
+            $this->markTestSkipped('sysvshm is not available in this PHP runtime.');
+        }
+
         $this->shm = new SysvIpc(1234, 1024);
     }
 
     protected function tearDown(): void
     {
-        $this->shm->destroy();
+        if (isset($this->shm)) {
+            $this->shm->destroy();
+        }
     }
 
+    /**
+     * Test set and get.
+     */
     public function testSetAndGet()
     {
         $key = 'test_key';
@@ -32,18 +44,27 @@ class SysvIpcTest extends TestCase
         $this->assertEquals($value, $result);
     }
 
+    /**
+     * Test get non existent key.
+     */
     public function testGetNonExistentKey()
     {
         $result = $this->shm->get('non_existent_key');
         $this->assertNull($result);
     }
 
+    /**
+     * Test get with default value.
+     */
     public function testGetWithDefaultValue()
     {
         $result = $this->shm->get('non_existent_key', 'default_value');
         $this->assertEquals('default_value', $result);
     }
 
+    /**
+     * Test exists.
+     */
     public function testExists()
     {
         $key = 'test_key';
@@ -53,6 +74,9 @@ class SysvIpcTest extends TestCase
         $this->assertFalse($this->shm->exists('non_existent_key'));
     }
 
+    /**
+     * Test increment.
+     */
     public function testIncrement()
     {
         $key = 'counter';
@@ -66,6 +90,9 @@ class SysvIpcTest extends TestCase
         $this->assertEquals(9, $result);
     }
 
+    /**
+     * Test decrement.
+     */
     public function testDecrement()
     {
         $key = 'counter';
@@ -79,6 +106,9 @@ class SysvIpcTest extends TestCase
         $this->assertEquals(6, $result);
     }
 
+    /**
+     * Test push and pop.
+     */
     public function testPushAndPop()
     {
         $key = 'array_key';
@@ -96,6 +126,9 @@ class SysvIpcTest extends TestCase
         $this->assertNull($popped);
     }
 
+    /**
+     * Test unshift and shift.
+     */
     public function testUnshiftAndShift()
     {
         $key = 'array_key';
@@ -113,6 +146,9 @@ class SysvIpcTest extends TestCase
         $this->assertNull($shifted);
     }
 
+    /**
+     * Test remember.
+     */
     public function testRemember()
     {
         $key = 'cached_key';
@@ -137,6 +173,9 @@ class SysvIpcTest extends TestCase
         $this->assertFalse($called); // Callback should not be called again
     }
 
+    /**
+     * Test all.
+     */
     public function testAll()
     {
         $this->shm->set('key1', 'value1');
@@ -149,6 +188,9 @@ class SysvIpcTest extends TestCase
         $this->assertEquals('value2', $all['key2']);
     }
 
+    /**
+     * Test keys.
+     */
     public function testKeys()
     {
         $this->shm->set('key1', 'value1');
@@ -160,6 +202,9 @@ class SysvIpcTest extends TestCase
         $this->assertEquals(['key1', 'key2'], $keys);
     }
 
+    /**
+     * Test count.
+     */
     public function testCount()
     {
         $this->shm->set('key1', 'value1');
@@ -168,6 +213,9 @@ class SysvIpcTest extends TestCase
         $this->assertEquals(2, $this->shm->count());
     }
 
+    /**
+     * Test clear expired.
+     */
     public function testClearExpired()
     {
         // This is a basic test - in practice, you'd want to set up
@@ -176,6 +224,9 @@ class SysvIpcTest extends TestCase
         $this->assertEquals(0, $result);
     }
 
+    /**
+     * Test clear.
+     */
     public function testClear()
     {
         $this->shm->set('key1', 'value1');
@@ -188,16 +239,24 @@ class SysvIpcTest extends TestCase
         $this->assertEquals([], $all);
     }
 
+    /**
+     * Test destroy.
+     */
     public function testDestroy()
     {
         $this->shm->set('key1', 'value1');
-        $this->shm->destroy();
+        if (isset($this->shm)) {
+            $this->shm->destroy();
+        }
         
         // This should not throw an exception, but the actual implementation
         // may vary depending on how shared memory is handled
         $this->assertTrue(true);
     }
 
+    /**
+     * Test with ttl.
+     */
     public function testWithTtl()
     {
         $key = 'ttl_test';
@@ -210,6 +269,9 @@ class SysvIpcTest extends TestCase
         $this->assertNull($result);
     }
 
+    /**
+     * Test array operations.
+     */
     public function testArrayOperations()
     {
         $key = 'array_test';

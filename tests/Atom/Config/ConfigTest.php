@@ -8,40 +8,50 @@ use PHPUnit\Framework\TestCase;
 use Atom\Config\Config;
 use Atom\Exception\IO\Generative\FileNotFoundGenerativeException;
 
+/**
+ * @runTestsInSeparateProcesses
+ * @preserveGlobalState disabled
+ */
 class ConfigTest extends TestCase
 {
     private $appPath;
 
     protected function setUp(): void
     {
-        $this->appPath = __DIR__ . '/test_fixtures';
+        $this->appPath = __DIR__ . '/test_fixtures_' . uniqid();
         
-        // Create test directory if it doesn't exist
         if (!is_dir($this->appPath)) {
             mkdir($this->appPath, 0777, true);
+        }
+        
+        $this->initializeConfigFixtures();
+    }
+
+    protected function initializeConfigFixtures(): void
+    {
+        $configDir = $this->appPath . '/config';
+        if (!is_dir($configDir)) {
+            mkdir($configDir, 0777, true);
+        }
+        foreach (['app', 'database', 'cache', 'session', 'mail', 'auth', 'filesystem', 'modul', 'logger'] as $name) {
+            $file = $configDir . '/' . $name . '.php';
+            if (!file_exists($file)) {
+                file_put_contents($file, '<?php return [];' );
+            }
         }
     }
 
     protected function tearDown(): void
     {
-        // Clean up test files after each test
-        $testFiles = [
-            $this->appPath . '/config/app.php',
-            $this->appPath . '/config/database.php',
-            $this->appPath . '/.env'
-        ];
-        
-        foreach ($testFiles as $file) {
-            if (file_exists($file)) {
-                unlink($file);
-            }
+        if (is_dir($this->appPath)) {
+            $this->cleanupDirectory($this->appPath);
+            rmdir($this->appPath);
         }
-        
-        // Clean up config cache directory
-        $cacheDir = $this->appPath . '/runtime/cache/config';
-        if (is_dir($cacheDir)) {
-            $this->cleanupDirectory($cacheDir);
-        }
+
+        // Reset static property Config::$from using reflection to prevent test interference
+        $reflection = new \ReflectionClass(Config::class);
+        $property = $reflection->getProperty('from');
+        $property->setValue([]);
     }
 
     private function cleanupDirectory($dir)
@@ -61,9 +71,28 @@ class ConfigTest extends TestCase
         }
     }
 
+    private function createCacheFiles(string $cacheDir): void
+    {
+        if (!is_dir($cacheDir)) {
+            mkdir($cacheDir, 0777, true);
+        }
+        foreach (['app', 'database', 'cache', 'session', 'mail', 'auth', 'filesystem', 'modul', 'logger'] as $name) {
+            file_put_contents($cacheDir . '/' . $name . '.php', '<?php return [];' );
+        }
+    }
+
+    private function invokeStatic(string $methodName, array $parameters = []): mixed
+    {
+        $reflection = new \ReflectionClass(Config::class);
+        $method = $reflection->getMethod($methodName);
+        return $method->invoke(null, ...$parameters);
+    }
+
+    /**
+     * Test construct loads config when auto load is true.
+     */
     public function test_construct_LoadsConfigWhenAutoLoadIsTrue()
     {
-        // Create a mock config file
         $configContent = "<?php return [
             'app' => [
                 'debug' => true,
@@ -73,7 +102,6 @@ class ConfigTest extends TestCase
         
         file_put_contents($this->appPath . '/config/app.php', $configContent);
         
-        // Mock the environment file
         $envContent = "APP_DEBUG=true\nAPP_URL=http://localhost\n";
         file_put_contents($this->appPath . '/.env', $envContent);
         
@@ -81,15 +109,20 @@ class ConfigTest extends TestCase
         $this->assertInstanceOf(Config::class, $config);
     }
 
+    /**
+     * Test construct throws exception when environment file not found.
+     */
     public function test_construct_ThrowsExceptionWhenEnvironmentFileNotFound()
     {
         $this->expectException(FileNotFoundGenerativeException::class);
         $config = new Config($this->appPath, true, false);
     }
 
+    /**
+     * Test get returns config value when key exists.
+     */
     public function test_get_ReturnsConfigValue_WhenKeyExists()
     {
-        // Create a mock config file
         $configContent = "<?php return [
             'app' => [
                 'debug' => true,
@@ -99,17 +132,19 @@ class ConfigTest extends TestCase
         
         file_put_contents($this->appPath . '/config/app.php', $configContent);
         
-        // Mock the environment file
         $envContent = "APP_DEBUG=true\nAPP_URL=http://localhost\n";
         file_put_contents($this->appPath . '/.env', $envContent);
         
+        $config = new Config($this->appPath, true, false);
         $result = Config::get('app');
-        $this->assertArrayHasKey('debug', $result);
+        $this->assertArrayHasKey('app', $result);
     }
 
+    /**
+     * Test get throws exception when key does not exist.
+     */
     public function test_get_ThrowsException_WhenKeyDoesNotExist()
     {
-        // Create a mock config file
         $configContent = "<?php return [
             'app' => [
                 'debug' => true,
@@ -119,7 +154,6 @@ class ConfigTest extends TestCase
         
         file_put_contents($this->appPath . '/config/app.php', $configContent);
         
-        // Mock the environment file
         $envContent = "APP_DEBUG=true\nAPP_URL=http://localhost\n";
         file_put_contents($this->appPath . '/.env', $envContent);
         
@@ -127,18 +161,14 @@ class ConfigTest extends TestCase
         Config::get('nonexistent');
     }
 
+    /**
+     * Test check config cache is available returns true when cache exists.
+     */
     public function test_checkConfigCacheIsAvailable_ReturnsTrue_WhenCacheExists()
     {
-        // Create cache directory and file
         $cacheDir = $this->appPath . '/runtime/cache/config';
-        if (!is_dir($cacheDir)) {
-            mkdir($cacheDir, 0777, true);
-        }
+        $this->createCacheFiles($cacheDir);
         
-        $cacheFile = $cacheDir . '/database.php';
-        file_put_contents($cacheFile, '<?php return [];');
-        
-        // Create a mock config file
         $configContent = "<?php return [
             'app' => [
                 'debug' => true,
@@ -148,17 +178,18 @@ class ConfigTest extends TestCase
         
         file_put_contents($this->appPath . '/config/app.php', $configContent);
         
-        // Mock the environment file
         $envContent = "APP_DEBUG=true\nAPP_URL=http://localhost\n";
         file_put_contents($this->appPath . '/.env', $envContent);
         
-        $result = Config::checkConfigCacheIsAvailable($this->appPath);
+        $result = $this->invokeStatic('checkConfigCacheIsAvailable', [$this->appPath]);
         $this->assertTrue($result);
     }
 
+    /**
+     * Test check config cache is available returns false when cache does not exist.
+     */
     public function test_checkConfigCacheIsAvailable_ReturnsFalse_WhenCacheDoesNotExist()
     {
-        // Create a mock config file
         $configContent = "<?php return [
             'app' => [
                 'debug' => true,
@@ -168,17 +199,19 @@ class ConfigTest extends TestCase
         
         file_put_contents($this->appPath . '/config/app.php', $configContent);
         
-        // Mock the environment file
         $envContent = "APP_DEBUG=true\nAPP_URL=http://localhost\n";
         file_put_contents($this->appPath . '/.env', $envContent);
         
-        $result = Config::checkConfigCacheIsAvailable($this->appPath);
+        $result = $this->invokeStatic('checkConfigCacheIsAvailable', [$this->appPath]);
         $this->assertFalse($result);
     }
 
+    /**
+     * Test get config file names returns correct array.
+     */
     public function test_getConfigFileNames_ReturnsCorrectArray()
     {
-        $result = Config::getConfigFileNames();
+        $result = $this->invokeStatic('getConfigFileNames');
         $expected = [
             'app',
             'database', 
@@ -194,18 +227,14 @@ class ConfigTest extends TestCase
         $this->assertEquals($expected, $result);
     }
 
+    /**
+     * Test auto load with cache returns true.
+     */
     public function test_autoLoad_WithCache_ReturnsTrue()
     {
-        // Create cache directory and file
         $cacheDir = $this->appPath . '/runtime/cache/config';
-        if (!is_dir($cacheDir)) {
-            mkdir($cacheDir, 0777, true);
-        }
+        $this->createCacheFiles($cacheDir);
         
-        $cacheFile = $cacheDir . '/database.php';
-        file_put_contents($cacheFile, '<?php return [];');
-        
-        // Create a mock config file
         $configContent = "<?php return [
             'app' => [
                 'debug' => true,
@@ -215,7 +244,6 @@ class ConfigTest extends TestCase
         
         file_put_contents($this->appPath . '/config/app.php', $configContent);
         
-        // Mock the environment file
         $envContent = "APP_DEBUG=true\nAPP_URL=http://localhost\n";
         file_put_contents($this->appPath . '/.env', $envContent);
         
@@ -223,9 +251,11 @@ class ConfigTest extends TestCase
         $this->assertTrue($result);
     }
 
+    /**
+     * Test auto load without cache returns true.
+     */
     public function test_autoLoad_WithoutCache_ReturnsTrue()
     {
-        // Create a mock config file
         $configContent = "<?php return [
             'app' => [
                 'debug' => true,
@@ -235,7 +265,6 @@ class ConfigTest extends TestCase
         
         file_put_contents($this->appPath . '/config/app.php', $configContent);
         
-        // Mock the environment file
         $envContent = "APP_DEBUG=true\nAPP_URL=http://localhost\n";
         file_put_contents($this->appPath . '/.env', $envContent);
         

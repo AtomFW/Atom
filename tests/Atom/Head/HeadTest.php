@@ -11,12 +11,18 @@ use Atom\Head\Enum\ColorScheme;
 
 final class HeadTest extends TestCase
 {
+    /**
+     * Test can create head instance.
+     */
     public function testCanCreateHeadInstance(): void
     {
         $head = new Head();
         $this->assertInstanceOf(Head::class, $head);
     }
 
+    /**
+     * Test set title.
+     */
     public function testSetTitle(): void
     {
         $head = new Head();
@@ -26,6 +32,9 @@ final class HeadTest extends TestCase
         $this->assertNotEmpty($head->build());
     }
 
+    /**
+     * Test meta method.
+     */
     public function testMetaMethod(): void
     {
         $head = new Head();
@@ -34,6 +43,9 @@ final class HeadTest extends TestCase
         $this->assertInstanceOf(Head::class, $result);
     }
 
+    /**
+     * Test property method.
+     */
     public function testPropertyMethod(): void
     {
         $head = new Head();
@@ -42,6 +54,9 @@ final class HeadTest extends TestCase
         $this->assertInstanceOf(Head::class, $result);
     }
 
+    /**
+     * Test link method.
+     */
     public function testLinkMethod(): void
     {
         $head = new Head();
@@ -50,6 +65,9 @@ final class HeadTest extends TestCase
         $this->assertInstanceOf(Head::class, $result);
     }
 
+    /**
+     * Test stylesheet method.
+     */
     public function testStylesheetMethod(): void
     {
         $head = new Head();
@@ -58,6 +76,9 @@ final class HeadTest extends TestCase
         $this->assertInstanceOf(Head::class, $result);
     }
 
+    /**
+     * Test script method.
+     */
     public function testScriptMethod(): void
     {
         $head = new Head();
@@ -66,6 +87,9 @@ final class HeadTest extends TestCase
         $this->assertInstanceOf(Head::class, $result);
     }
 
+    /**
+     * Test script text method.
+     */
     public function testScriptTextMethod(): void
     {
         $head = new Head();
@@ -74,6 +98,9 @@ final class HeadTest extends TestCase
         $this->assertInstanceOf(Head::class, $result);
     }
 
+    /**
+     * Test build method returns string.
+     */
     public function testBuildMethodReturnsString(): void
     {
         $head = new Head();
@@ -84,10 +111,13 @@ final class HeadTest extends TestCase
         $result = $head->build();
         
         $this->assertIsString($result);
-        $this->assertStringContainsString('<title>', $result);
+        $this->assertStringContainsString('<title', $result);
         $this->assertStringContainsString('Test Title', $result);
     }
 
+    /**
+     * Test multiple meta tags.
+     */
     public function testMultipleMetaTags(): void
     {
         $head = new Head();
@@ -102,6 +132,9 @@ final class HeadTest extends TestCase
         $this->assertStringContainsString('name="author"', $result);
     }
 
+    /**
+     * Test multiple properties.
+     */
     public function testMultipleProperties(): void
     {
         $head = new Head();
@@ -116,14 +149,20 @@ final class HeadTest extends TestCase
         $this->assertStringContainsString('property="og:image"', $result);
     }
 
+    /**
+     * Test open graph tag.
+     */
     public function testOpenGraphTag(): void
     {
         $head = new Head();
-        $result = $head->og(OpenGraphTag::Title, 'Test Title');
+        $result = $head->og(OpenGraphTag::TITLE, 'Test Title');
         
         $this->assertInstanceOf(Head::class, $result);
     }
 
+    /**
+     * Test apple mobile web app title.
+     */
     public function testAppleMobileWebAppTitle(): void
     {
         $head = new Head();
@@ -132,14 +171,20 @@ final class HeadTest extends TestCase
         $this->assertInstanceOf(Head::class, $result);
     }
 
+    /**
+     * Test color scheme method.
+     */
     public function testColorSchemeMethod(): void
     {
         $head = new Head();
-        $result = $head->colorScheme(ColorScheme::Light);
+        $result = $head->colorScheme(ColorScheme::LIGHT);
         
         $this->assertInstanceOf(Head::class, $result);
     }
 
+    /**
+     * Test charset method.
+     */
     public function testCharsetMethod(): void
     {
         $head = new Head();

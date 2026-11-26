@@ -12,6 +12,9 @@ use PHPUnit\Framework\MockObject\MockObject;
 use ReflectionClass;
 use ReflectionMethod;
 
+/**
+ * Test suite for the SafetyDataStructureVariable component.
+ */
 class SafetyDataStructureVariableTest extends TestCase
 {
     private $database;
@@ -23,35 +26,54 @@ class SafetyDataStructureVariableTest extends TestCase
         parent::setUp();
         
         $this->database = $this->createMock(AtomDatabase::class);
-        $this->cache = $this->createMock(CacheWrapper::class);
+        $this->cache = new CacheWrapper();
+        $this->sds = new \Atom\Security\SafetyDataStructureVariable($this->database, $this->cache);
     }
 
+    /**
+     * Test search returns array.
+     */
     public function testSearchReturnsArray()
     {
         // Since this method requires complex setup, we'll just verify it's callable
         $this->assertIsCallable([$this->sds, 'search']);
     }
     
+    /**
+     * Test search static returns array.
+     */
     public function testSearchStaticReturnsArray()
     {
         $this->assertIsCallable([$this->sds, 'searchStatic']);
     }
     
+    /**
+     * Test search across columns returns array.
+     */
     public function testSearchAcrossColumnsReturnsArray()
     {
         $this->assertIsCallable([$this->sds, 'searchAcrossColumns']);
     }
     
+    /**
+     * Test tables returns array.
+     */
     public function testTablesReturnsArray()
     {
         $this->assertIsCallable([$this->sds, 'tables']);
     }
     
+    /**
+     * Test columns returns array.
+     */
     public function testColumnsReturnsArray()
     {
         $this->assertIsCallable([$this->sds, 'columns']);
     }
 
+    /**
+     * Test cache key returns string.
+     */
     public function testCacheKeyReturnsString()
     {
         // Since cacheKey is a private method, we need to test through the public interface
@@ -65,6 +87,9 @@ class SafetyDataStructureVariableTest extends TestCase
         $this->assertInstanceOf(\Atom\Security\SafetyDataStructureVariable::class, $sds);
     }
 
+    /**
+     * Test sort rows returns array.
+     */
     public function testSortRowsReturnsArray()
     {
         $reflection = new ReflectionClass(\Atom\Security\SafetyDataStructureVariable::class);
@@ -75,6 +100,9 @@ class SafetyDataStructureVariableTest extends TestCase
         $this->assertTrue(method_exists('\Atom\Security\SafetyDataStructureVariable', 'sortRows'));
     }
 
+    /**
+     * Test compare with valid operator.
+     */
     public function testCompareWithValidOperator()
     {
         // Testing comparison logic would require mocking internal state,
@@ -82,6 +110,9 @@ class SafetyDataStructureVariableTest extends TestCase
         $this->assertIsCallable([$this->sds, 'search']);
     }
 
+    /**
+     * Test like compare.
+     */
     public function testLikeCompare()
     {
         // Test that we can at least create the class without errors
@@ -89,6 +120,9 @@ class SafetyDataStructureVariableTest extends TestCase
         $this->assertInstanceOf(\Atom\Security\SafetyDataStructureVariable::class, $sds);
     }
 
+    /**
+     * Test constructor with cache.
+     */
     public function testConstructorWithCache()
     {
         // Just verify the class can be instantiated
@@ -96,6 +130,9 @@ class SafetyDataStructureVariableTest extends TestCase
         $this->assertInstanceOf(\Atom\Security\SafetyDataStructureVariable::class, $sds);
     }
 
+    /**
+     * Test methods are callable.
+     */
     public function testMethodsAreCallable()
     {
         $methods = [

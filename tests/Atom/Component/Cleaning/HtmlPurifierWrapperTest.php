@@ -24,6 +24,9 @@ final class HtmlPurifierWrapperTest extends TestCase
         return $cfg;
     }
 
+    /**
+     * Test construct with array creates purifier and respects options.
+     */
     public function testConstructWithArrayCreatesPurifierAndRespectsOptions(): void
     {
         $wrapper = new HtmlPurifierWrapper(['Core.Encoding' => 'UTF-8', 'HTML.SafeIframe' => true]);
@@ -39,6 +42,9 @@ final class HtmlPurifierWrapperTest extends TestCase
         self::assertStringNotContainsString('<script>', $clean);
     }
 
+    /**
+     * Test construct with existing purifier uses it.
+     */
     public function testConstructWithExistingPurifierUsesIt(): void
     {
         $cfg = $this->makeConfig(['Core.Encoding' => 'ISO-8859-1']);
@@ -54,6 +60,9 @@ final class HtmlPurifierWrapperTest extends TestCase
         self::assertStringContainsString('<b>ä</b>', $clean);
     }
 
+    /**
+     * Test construct with config builds purifier.
+     */
     public function testConstructWithConfigBuildsPurifier(): void
     {
         $cfg = $this->makeConfig(['HTML.SafeIframe' => true]);
@@ -66,6 +75,9 @@ final class HtmlPurifierWrapperTest extends TestCase
         self::assertStringContainsString('<iframe', $clean);
     }
 
+    /**
+     * Test set option updates config and rebuilds.
+     */
     public function testSetOptionUpdatesConfigAndRebuilds(): void
     {
         $wrapper = new HtmlPurifierWrapper();
@@ -77,6 +89,9 @@ final class HtmlPurifierWrapperTest extends TestCase
         self::assertFalse($wrapper->getOption('HTML.SafeObject'));
     }
 
+    /**
+     * Test merge options merges and rebuilds.
+     */
     public function testMergeOptionsMergesAndRebuilds(): void
     {
         $wrapper = new HtmlPurifierWrapper(['HTML.SafeIframe' => false]);
@@ -90,6 +105,9 @@ final class HtmlPurifierWrapperTest extends TestCase
         self::assertSame(sys_get_temp_dir(), $wrapper->getOption('Cache.SerializerPath'));
     }
 
+    /**
+     * Test set config from array replaces all and rebuilds.
+     */
     public function testSetConfigFromArrayReplacesAllAndRebuilds(): void
     {
         $wrapper = new HtmlPurifierWrapper(['HTML.SafeIframe' => true]);
@@ -103,6 +121,9 @@ final class HtmlPurifierWrapperTest extends TestCase
         self::assertSame('UTF-8', $wrapper->getOption('Core.Encoding'));
     }
 
+    /**
+     * Test set config with object resets options and rebuilds.
+     */
     public function testSetConfigWithObjectResetsOptionsAndRebuilds(): void
     {
         $wrapper = new HtmlPurifierWrapper(['HTML.SafeIframe' => true]);
@@ -119,6 +140,9 @@ final class HtmlPurifierWrapperTest extends TestCase
         self::assertStringContainsString('<b>bold</b>', $clean);
     }
 
+    /**
+     * Test reset config restores defaults and rebuilds.
+     */
     public function testResetConfigRestoresDefaultsAndRebuilds(): void
     {
         $wrapper = new HtmlPurifierWrapper(['HTML.SafeIframe' => true]);
@@ -130,6 +154,9 @@ final class HtmlPurifierWrapperTest extends TestCase
         self::assertSame([], $wrapper->getOptions());
     }
 
+    /**
+     * Test with config callback allows advanced mutation and rebuilds.
+     */
     public function testWithConfigCallbackAllowsAdvancedMutationAndRebuilds(): void
     {
         $wrapper = new HtmlPurifierWrapper();
@@ -147,6 +174,9 @@ final class HtmlPurifierWrapperTest extends TestCase
         self::assertStringContainsString('<iframe', $result);
     }
 
+    /**
+     * Test rebuild after manual config change recreates instance.
+     */
     public function testRebuildAfterManualConfigChangeRecreatesInstance(): void
     {
         $wrapper = new HtmlPurifierWrapper();
@@ -161,6 +191,9 @@ final class HtmlPurifierWrapperTest extends TestCase
         self::assertStringContainsString('<iframe', $wrapper->purify('<iframe src="https://example.com"></iframe>'));
     }
 
+    /**
+     * Test magic call delegates to purifier methods.
+     */
     public function testMagicCallDelegatesToPurifierMethods(): void
     {
         $wrapper = new HtmlPurifierWrapper();
@@ -172,6 +205,9 @@ final class HtmlPurifierWrapperTest extends TestCase
         self::assertContains('purify', $methods);
     }
 
+    /**
+     * Test magic call to config methods with prefix.
+     */
     public function testMagicCallToConfigMethodsWithPrefix(): void
     {
         $wrapper = new HtmlPurifierWrapper();
@@ -182,6 +218,9 @@ final class HtmlPurifierWrapperTest extends TestCase
         self::assertStringContainsString('<iframe', $clean);
     }
 
+    /**
+     * Test magic call throws for unknown method.
+     */
     public function testMagicCallThrowsForUnknownMethod(): void
     {
         $wrapper = new HtmlPurifierWrapper();
@@ -190,6 +229,9 @@ final class HtmlPurifierWrapperTest extends TestCase
         $wrapper->nonExistingMethodOnWrapper();
     }
 
+    /**
+     * Test purify array cleans only string values.
+     */
     public function testPurifyArrayCleansOnlyStringValues(): void
     {
         $wrapper = new HtmlPurifierWrapper();
@@ -205,6 +247,9 @@ final class HtmlPurifierWrapperTest extends TestCase
         self::assertStringNotContainsString('<script>', $out['two']);
     }
 
+    /**
+     * Test with merged options creates new instance without mutating original.
+     */
     public function testWithMergedOptionsCreatesNewInstanceWithoutMutatingOriginal(): void
     {
         $base = new HtmlPurifierWrapper(['HTML.SafeIframe' => false]);
@@ -218,6 +263,9 @@ final class HtmlPurifierWrapperTest extends TestCase
         self::assertStringContainsString('<iframe', $cleanClone);
     }
 
+    /**
+     * Test constructor throws if html purifier missing.
+     */
     public function testConstructorThrowsIfHtmlPurifierMissing(): void
     {
         // This test simulates the absence of the HTMLPurifier class by checking the guard message

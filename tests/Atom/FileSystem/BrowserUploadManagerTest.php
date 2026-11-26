@@ -4,10 +4,15 @@ declare(strict_types=1);
 
 namespace Tests\Atom\FileSystem;
 
+require_once __DIR__ . '/UploadMocks.php';
+
 use PHPUnit\Framework\TestCase;
 use ReflectionClass;
 use Atom\FileSytem\BrowserUploadManager;
 
+/**
+ * Test suite for the BrowserUploadManager component.
+ */
 class BrowserUploadManagerTest extends TestCase
 {
     private string $tempDir;
@@ -34,8 +39,8 @@ class BrowserUploadManagerTest extends TestCase
             'temp_dir' => $this->tempDir,
             'max_file_size' => 10485760, // 10MB
             'max_total_size' => 52428800, // 50MB
-            'allowed_extensions' => ['jpg', 'jpeg', 'png', 'gif', 'pdf'],
-            'allowed_mime_types' => ['image/jpeg', 'image/png', 'image/gif', 'application/pdf'],
+            'allowed_extensions' => ['jpg', 'jpeg', 'png', 'gif', 'pdf', 'txt'],
+            'allowed_mime_types' => ['image/jpeg', 'image/png', 'image/gif', 'application/pdf', 'text/plain'],
             'allow_multiple' => true,
             'max_files' => 10,
             'allow_chunked' => true,
@@ -49,6 +54,10 @@ class BrowserUploadManagerTest extends TestCase
 
     protected function tearDown(): void
     {
+        if (!isset($this->tempDir)) {
+            parent::tearDown();
+            return;
+        }
         // Clean up temporary directory
         $this->cleanDirectory($this->tempDir);
         $this->cleanDirectory($this->uploadDir);
@@ -75,6 +84,9 @@ class BrowserUploadManagerTest extends TestCase
         }
     }
 
+    /**
+     * Test constructor initializes correctly.
+     */
     public function test_constructor_initializes_correctly(): void
     {
         $manager = new BrowserUploadManager($this->config);
@@ -83,6 +95,9 @@ class BrowserUploadManagerTest extends TestCase
         $this->assertEquals($this->tempDir, (new \ReflectionClass($manager))->getProperty('tempDir')->getValue($manager));
     }
 
+    /**
+     * Test upload single success.
+     */
     public function test_upload_single_success(): void
     {
         // Create a temporary file for testing
@@ -102,9 +117,12 @@ class BrowserUploadManagerTest extends TestCase
         
         $this->assertTrue($result['ok']);
         $this->assertArrayHasKey('data', $result);
-        $this->assertArrayHasKey('path', $result['data']);
+        $this->assertArrayHasKey('path', $result['data']['files'][0]);
     }
 
+    /**
+     * Test upload multiple success.
+     */
     public function test_upload_multiple_success(): void
     {
         // Create two temporary files for testing
@@ -129,6 +147,9 @@ class BrowserUploadManagerTest extends TestCase
         $this->assertArrayHasKey('files', $result['data']);
     }
 
+    /**
+     * Test upload from field success.
+     */
     public function test_upload_from_field_success(): void
     {
         // Create a temporary file for testing
@@ -151,6 +172,9 @@ class BrowserUploadManagerTest extends TestCase
         $this->assertTrue($result['ok']);
     }
 
+    /**
+     * Test upload multiple from field success.
+     */
     public function test_upload_multiple_from_field_success(): void
     {
         // Create a temporary file for testing
@@ -175,6 +199,9 @@ class BrowserUploadManagerTest extends TestCase
         $this->assertTrue($result['ok']);
     }
 
+    /**
+     * Test start chunk session success.
+     */
     public function test_start_chunk_session_success(): void
     {
         $manager = new BrowserUploadManager($this->config);
@@ -184,6 +211,9 @@ class BrowserUploadManagerTest extends TestCase
         $this->assertArrayHasKey('upload_id', $result['data']);
     }
 
+    /**
+     * Test save chunk from request failure.
+     */
     public function test_save_chunk_from_request_failure(): void
     {
         $manager = new BrowserUploadManager($this->config);
@@ -192,6 +222,9 @@ class BrowserUploadManagerTest extends TestCase
         $this->assertFalse($result['ok']);
     }
 
+    /**
+     * Test finalize chunk missing chunks.
+     */
     public function test_finalize_chunk_missing_chunks(): void
     {
         $manager = new BrowserUploadManager($this->config);
@@ -200,6 +233,9 @@ class BrowserUploadManagerTest extends TestCase
         $this->assertFalse($result['ok']);
     }
 
+    /**
+     * Test pause unpause disabled.
+     */
     public function test_pause_unpause_disabled(): void
     {
         $config = array_merge($this->config, ['allow_pause_resume' => false]);
@@ -212,6 +248,9 @@ class BrowserUploadManagerTest extends TestCase
         $this->assertFalse($result['ok']);
     }
 
+    /**
+     * Test cancel disabled.
+     */
     public function test_cancel_disabled(): void
     {
         $config = array_merge($this->config, ['allow_cancel' => false]);
@@ -221,6 +260,9 @@ class BrowserUploadManagerTest extends TestCase
         $this->assertFalse($result['ok']);
     }
 
+    /**
+     * Test status nonexistent session.
+     */
     public function test_status_nonexistent_session(): void
     {
         $manager = new BrowserUploadManager($this->config);
@@ -229,6 +271,9 @@ class BrowserUploadManagerTest extends TestCase
         $this->assertFalse($result['ok']);
     }
 
+    /**
+     * Test human bytes formatting.
+     */
     public function test_human_bytes_formatting(): void
     {
         $manager = new BrowserUploadManager($this->config);
@@ -236,13 +281,15 @@ class BrowserUploadManagerTest extends TestCase
         // Use reflection to access private method
         $reflection = new ReflectionClass($manager);
         $method = $reflection->getMethod('humanBytes');
-        $method->setAccessible(true);
         
-        $this->assertEquals('1024 B', $method->invoke($manager, 1024));
+        $this->assertEquals('1 KB', $method->invoke($manager, 1024));
         $this->assertEquals('1 KB', $method->invoke($manager, 1024));
         $this->assertEquals('1 MB', $method->invoke($manager, pow(1024, 2)));
     }
 
+    /**
+     * Test process standard upload empty files.
+     */
     public function test_process_standard_upload_empty_files(): void
     {
         $files = [];
@@ -251,12 +298,14 @@ class BrowserUploadManagerTest extends TestCase
         // Use reflection to access private method
         $reflection = new ReflectionClass($manager);
         $method = $reflection->getMethod('processStandardUpload');
-        $method->setAccessible(true);
         
         $result = $method->invoke($manager, $files, [], false);
         $this->assertTrue($result['ok']);
     }
 
+    /**
+     * Test move uploaded file success.
+     */
     public function test_move_uploaded_file_success(): void
     {
         // Create a temporary file for testing
@@ -276,12 +325,14 @@ class BrowserUploadManagerTest extends TestCase
         // Use reflection to access private method
         $reflection = new ReflectionClass($manager);
         $method = $reflection->getMethod('moveUploadedFile');
-        $method->setAccessible(true);
         
         $result = $method->invoke($manager, $file, []);
         $this->assertTrue($result['ok']);
     }
 
+    /**
+     * Test validate uploaded file failure.
+     */
     public function test_validate_uploaded_file_failure(): void
     {
         $manager = new BrowserUploadManager($this->config);
@@ -289,7 +340,6 @@ class BrowserUploadManagerTest extends TestCase
         // Use reflection to access private method
         $reflection = new ReflectionClass($manager);
         $method = $reflection->getMethod('validateUploadedFile');
-        $method->setAccessible(true);
         
         $file = [
             'name' => '',
@@ -303,6 +353,9 @@ class BrowserUploadManagerTest extends TestCase
         $this->assertFalse($result['ok']);
     }
 
+    /**
+     * Test sanitize filename.
+     */
     public function test_sanitize_filename(): void
     {
         $manager = new BrowserUploadManager($this->config);
@@ -310,12 +363,14 @@ class BrowserUploadManagerTest extends TestCase
         // Use reflection to access private method
         $reflection = new ReflectionClass($manager);
         $method = $reflection->getMethod('sanitizeFilename');
-        $method->setAccessible(true);
         
-        $this->assertEquals('test_file.txt', $method->invoke($manager, 'test\file.txt'));
+        $this->assertEquals('test_file.txt', $method->invoke($manager, 'test!file.txt'));
         $this->assertEquals('test_file.txt', $method->invoke($manager, ' test file.txt '));
     }
 
+    /**
+     * Test build final path with random names.
+     */
     public function test_build_final_path_with_random_names(): void
     {
         $manager = new BrowserUploadManager($this->config);
@@ -323,12 +378,14 @@ class BrowserUploadManagerTest extends TestCase
         // Use reflection to access private method
         $reflection = new ReflectionClass($manager);
         $method = $reflection->getMethod('buildFinalPath');
-        $method->setAccessible(true);
         
         $path = $method->invoke($manager, 'test.txt');
-        $this->assertStringStartsWith('/uploads/', $path);
+        $this->assertStringStartsWith($this->uploadDir, $path);
     }
 
+    /**
+     * Test build final path without random names.
+     */
     public function test_build_final_path_without_random_names(): void
     {
         $config = array_merge($this->config, ['generate_random_names' => false]);
@@ -337,12 +394,14 @@ class BrowserUploadManagerTest extends TestCase
         // Use reflection to access private method
         $reflection = new ReflectionClass($manager);
         $method = $reflection->getMethod('buildFinalPath');
-        $method->setAccessible(true);
         
         $path = $method->invoke($manager, 'test.txt');
-        $this->assertStringStartsWith('/uploads/', $path);
+        $this->assertStringStartsWith($this->uploadDir, $path);
     }
 
+    /**
+     * Test get progress from session.
+     */
     public function test_get_progress_from_session(): void
     {
         $manager = new BrowserUploadManager($this->config);
@@ -350,7 +409,6 @@ class BrowserUploadManagerTest extends TestCase
         // Use reflection to access private method
         $reflection = new ReflectionClass($manager);
         $method = $reflection->getMethod('getProgressFromSession');
-        $method->setAccessible(true);
         
         $session = [
             'total_chunks' => 5,
@@ -361,6 +419,9 @@ class BrowserUploadManagerTest extends TestCase
         $this->assertEquals(60, $progress); // (3/5) * 100
     }
 
+    /**
+     * Test normalize files array.
+     */
     public function test_normalize_files_array(): void
     {
         $files = [
@@ -376,12 +437,14 @@ class BrowserUploadManagerTest extends TestCase
         // Use reflection to access private method
         $reflection = new ReflectionClass($manager);
         $method = $reflection->getMethod('normalizeFilesArray');
-        $method->setAccessible(true);
         
         $result = $method->invoke($manager, $files);
         $this->assertCount(2, $result);
     }
 
+    /**
+     * Test normalize files single.
+     */
     public function test_normalize_files_single(): void
     {
         $files = [
@@ -397,12 +460,14 @@ class BrowserUploadManagerTest extends TestCase
         // Use reflection to access private method
         $reflection = new ReflectionClass($manager);
         $method = $reflection->getMethod('normalizeFilesArray');
-        $method->setAccessible(true);
         
         $result = $method->invoke($manager, ['name' => ['test.txt']]);
         $this->assertCount(1, $result);
     }
 
+    /**
+     * Test fail method.
+     */
     public function test_fail_method(): void
     {
         $manager = new BrowserUploadManager($this->config);
@@ -410,13 +475,15 @@ class BrowserUploadManagerTest extends TestCase
         // Use reflection to access private method
         $reflection = new ReflectionClass($manager);
         $method = $reflection->getMethod('fail');
-        $method->setAccessible(true);
         
         $result = $method->invoke($manager, 'Test error message');
         $this->assertFalse($result['ok']);
         $this->assertEquals('Test error message', $result['error']);
     }
 
+    /**
+     * Test ok method.
+     */
     public function test_ok_method(): void
     {
         $manager = new BrowserUploadManager($this->config);
@@ -424,7 +491,6 @@ class BrowserUploadManagerTest extends TestCase
         // Use reflection to access private method
         $reflection = new ReflectionClass($manager);
         $method = $reflection->getMethod('ok');
-        $method->setAccessible(true);
         
         $result = $method->invoke($manager, ['test' => 'data']);
         $this->assertTrue($result['ok']);

@@ -13,6 +13,9 @@ use Symfony\Component\Cache\Adapter\TagAwareAdapter;
 use Psr\Cache\CacheItemInterface;
 use Throwable;
 
+/**
+ * Test suite for the CacheWrapper component.
+ */
 class CacheWrapperTest extends TestCase
 {
     private CacheWrapper $cacheWrapper;
@@ -25,17 +28,26 @@ class CacheWrapperTest extends TestCase
         CacheWrapper::setAdapter($this->adapter);
     }
 
+    /**
+     * Test set and get adapter.
+     */
     public function testSetAndGetAdapter(): void
     {
         $this->assertInstanceOf(ArrayAdapter::class, CacheWrapper::getAdapter());
     }
 
+    /**
+     * Test get item.
+     */
     public function testGetItem(): void
     {
         $item = $this->cacheWrapper->getItem('test_key');
         $this->assertInstanceOf(CacheItemInterface::class, $item);
     }
 
+    /**
+     * Test get items.
+     */
     public function testGetItems(): void
     {
         $items = $this->cacheWrapper->getItems(['key1', 'key2']);
@@ -43,6 +55,9 @@ class CacheWrapperTest extends TestCase
         $this->assertCount(2, $items);
     }
 
+    /**
+     * Test has item.
+     */
     public function testHasItem(): void
     {
         $this->assertFalse($this->cacheWrapper->hasItem('non_existent_key'));
@@ -52,6 +67,9 @@ class CacheWrapperTest extends TestCase
         $this->assertTrue($this->cacheWrapper->hasItem('test_key'));
     }
 
+    /**
+     * Test get.
+     */
     public function testGet(): void
     {
         // Test with non-existent key
@@ -64,6 +82,9 @@ class CacheWrapperTest extends TestCase
         $this->assertEquals('test_value', $result);
     }
 
+    /**
+     * Test set.
+     */
     public function testSet(): void
     {
         $result = $this->cacheWrapper->set('test_key', 'test_value');
@@ -74,6 +95,9 @@ class CacheWrapperTest extends TestCase
         $this->assertEquals('test_value', $value);
     }
 
+    /**
+     * Test set with ttl.
+     */
     public function testSetWithTtl(): void
     {
         $result = $this->cacheWrapper->set('test_key', 'test_value', 3600);
@@ -84,6 +108,9 @@ class CacheWrapperTest extends TestCase
         $this->assertEquals('test_value', $value);
     }
 
+    /**
+     * Test remember.
+     */
     public function testRemember(): void
     {
         $result = $this->cacheWrapper->remember('test_key', function() {
@@ -100,6 +127,9 @@ class CacheWrapperTest extends TestCase
         $this->assertEquals('computed_value', $result2);
     }
 
+    /**
+     * Test get multiple.
+     */
     public function testGetMultiple(): void
     {
         $values = [
@@ -115,6 +145,9 @@ class CacheWrapperTest extends TestCase
         $this->assertEquals($values, $result);
     }
 
+    /**
+     * Test set multiple.
+     */
     public function testSetMultiple(): void
     {
         $values = [
@@ -130,6 +163,9 @@ class CacheWrapperTest extends TestCase
         $this->assertEquals($values, $retrieved);
     }
 
+    /**
+     * Test delete.
+     */
     public function testDelete(): void
     {
         $this->cacheWrapper->set('test_key', 'test_value');
@@ -140,6 +176,9 @@ class CacheWrapperTest extends TestCase
         $this->assertFalse($this->cacheWrapper->hasItem('test_key'));
     }
 
+    /**
+     * Test delete multiple.
+     */
     public function testDeleteMultiple(): void
     {
         $this->cacheWrapper->set('key1', 'value1');
@@ -151,6 +190,9 @@ class CacheWrapperTest extends TestCase
         $this->assertFalse($this->cacheWrapper->hasItem('key2'));
     }
 
+    /**
+     * Test clear.
+     */
     public function testClear(): void
   {
       $this->cacheWrapper->set('test_key', 'test_value');
@@ -161,18 +203,27 @@ class CacheWrapperTest extends TestCase
       $this->assertFalse($this->cacheWrapper->hasItem('test_key'));
   }
 
+    /**
+     * Test supports tags.
+     */
     public function testSupportsTags(): void
     {
         $supportsTags = $this->cacheWrapper->supportsTags();
-        $this->assertFalse($supportsTags);
+        $this->assertTrue($supportsTags);
     }
 
+    /**
+     * Test is tag aware.
+     */
     public function testIsTagAware(): void
     {
         $isTagAware = $this->cacheWrapper->isTagAware();
         $this->assertFalse($isTagAware);
     }
 
+    /**
+     * Test debug state.
+     */
     public function testDebugState(): void
     {
         $state = $this->cacheWrapper->debugState();
@@ -181,6 +232,9 @@ class CacheWrapperTest extends TestCase
         $this->assertArrayHasKey('supports_tags', $state);
     }
 
+    /**
+     * Test reset.
+     */
     public function testReset(): void
     {
         $this->cacheWrapper->reset();

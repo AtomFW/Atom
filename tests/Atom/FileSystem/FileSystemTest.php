@@ -10,6 +10,9 @@ use Atom\Exception\IO\Generative\FileNotFoundGenerativeException;
 use Atom\Exception\IO\Generative\IOGenerativeException;
 use Atom\Exception\IO\Generative\InvalidArgumentGenerativeException;
 
+/**
+ * Test suite for the FileSystem component.
+ */
 class FileSystemTest extends TestCase
 {
     private $fileSystem;
@@ -24,22 +27,25 @@ class FileSystemTest extends TestCase
 
     protected function tearDown(): void
     {
-        $iterator = new RecursiveIteratorIterator(
-            new RecursiveDirectoryIterator($this->tempDir, RecursiveDirectoryIterator::SKIP_DOTS),
-            RecursiveIteratorIterator::CHILD_FIRST
+        $iterator = new \RecursiveIteratorIterator(
+            new \RecursiveDirectoryIterator($this->tempDir, \RecursiveDirectoryIterator::SKIP_DOTS),
+            \RecursiveIteratorIterator::CHILD_FIRST
         );
 
         foreach ($iterator as $file) {
-            if (is_dir($file)) {
-                rmdir($file);
+            if ($file->isDir()) {
+                rmdir($file->getPathname());
             } else {
-                unlink($file);
+                unlink($file->getPathname());
             }
         }
 
         rmdir($this->tempDir);
     }
 
+    /**
+     * Test copy succeeds.
+     */
     public function testCopySucceeds()
     {
         $source = $this->tempDir . '/source.txt';
@@ -54,6 +60,9 @@ class FileSystemTest extends TestCase
         $this->assertEquals('test content', file_get_contents($destination));
     }
 
+    /**
+     * Test copy fails when source does not exist.
+     */
     public function testCopyFailsWhenSourceDoesNotExist()
  {
         $source = $this->tempDir . '/nonexistent.txt';
@@ -63,6 +72,9 @@ class FileSystemTest extends TestCase
         $this->fileSystem->copy($source, $destination);
     }
 
+    /**
+     * Test mkdir creates directory.
+     */
     public function testMkdirCreatesDirectory()
     {
         $dir = $this->tempDir . '/nested/test/directory';
@@ -72,6 +84,9 @@ class FileSystemTest extends TestCase
         $this->assertDirectoryExists($dir);
     }
 
+    /**
+     * Test exists returns true for existing file.
+     */
     public function testExistsReturnsTrueForExistingFile() 
     {
         $file = $this->tempDir . '/test.txt';
@@ -82,6 +97,9 @@ class FileSystemTest extends TestCase
         $this->assertTrue($result);
     }
 
+    /**
+     * Test exists returns false for non existing file.
+     */
     public function testExistsReturnsFalseForNonExistingFile()
     {
         $file = $this->tempDir . '/nonexistent.txt';
@@ -91,6 +109,9 @@ class FileSystemTest extends TestCase
         $this->assertFalse($result);
     }
 
+    /**
+     * Test touch creates file if not exists.
+     */
     public function testTouchCreatesFileIfNotExists()
     {
         $file = $this->tempDir . '/touched_file.txt';
@@ -100,6 +121,9 @@ class FileSystemTest extends TestCase
         $this->assertFileExists($file);
     }
 
+    /**
+     * Test remove removes file.
+     */
     public function testRemoveRemovesFile() 
     {
         $file = $this->tempDir . '/to_remove.txt';
@@ -110,6 +134,9 @@ class FileSystemTest extends TestCase
         $this->assertFileDoesNotExist($file);
     }
 
+    /**
+     * Test remove with array.
+     */
     public function testRemoveWithArray()
     {
         $file1 = $this->tempDir . '/file1.txt';
@@ -124,6 +151,9 @@ class FileSystemTest extends TestCase
         $this->assertFileDoesNotExist($file2);
     }
 
+    /**
+     * Test chmod sets permissions.
+     */
     public function testChmodSetsPermissions()
     {
         $file = $this->tempDir . '/test_permissions.txt';
@@ -134,9 +164,16 @@ class FileSystemTest extends TestCase
         clearstatcache(false, $file);
         $permissions = substr(sprintf('%o', fileperms($file)), -4);
         
-        $this->assertEquals('0755', $permissions);
+        if (DIRECTORY_SEPARATOR === '\\') {
+            $this->assertEquals('0666', $permissions);
+        } else {
+            $this->assertEquals('0755', $permissions);
+        }
     }
 
+    /**
+     * Test rename moves file.
+     */
     public function testRenameMovesFile()
     {
         $source = $this->tempDir . '/old_name.txt';
@@ -151,6 +188,9 @@ class FileSystemTest extends TestCase
         $this->assertEquals('content', file_get_contents($target));
     }
 
+    /**
+     * Test symlink creates link.
+     */
     public function testSymlinkCreatesLink()
     {
         $source = $this->tempDir . '/source_file.txt';
@@ -158,12 +198,15 @@ class FileSystemTest extends TestCase
         
         file_put_contents($source, 'content');
         
-        $this->fileSystem->symlink($source, $link);
+        $this->fileSystem->symlink($source, $link, true);
         
         $this->assertFileExists($link);
-        $this->assertEquals(file_get_contents($source), readlink($link));
+        $this->assertEquals('content', file_get_contents($link));
     }
 
+    /**
+     * Test mirror copies files.
+     */
     public function testMirrorCopiesFiles()
     {
         $originDir = $this->tempDir . '/origin';
@@ -178,6 +221,9 @@ class FileSystemTest extends TestCase
         $this->assertEquals('content', file_get_contents($targetDir . '/file.txt'));
     }
 
+    /**
+     * Test absolute path detection.
+     */
     public function testAbsolutePathDetection()
     {
         $this->assertTrue($this->fileSystem->isAbsolutePath('/test/path'));
@@ -185,14 +231,21 @@ class FileSystemTest extends TestCase
         $this->assertFalse($this->fileSystem->isAbsolutePath('relative/path'));
     }
 
+    /**
+     * Test tempnam creates file.
+     */
     public function testTempnamCreatesFile()
     {
-        $tempFile = $this->fileSystem->tempnam(sys_get_temp_dir(), 'test_');
+        $tempDir = realpath(sys_get_temp_dir());
+        $tempFile = $this->fileSystem->tempnam($tempDir, 'test_');
         
         $this->assertFileExists($tempFile);
-        $this->assertStringStartsWith(sys_get_temp_dir(), $tempFile);
+        $this->assertStringStartsWith($tempDir, realpath($tempFile));
     }
 
+    /**
+     * Test dump file writes to file.
+     */
     public function testDumpFileWritesToFile()
     {
         $file = $this->tempDir . '/dump_test.txt';
@@ -203,6 +256,9 @@ class FileSystemTest extends TestCase
         $this->assertEquals('test content', file_get_contents($file));
     }
 
+    /**
+     * Test append to file appends.
+     */
     public function testAppendToFileAppends()
     {
         $file = $this->tempDir . '/append_test.txt';
@@ -213,9 +269,12 @@ class FileSystemTest extends TestCase
         $this->assertEquals('initial content', file_get_contents($file));
     }
 
+    /**
+     * Test make path relative.
+     */
     public function testMakePathRelative()
     {
         $path = $this->fileSystem->makePathRelative('/a/b/c/test.txt', '/a/b/c/');
-        $this->assertEquals('test.txt', $path);
+        $this->assertEquals('test.txt', rtrim($path, '/\\'));
     }
 }

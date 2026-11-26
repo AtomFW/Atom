@@ -9,8 +9,14 @@ use Atom\Component\Uid\Ulid;
 use Symfony\Component\Uid\Ulid as SymfonyUlid;
 use InvalidArgumentException;
 
+/**
+ * Test suite for the Ulid component.
+ */
 class UlidTest extends TestCase
 {
+    /**
+     * Test constructs with valid ulid.
+     */
     public function testConstructsWith_valid_ulid(): void
     {
         $ulidString = '01ARZ3NDEM0000000000000000';
@@ -20,6 +26,9 @@ class UlidTest extends TestCase
         $this->assertEquals($ulidString, (string) $ulid);
     }
 
+    /**
+     * Test constructs with null generates new ulid.
+     */
     public function testConstructsWith_null_generates_new_ulid(): void
     {
         $ulid = new Ulid();
@@ -28,6 +37,9 @@ class UlidTest extends TestCase
         $this->assertMatchesRegularExpression('/^[0-9A-HJKMNP-TV-Z]{26}$/i', (string) $ulid);
     }
 
+    /**
+     * Test constructs with invalid ulid.
+     */
     public function testConstructsWith_invalid_ulid(): void
     {
         $this->expectException(InvalidArgumentException::class);
@@ -35,6 +47,9 @@ class UlidTest extends TestCase
         new Ulid('invalid-ulid');
     }
 
+    /**
+     * Test to string returns string.
+     */
     public function testToString_returns_string(): void
     {
         $ulidString = '01ARZ3NDEM0000000000000000';
@@ -44,6 +59,9 @@ class UlidTest extends TestCase
         $this->assertEquals($ulidString, $ulid->__toString());
     }
 
+    /**
+     * Test to string returns same as to string.
+     */
     public function testToString_returns_same_as_toString(): void
     {
         $ulidString = '01ARZ3NDEM0000000000000000';
@@ -52,6 +70,9 @@ class UlidTest extends TestCase
         $this->assertEquals($ulidString, $ulid->toString());
     }
 
+    /**
+     * Test equals returns true for same ulid.
+     */
     public function testEquals_returns_true_for_same_ulid(): void
     {
         $ulidString = '01ARZ3NDEM0000000000000000';
@@ -61,6 +82,9 @@ class UlidTest extends TestCase
         $this->assertTrue($ulid1->equals($ulid2));
     }
 
+    /**
+     * Test equals returns false for different ulid.
+     */
     public function testEquals_returns_false_for_different_ulid(): void
     {
         $ulid1 = new Ulid('01ARZ3NDEM0000000000000000');
@@ -69,6 +93,9 @@ class UlidTest extends TestCase
         $this->assertFalse($ulid1->equals($ulid2));
     }
 
+    /**
+     * Test to string returns valid ulid format.
+     */
     public function testToString_returns_valid_ulid_format(): void
     {
         $ulidString = '01ARZ3NDEM0000000000000000';
@@ -77,6 +104,9 @@ class UlidTest extends TestCase
         $this->assertMatchesRegularExpression('/^[0-9A-HJKMNP-TV-Z]{26}$/i', $ulid->__toString());
     }
 
+    /**
+     * Test immutability.
+     */
     public function testImmutability(): void
     {
         $ulidString = '01ARZ3NDEM0000000000000000';
@@ -87,6 +117,9 @@ class UlidTest extends TestCase
         $this->assertNotSame($ulid, $ulidCopy);
     }
 
+    /**
+     * Test extends symfony ulid.
+     */
     public function testExtends_symfony_ulid(): void
     {
         $ulidString = '01ARZ3NDEM0000000000000000';
@@ -96,6 +129,9 @@ class UlidTest extends TestCase
         $this->assertInstanceOf(SymfonyUlid::class, $ulid);
     }
 
+    /**
+     * Test generates different ulids.
+     */
     public function testGenerates_different_ulids(): void
     {
         $ulid1 = new Ulid();

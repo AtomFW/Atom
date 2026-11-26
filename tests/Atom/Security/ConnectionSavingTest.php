@@ -5,10 +5,15 @@ declare(strict_types=1);
 namespace Tests\Unit\Atom\Security;
 
 use Atom\DataBase\Database;
+use Atom\Atom;
 use Atom\DateTime\DateTime;
 use Atom\Security\ConnectionSaving;
+use Doctrine\DBAL\Result;
 use PHPUnit\Framework\TestCase;
 
+/**
+ * Test suite for the ConnectionSaving component.
+ */
 class ConnectionSavingTest extends TestCase
 {
     private $database;
@@ -18,10 +23,26 @@ class ConnectionSavingTest extends TestCase
     protected function setUp(): void
     {
         $this->database = $this->createMock(Database::class);
-        $this->datetime = $this->createMock(DateTime::class);
+        $this->datetime = new DateTime();
+        $this->datetime::setMacro();
+        $this->database->pdo = $this->createMock(\PDO::class);
+        $this->database->pdo->method('lastInsertId')->willReturn('1');
+        $app = (new \ReflectionClass(Atom::class))->newInstanceWithoutConstructor();
+        $app->db = $this->database;
+        $app->datetime = $this->datetime;
+        Atom::$app = $app;
         $this->serverId = 1;
     }
 
+    private function invokeProtectedStatic(string $class, string $method, array $arguments = []): mixed
+    {
+        $reflection = new \ReflectionMethod($class, $method);
+        return $reflection->invokeArgs(null, $arguments);
+    }
+
+    /**
+     * Test add method.
+     */
     public function testAddMethod()
     {
         // Mock dependencies
@@ -48,16 +69,16 @@ class ConnectionSavingTest extends TestCase
         // Mock the dataStructure method to return test data
         $reflection = new \ReflectionClass(ConnectionSaving::class);
         $dataStructure = $reflection->getMethod('dataStructure');
-        $dataStructure->setAccessible(true);
         
         // Mock the database insert operation
-        $statementMock = $this->createMock(\Doctrine\DBAL\Statement::class);
+        $statementMock = $this->createMock(Result::class);
         $statementMock->method('rowCount')->willReturn(1);
         $statementMock->expects($this->once())->method('free');
         
-        $insertMock = $this->createMock(\Doctrine\DBAL\Query\ForUpdate::class);
+        $insertMock = $this->createMock(\Doctrine\DBAL\Query\QueryBuilder::class);
         $insertMock->method('values')->willReturn($insertMock);
         $insertMock->method('setParameters')->willReturn($insertMock);
+        $insertMock->method('executeQuery')->willReturn($statementMock);
         
         $this->database->method('insertInto')->willReturn($insertMock);
         $this->database->expects($this->once())->method('attributesToBindsProperty');
@@ -66,9 +87,12 @@ class ConnectionSavingTest extends TestCase
         $result = $connectionSaving::add($browserDetector, $connectionInformation, $botDetector);
         
         // Assert
-        $this->assertIs(int, $result);
+        $this->assertIsInt($result);
     }
 
+    /**
+     * Test attributes types.
+     */
     public function testAttributesTypes()
     {
         $expected = [
@@ -77,9 +101,12 @@ class ConnectionSavingTest extends TestCase
             'raw_details' => "json",
         ];
         
-        $this->assertEquals($expected, ConnectionSaving::attributesTypes());
+        $this->assertEquals($expected, $this->invokeProtectedStatic(ConnectionSaving::class, 'attributesTypes'));
     }
 
+    /**
+     * Test attributes.
+     */
     public function testAttributes()
     {
         $expected = [
@@ -100,9 +127,12 @@ class ConnectionSavingTest extends TestCase
             'raw_details'
         ];
         
-        $this->assertEquals($expected, ConnectionSaving::attributes());
+        $this->assertEquals($expected, $this->invokeProtectedStatic(ConnectionSaving::class, 'attributes'));
     }
 
+    /**
+     * Test change database.
+     */
     public function testChangeDatabase()
     {
         // Create new mock database
@@ -116,10 +146,13 @@ class ConnectionSavingTest extends TestCase
         $this->assertTrue(true); // If we reach here without exception, test passes
     }
 
+    /**
+     * Test change date time.
+     */
     public function testChangeDateTime()
     {
-        // Create new mock datetime
-        $newDatetime = $this->createMock(DateTime::class);
+        // Create new datetime instance
+        $newDatetime = new DateTime();
         
         // Change the datetime using the static method
         ConnectionSaving::changeDateTime($newDatetime);
@@ -128,6 +161,9 @@ class ConnectionSavingTest extends TestCase
         $this->assertTrue(true); // If we reach here without exception, test passes
     }
 
+    /**
+     * Test change server id.
+     */
     public function testChangeServerId()
     {
         // Change the server ID using the static method
@@ -137,6 +173,9 @@ class ConnectionSavingTest extends TestCase
         $this->assertTrue(true); // If we reach here without exception, test passes
     }
 
+    /**
+     * Test constructor.
+     */
     public function testConstructor()
     {
         // Create a new instance with mocks

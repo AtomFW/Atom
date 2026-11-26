@@ -9,8 +9,16 @@ use Atom\Component\Task\TaskInterface;
 use Atom\Component\Task\Driver\MessageDriverInterface;
 use PHPUnit\Framework\TestCase;
 
+
 final class QueueManagerTest extends TestCase
 {
+    protected function setUp(): void
+    {
+        parent::setUp();
+        if (!class_exists('Redis')) {
+            $this->markTestSkipped('ext-redis is required for QueueManager tests.');
+        }
+    }
     private function makeConfig(array $overrides = []): array
     {
         $base = [
@@ -39,12 +47,14 @@ final class QueueManagerTest extends TestCase
         // Use reflection to replace private drivers for tests
         $ref = new \ReflectionClass($qm);
         $prop = $ref->getProperty('drivers');
-        $prop->setAccessible(true);
         $drivers = $prop->getValue($qm);
         $drivers[$name] = $driver;
         $prop->setValue($qm, $drivers);
     }
 
+    /**
+     * Test dispatch stores envelope and count increments.
+     */
     public function testDispatchStoresEnvelopeAndCountIncrements(): void
     {
         $qm = new QueueManager($this->makeConfig());
@@ -61,6 +71,9 @@ final class QueueManagerTest extends TestCase
         $this->assertSame(0, $env['attempts']);
     }
 
+    /**
+     * Test run worker processes ready message and removes it.
+     */
     public function testRunWorkerProcessesReadyMessageAndRemovesIt(): void
     {
         $handled = [];
@@ -80,6 +93,9 @@ final class QueueManagerTest extends TestCase
         $this->assertSame(0, $qm->count());
     }
 
+    /**
+     * Test delayed messages are skipped until available.
+     */
     public function testDelayedMessagesAreSkippedUntilAvailable(): void
     {
         $handled = [];
@@ -108,6 +124,9 @@ final class QueueManagerTest extends TestCase
         $this->assertNotNull($fake->getMessage($id), 'Message should remain in queue');
     }
 
+    /**
+     * Test retry policy applies exponential backoff and eventually removes.
+     */
     public function testRetryPolicyAppliesExponentialBackoffAndEventuallyRemoves(): void
     {
         $attempts = 0;
@@ -147,6 +166,9 @@ final class QueueManagerTest extends TestCase
         $this->assertSame(3, $attempts, 'Handler should be invoked for each attempt including the final one');
     }
 
+    /**
+     * Test transfer all moves messages between drivers with optional transform.
+     */
     public function testTransferAllMovesMessagesBetweenDriversWithOptionalTransform(): void
     {
         $qm = new QueueManager($this->makeConfig());

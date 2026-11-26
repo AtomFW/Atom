@@ -162,4 +162,46 @@ return [
      * @var bool
      */
     'autoConvertGifToMove' => env('FILESYSTEM_AUTO_CONVERT_GIF_TO_MOVE', true),
+
+    /**
+     * Temporary upload and staging directory configuration (strictly inside runtime/).
+     *
+     * @var array
+     */
+    'upload' => [
+        /**
+         * Temporary upload staging folder inside runtime/.
+         *
+         * @var string
+         */
+        'tempDir' => env('FILESYSTEM_TEMP_UPLOAD_DIR', __DIR__ . '/../runtime/tempUpload'),
+
+        /**
+         * Maximum single uploaded file size in bytes (defaults to 10 MB).
+         *
+         * @var int
+         */
+        'maxSizeBytes' => (int) env('FILESYSTEM_MAX_UPLOAD_BYTES', 10485760),
+
+        /**
+         * Strictly verify real MIME type from file magic bytes (finfo) instead of trusting client headers.
+         *
+         * @var bool
+         */
+        'strictMimeCheck' => (bool) env('FILESYSTEM_STRICT_MIME_CHECK', true),
+
+        /**
+         * Scan uploaded files with FileSafetyScanner before persisting.
+         *
+         * @var bool
+         */
+        'safetyScan' => (bool) env('FILESYSTEM_SAFETY_SCAN', true),
+
+        /**
+         * Chunk size in bytes for memory-safe streaming file operations (64 KiB).
+         *
+         * @var int
+         */
+        'streamChunkBytes' => (int) env('FILESYSTEM_STREAM_CHUNK_BYTES', 65536),
+    ],
 ];

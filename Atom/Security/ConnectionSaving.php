@@ -163,8 +163,8 @@ final class ConnectionSaving {
         $idServer = self::getIdServerByIp();
 
         return [
-            'ip' => inet_pton($_SERVER["REMOTE_ADDR"]),
-            'isp' => gethostbyaddr($_SERVER["REMOTE_ADDR"]),
+            'ip' => inet_pton($_SERVER["REMOTE_ADDR"] ?? '127.0.0.1'),
+            'isp' => gethostbyaddr($_SERVER["REMOTE_ADDR"] ?? '127.0.0.1'),
             'lang' => $_SERVER["GEOIP_COUNTRY_ISO_CODE"] ?? $_SERVER["GEOIP_COUNTRY_CODE"] ?? "",
             'city' => $_SERVER["GEOIP_CITY"] ?? "",
             'country' => $_SERVER["GEOIP_COUNTRY_NAME"] ?? "",

@@ -22,6 +22,9 @@ final class ImageTransformerTest extends TestCase
         return (string)ob_get_clean();
     }
 
+    /**
+     * Test load from string sets dimensions.
+     */
     public function testLoadFromStringSetsDimensions(): void
     {
         $blob = $this->makePngBlob(10, 6);
@@ -31,6 +34,9 @@ final class ImageTransformerTest extends TestCase
         $this->assertSame(6, $t->getHeight());
     }
 
+    /**
+     * Test resize fit preserves aspect and no upscale.
+     */
     public function testResizeFitPreservesAspectAndNoUpscale(): void
     {
         $blob = $this->makePngBlob(100, 50);
@@ -42,6 +48,9 @@ final class ImageTransformerTest extends TestCase
         $this->assertSame(15, $t->getHeight());
     }
 
+    /**
+     * Test resize cover crops to target.
+     */
     public function testResizeCoverCropsToTarget(): void
     {
         $blob = $this->makePngBlob(50, 100);
@@ -52,6 +61,9 @@ final class ImageTransformerTest extends TestCase
         $this->assertSame(30, $t->getHeight());
     }
 
+    /**
+     * Test crop with gravity center produces exact size.
+     */
     public function testCropWithGravityCenterProducesExactSize(): void
     {
         $blob = $this->makePngBlob(40, 20);
@@ -62,6 +74,9 @@ final class ImageTransformerTest extends TestCase
         $this->assertSame(10, $t->getHeight());
     }
 
+    /**
+     * Test apply unknown filter throws.
+     */
     public function testApplyUnknownFilterThrows(): void
     {
         $blob = $this->makePngBlob();
@@ -71,18 +86,53 @@ final class ImageTransformerTest extends TestCase
         $t->applyFilter('nope');
     }
 
+    /**
+     * Test add text does not throw and keeps dimensions.
+     */
     public function testAddTextDoesNotThrowAndKeepsDimensions(): void
     {
         $blob = $this->makePngBlob(60, 40);
         $t = new ImageTransformer();
+        
+        $font = null;
+        $possibleFonts = [
+            'C:\\Windows\\Fonts\\arial.ttf',
+            '/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf',
+            '/usr/share/fonts/TTF/DejaVuSans.ttf',
+            '/System/Library/Fonts/Helvetica.ttc'
+        ];
+        
+        foreach ($possibleFonts as $f) {
+            if (file_exists($f)) {
+                $font = $f;
+                break;
+            }
+        }
+        
+        if ($font === null) {
+            // If we can't find a system font, force GD mode which doesn't require a font
+            $ref = new \ReflectionClass($t);
+            $prop = $ref->getProperty('useImagick');
+            $prop->setValue($t, false);
+        }
+        
         $t->loadFromString($blob);
         $w = $t->getWidth();
         $h = $t->getHeight();
-        $t->addText('hello', ['color' => '#00ff00', 'size' => 12]);
+        
+        $options = ['color' => '#00ff00', 'size' => 12];
+        if ($font !== null) {
+            $options['fontFile'] = $font;
+        }
+        
+        $t->addText('hello', $options);
         $this->assertSame($w, $t->getWidth());
         $this->assertSame($h, $t->getHeight());
     }
 
+    /**
+     * Test get blob returns non empty default webp or png fallback.
+     */
     public function testGetBlobReturnsNonEmptyDefaultWebpOrPngFallback(): void
     {
         $blob = $this->makePngBlob(10, 10);
@@ -93,6 +143,9 @@ final class ImageTransformerTest extends TestCase
         $this->assertGreaterThan(0, strlen($out));
     }
 
+    /**
+     * Test to base64 prefix.
+     */
     public function testToBase64Prefix(): void
     {
         $blob = $this->makePngBlob(8, 8);
@@ -102,6 +155,9 @@ final class ImageTransformerTest extends TestCase
         $this->assertStringStartsWith('data:image/png;base64,', $data);
     }
 
+    /**
+     * Test compress changes quality but returns chainable.
+     */
     public function testCompressChangesQualityButReturnsChainable(): void
     {
         $blob = $this->makePngBlob(8, 8);
@@ -113,6 +169,9 @@ final class ImageTransformerTest extends TestCase
         $this->assertSame(8, $res->getHeight());
     }
 
+    /**
+     * Test get avg color on solid image.
+     */
     public function testGetAvgColorOnSolidImage(): void
     {
         // Solid red (semi transparent) should yield close to #ff0000

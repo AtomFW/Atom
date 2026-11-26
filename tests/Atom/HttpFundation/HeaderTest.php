@@ -17,10 +17,12 @@ final class HeaderTest extends TestCase
         // Reset the static property before each test to ensure isolation
         $reflection = new \ReflectionClass(Header::class);
         $staticProperty = $reflection->getProperty('headerCallbackRegistered');
-        // $staticProperty->setAccessible(true);
         $staticProperty->setValue(false);
     }
 
+    /**
+     * Test constructor and basic set get.
+     */
     public function testConstructorAndBasicSetGet(): void
     {
         $headers = new Header(['Content-Type' => 'application/json', 'X-Custom' => ['foo', 'bar']]);
@@ -45,6 +47,9 @@ final class HeaderTest extends TestCase
         ], $headers->toArray());
     }
 
+    /**
+     * Test immutability.
+     */
     public function testImmutability(): void
     {
         $initialHeaders = ['Content-Type' => 'text/html'];
@@ -72,6 +77,9 @@ final class HeaderTest extends TestCase
         $this->assertTrue($mutableHeaders->has('X-Foo'));
     }
 
+    /**
+     * Test add and remove headers.
+     */
     public function testAddAndRemoveHeaders(): void
     {
         $headers = new Header();
@@ -96,6 +104,9 @@ final class HeaderTest extends TestCase
         $this->assertCount(1, $headers);
     }
 
+    /**
+     * Test parse content type.
+     */
     public function testParseContentType(): void
     {
         $headers = new Header();
@@ -126,6 +137,9 @@ final class HeaderTest extends TestCase
         $this->assertEquals(['mime' => 'text/xml', 'params' => ['boundary' => 'foo']], $headers->parseContentType());
     }
 
+    /**
+     * Test from globals.
+     */
     public function testFromGlobals(): void
     {
         // Mock $_SERVER superglobal for testing

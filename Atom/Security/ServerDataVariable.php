@@ -350,7 +350,7 @@ final class ServerDataVariable
             $qb->setParameter(
                 $column,
                 $value,
-                $column === $this->ipBinaryColumn ? ParameterType::BINARY : null
+                $column === $this->ipBinaryColumn ? ParameterType::BINARY : ParameterType::STRING
             );
         }
 

@@ -9,6 +9,9 @@ use Atom\DateTime\DateTime;
 use Carbon\Carbon;
 use ReflectionClass;
 
+/**
+ * Test suite for the DateTime component.
+ */
 class DateTimeTest extends TestCase
 {
     protected function tearDown(): void
@@ -24,6 +27,9 @@ class DateTimeTest extends TestCase
         }
     }
 
+    /**
+     * Test set global define.
+     */
     public function test_set_global_define(): void
     {
         $config = (object) [
@@ -43,6 +49,9 @@ class DateTimeTest extends TestCase
         $this->assertTrue(\defined('ATOM_LOCAE'));
     }
 
+    /**
+     * Test set default locale.
+     */
     public function test_set_default_locale(): void
     {
         // Set up a mock config
@@ -65,6 +74,9 @@ class DateTimeTest extends TestCase
         $this->assertTrue(true);
     }
 
+    /**
+     * Test set default timezone.
+     */
     public function test_set_default_timezone(): void
     {
         // Set up config
@@ -90,6 +102,9 @@ class DateTimeTest extends TestCase
         $this->assertTrue($result);
     }
 
+    /**
+     * Test set macro.
+     */
     public function test_set_macro(): void
     {
         // Set up config
@@ -114,6 +129,9 @@ class DateTimeTest extends TestCase
         $this->assertTrue($result);
     }
 
+    /**
+     * Test magic to string.
+     */
     public function test_magic_to_string(): void
     {
         // Set up config for testing
@@ -135,6 +153,9 @@ class DateTimeTest extends TestCase
         $this->assertIsString($result);
     }
 
+    /**
+     * Test macro functions exist.
+     */
     public function test_macro_functions_exist(): void
     {
         // Set up config

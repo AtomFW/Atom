@@ -4,9 +4,14 @@ declare(strict_types=1);
 
 namespace Tests\Atom\FileSystem;
 
+use DateTimeImmutable;
+
 use PHPUnit\Framework\TestCase;
 use Atom\FileSytem\UploadFolderManager as UploadFolderManager;
 
+/**
+ * Test suite for the UploadFolderManager component.
+ */
 class UploadFolderManagerTest extends TestCase
 {
     private string $tempDir;
@@ -36,7 +41,7 @@ class UploadFolderManagerTest extends TestCase
             return;
         }
 
-        foreach (new RecursiveIteratorIterator(new RecursiveDirectoryIterator($dir, FilesystemIterator::SKIP_DOTS), RecursiveIteratorIterator::CHILD_FIRST) as $path) {
+        foreach (new \RecursiveIteratorIterator(new \RecursiveDirectoryIterator($dir, \FilesystemIterator::SKIP_DOTS), \RecursiveIteratorIterator::CHILD_FIRST) as $path) {
             if ($path->isDir()) {
                 rmdir($path->getPathname());
             } else {
@@ -47,6 +52,9 @@ class UploadFolderManagerTest extends TestCase
         rmdir($dir);
     }
 
+    /**
+     * Test constructor with basic options.
+     */
     public function testConstructorWithBasicOptions(): void
     {
         $manager = new UploadFolderManager(
@@ -65,6 +73,9 @@ class UploadFolderManagerTest extends TestCase
         $this->assertNotNull($manager);
     }
 
+    /**
+     * Test create structure with non temporary.
+     */
     public function testCreateStructureWithNonTemporary(): void
     {
         $manager = new UploadFolderManager(
@@ -80,6 +91,9 @@ class UploadFolderManagerTest extends TestCase
         $this->assertArrayHasKey('schema', $result);
     }
 
+    /**
+     * Test create structure with temporary.
+     */
     public function testCreateStructureWithTemporary(): void
     {
         $manager = new UploadFolderManager(
@@ -97,6 +111,9 @@ class UploadFolderManagerTest extends TestCase
         $this->assertArrayHasKey('tempJsonPath', $result);
     }
 
+    /**
+     * Test get main path.
+     */
     public function testGetMainPath(): void
     {
         $manager = new UploadFolderManager($this->baseDir, ['Y', 'm', 'd']);
@@ -105,9 +122,12 @@ class UploadFolderManagerTest extends TestCase
         $mainPath = $manager->getMainPath();
         
         $this->assertIsString($mainPath);
-        $this->assertStringStartsWith($this->baseDir, $mainPath);
+        $this->assertStringStartsWith(str_replace('/', DIRECTORY_SEPARATOR, $this->baseDir), $mainPath);
     }
 
+    /**
+     * Test get related paths.
+     */
     public function testGetRelatedPaths(): void
     {
         $manager = new UploadFolderManager(
@@ -126,6 +146,9 @@ class UploadFolderManagerTest extends TestCase
         $this->assertNotEmpty($relatedPaths);
     }
 
+    /**
+     * Test get all paths.
+     */
     public function testGetAllPaths(): void
     {
         $manager = new UploadFolderManager(
@@ -145,6 +168,9 @@ class UploadFolderManagerTest extends TestCase
         $this->assertArrayHasKey('related_2', $allPaths);
     }
 
+    /**
+     * Test get temp json path.
+     */
     public function testGetTempJsonPath(): void
     {
         $manager = new UploadFolderManager(
@@ -160,6 +186,9 @@ class UploadFolderManagerTest extends TestCase
         $this->assertStringContainsString('.json', $jsonPath);
     }
 
+    /**
+     * Test get structure info.
+     */
     public function testGetStructureInfo(): void
     {
         $manager = new UploadFolderManager(
@@ -177,6 +206,9 @@ class UploadFolderManagerTest extends TestCase
         $this->assertArrayHasKey('createdAt', $info);
     }
 
+    /**
+     * Test is expired with non temporary.
+     */
     public function testIsExpiredWithNonTemporary(): void
     {
         $manager = new UploadFolderManager(
@@ -190,6 +222,9 @@ class UploadFolderManagerTest extends TestCase
         $this->assertFalse($isExpired);
     }
 
+    /**
+     * Test is expired with temporary.
+     */
     public function testIsExpiredWithTemporary(): void
     {
         $manager = new UploadFolderManager(
@@ -207,6 +242,9 @@ class UploadFolderManagerTest extends TestCase
         $this->assertFalse($isExpired);
     }
 
+    /**
+     * Test cleanup expired with non temporary.
+     */
     public function testCleanupExpiredWithNonTemporary(): void
     {
         $manager = new UploadFolderManager(
@@ -220,6 +258,9 @@ class UploadFolderManagerTest extends TestCase
         $this->assertFalse($cleanup);
     }
 
+    /**
+     * Test folder exists.
+     */
     public function testFolderExists(): void
     {
         $manager = new UploadFolderManager(
@@ -233,6 +274,9 @@ class UploadFolderManagerTest extends TestCase
         $this->assertTrue($exists);
     }
 
+    /**
+     * Test file exists.
+     */
     public function testFileExists(): void
     {
         $manager = new UploadFolderManager(
@@ -246,6 +290,9 @@ class UploadFolderManagerTest extends TestCase
         $this->assertFalse($fileExists);
     }
 
+    /**
+     * Test get absolute file path.
+     */
     public function testGetAbsoluteFilePath(): void
     {
         $manager = new UploadFolderManager(
@@ -260,6 +307,9 @@ class UploadFolderManagerTest extends TestCase
         $this->assertStringContainsString('test.txt', $filePath);
     }
 
+    /**
+     * Test get all files paths.
+     */
     public function testGetAllFilesPaths(): void
     {
         $manager = new UploadFolderManager(
@@ -273,6 +323,9 @@ class UploadFolderManagerTest extends TestCase
         $this->assertIsArray($files);
     }
 
+    /**
+     * Test count files.
+     */
     public function testCountFiles(): void
     {
         $manager = new UploadFolderManager(
@@ -287,6 +340,9 @@ class UploadFolderManagerTest extends TestCase
         $this->assertGreaterThanOrEqual(0, $count);
     }
 
+    /**
+     * Test files by extension.
+     */
     public function testFilesByExtension(): void
     {
         $manager = new UploadFolderManager(
@@ -300,6 +356,9 @@ class UploadFolderManagerTest extends TestCase
         $this->assertIsArray($files);
     }
 
+    /**
+     * Test files by mime.
+     */
     public function testFilesByMime(): void
     {
         $manager = new UploadFolderManager(
@@ -313,6 +372,9 @@ class UploadFolderManagerTest extends TestCase
         $this->assertIsArray($files);
     }
 
+    /**
+     * Test list files.
+     */
     public function testListFiles(): void
     {
         $manager = new UploadFolderManager(
@@ -326,6 +388,9 @@ class UploadFolderManagerTest extends TestCase
         $this->assertIsArray($files);
     }
 
+    /**
+     * Test get created at.
+     */
     public function testGetCreatedAt(): void
     {
         $manager = new UploadFolderManager(
@@ -339,6 +404,9 @@ class UploadFolderManagerTest extends TestCase
         $this->assertInstanceOf(DateTimeImmutable::class, $createdAt);
     }
 
+    /**
+     * Test get modified at.
+     */
     public function testGetModifiedAt(): void
     {
         $manager = new UploadFolderManager(
@@ -352,6 +420,9 @@ class UploadFolderManagerTest extends TestCase
         $this->assertInstanceOf(DateTimeImmutable::class, $modifiedAt);
     }
 
+    /**
+     * Test get last added at.
+     */
     public function testGetLastAddedAt(): void
     {
         $manager = new UploadFolderManager(
@@ -360,11 +431,15 @@ class UploadFolderManagerTest extends TestCase
         );
         
         $result = $manager->createStructure();
+        $manager->saveFile('test.txt', 'content');
         $lastAdded = $manager->getLastAddedAt();
 
         $this->assertInstanceOf(DateTimeImmutable::class, $lastAdded);
     }
 
+    /**
+     * Test get folder permissions.
+     */
     public function testGetFolderPermissions(): void
     {
         $manager = new UploadFolderManager(
@@ -378,6 +453,9 @@ class UploadFolderManagerTest extends TestCase
         $this->assertIsString($permissions);
     }
 
+    /**
+     * Test get file permissions.
+     */
     public function testGetFilePermissions(): void
     {
         $manager = new UploadFolderManager(
@@ -386,19 +464,24 @@ class UploadFolderManagerTest extends TestCase
         );
         
         $result = $manager->createStructure();
+        $manager->saveFile('test.txt', 'content');
         $permissions = $manager->getFilePermissions('test.txt');
 
         $this->assertIsString($permissions);
     }
 
+    /**
+     * Test get file info.
+     */
     public function testGetFileInfo(): void
     {
         $manager = new UploadFolderManager(
-            $thisDir,
+            $this->baseDir,
             ['Y', 'm', 'd']
         );
         
         $result = $manager->createStructure();
+        $manager->saveFile('test.txt', 'content');
         try {
             $info = $manager->getFileInfo('test.txt');
             // If all tests pass, it means the file does not exist
@@ -410,6 +493,9 @@ class UploadFolderManagerTest extends TestCase
         }
     }
 
+    /**
+     * Test get folder info.
+     */
     public function testGetFolderInfo(): void
     {
         $manager = new UploadFolderManager(
@@ -426,6 +512,9 @@ class UploadFolderManagerTest extends TestCase
         $this->assertArrayHasKey('fileCount', $info);
     }
 
+    /**
+     * Test save file.
+     */
     public function testSaveFile(): void
     {
         $manager = new UploadFolderManager(
@@ -439,6 +528,9 @@ class UploadFolderManagerTest extends TestCase
         $this->assertStringContainsString('test.txt', $path);
     }
 
+    /**
+     * Test get schema.
+     */
     public function testGetSchema(): void
     {
         $schema = ['Y', 'm', 'd'];
@@ -454,6 +546,9 @@ class UploadFolderManagerTest extends TestCase
         $this->assertEquals($schema, $actualSchema);
     }
 
+    /**
+     * Test get related schemas.
+     */
     public function testGetRelatedSchemas(): void
     {
         $manager = new UploadFolderManager(
@@ -470,6 +565,9 @@ class UploadFolderManagerTest extends TestCase
         $this->assertIsArray($relatedSchemas);
     }
 
+    /**
+     * Test has related folder.
+     */
     public function testHasRelatedFolder(): void
     {
         $manager = new UploadFolderManager(
@@ -488,6 +586,9 @@ class UploadFolderManagerTest extends TestCase
         $this->assertFalse($hasFolder2);
     }
 
+    /**
+     * Test get related folder path.
+     */
     public function testGetRelatedFolderPath(): void
     {
         $manager = new UploadFolderManager(
@@ -504,6 +605,9 @@ class UploadFolderManagerTest extends TestCase
         $this->assertIsString($folderPath);
     }
 
+    /**
+     * Test touch folder.
+     */
     public function testTouchFolder(): void
     {
         $manager = new UploadFolderManager(
@@ -517,6 +621,9 @@ class UploadFolderManagerTest extends TestCase
         $this->assertTrue($touched);
     }
 
+    /**
+     * Test refresh temp metadata.
+     */
     public function testRefreshTempMetadata(): void
     {
         $manager = new UploadFolderManager(
@@ -534,6 +641,9 @@ class UploadFolderManagerTest extends TestCase
         $this->assertTrue($refreshed);
     }
 
+    /**
+     * Test get temp metadata.
+     */
     public function testGetTempMetadata(): void
     {
         $manager = new UploadFolderManager(

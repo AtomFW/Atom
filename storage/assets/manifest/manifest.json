@@ -1,0 +1,12 @@
+{
+    "name": "Atom",
+    "short_name": "Atom",
+    "start_url": "https://localhost/newatom",
+    "scope": "/",
+    "display": "standalone",
+    "background_color": "#000000",
+    "theme_color": "#000000",
+    "description": "Atom WebSite",
+    "lang": "pl",
+    "prefer_related_applications": false
+}

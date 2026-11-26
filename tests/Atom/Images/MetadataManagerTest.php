@@ -22,30 +22,32 @@ final class MetadataManagerTest extends TestCase
     protected function setUp(): void
     {
         parent::setUp();
-        $this->projectRoot = realpath(__DIR__ . '/../TestFile/') ?: getcwd();
-
-        $candidates = [
-            $this->projectRoot . '/source.png',
-            $this->projectRoot . '/out/out.webp',
-            $this->projectRoot . '/out.webp',
-            $this->projectRoot . '/source.png',
-        ];
-        $this->sampleImage = null;
-        foreach ($candidates as $path) {
-            if (is_file($path)) {
-                $this->sampleImage = $path;
-                break;
-            }
+        $this->projectRoot = realpath(__DIR__ . '/../../..') ?: getcwd();
+        
+        // Generate a real PNG file for testing instead of relying on hardcoded paths
+        $this->sampleImage = sys_get_temp_dir() . '/test_sample_' . uniqid() . '.png';
+        $img = imagecreatetruecolor(10, 10);
+        imagepng($img, $this->sampleImage);
+    }
+    
+    protected function tearDown(): void
+    {
+        if ($this->sampleImage !== null && file_exists($this->sampleImage)) {
+            @unlink($this->sampleImage);
         }
+        parent::tearDown();
     }
 
     private function ensureSampleImage(): void
     {
-        if ($this->sampleImage === null) {
-            $this->markTestSkipped('No sample image available in expected locations.');
+        if ($this->sampleImage === null || !file_exists($this->sampleImage)) {
+            $this->markTestSkipped('No sample image available.');
         }
     }
 
+    /**
+     * Test get all metadata on nonexistent file returns empty groups.
+     */
     public function testGetAllMetadataOnNonexistentFileReturnsEmptyGroups(): void
     {
         $manager = new MetadataManager();
@@ -61,6 +63,9 @@ final class MetadataManagerTest extends TestCase
         $this->assertSame([], $all['xmp']);
     }
 
+    /**
+     * Test read exif gracefully without extension or unsupported format.
+     */
     public function testReadExifGracefullyWithoutExtensionOrUnsupportedFormat(): void
     {
         $manager = new MetadataManager();
@@ -72,6 +77,9 @@ final class MetadataManagerTest extends TestCase
         @unlink($tmp);
     }
 
+    /**
+     * Test read iptc on non jpeg returns empty.
+     */
     public function testReadIptcOnNonJpegReturnsEmpty(): void
     {
         $this->ensureSampleImage();
@@ -81,6 +89,9 @@ final class MetadataManagerTest extends TestCase
         $this->assertSame([], $iptc, 'WebP/PNG/GIF should not report IPTC via native reader');
     }
 
+    /**
+     * Test read xmp returns array or empty.
+     */
     public function testReadXmpReturnsArrayOrEmpty(): void
     {
         $this->ensureSampleImage();
@@ -89,6 +100,9 @@ final class MetadataManagerTest extends TestCase
         $this->assertIsArray($xmp);
     }
 
+    /**
+     * Test count metadata keys is zero for nonexistent.
+     */
     public function testCountMetadataKeysIsZeroForNonexistent(): void
     {
         $manager = new MetadataManager();
@@ -96,6 +110,9 @@ final class MetadataManagerTest extends TestCase
         $this->assertSame(0, $manager->countMetadataKeys($fakePath));
     }
 
+    /**
+     * Test strip all metadata succeeds using fallback for webp.
+     */
     public function testStripAllMetadataSucceedsUsingFallbackForWebp(): void
     {
         $this->ensureSampleImage();
@@ -110,6 +127,9 @@ final class MetadataManagerTest extends TestCase
         @unlink($out);
     }
 
+    /**
+     * Test strip all metadata fails for missing file.
+     */
     public function testStripAllMetadataFailsForMissingFile(): void
     {
         $manager = new MetadataManager();
@@ -117,6 +137,9 @@ final class MetadataManagerTest extends TestCase
         $this->assertFalse($manager->stripAllMetadata($fakePath));
     }
 
+    /**
+     * Test add iptc tags returns false for non jpeg.
+     */
     public function testAddIptcTagsReturnsFalseForNonJpeg(): void
     {
         $this->ensureSampleImage();
@@ -124,6 +147,9 @@ final class MetadataManagerTest extends TestCase
         $this->assertFalse($manager->addIptcTags($this->sampleImage, ['Byline' => 'Author']));
     }
 
+    /**
+     * Test add xmp tag returns false for non jpeg.
+     */
     public function testAddXmpTagReturnsFalseForNonJpeg(): void
     {
         $this->ensureSampleImage();
@@ -131,6 +157,9 @@ final class MetadataManagerTest extends TestCase
         $this->assertFalse($manager->addXmpTag($this->sampleImage, 'Flag', '1'));
     }
 
+    /**
+     * Test export metadata json produces valid json.
+     */
     public function testExportMetadataJsonProducesValidJson(): void
     {
         $this->ensureSampleImage();
@@ -144,6 +173,9 @@ final class MetadataManagerTest extends TestCase
         $this->assertArrayHasKey('xmp', $decoded);
     }
 
+    /**
+     * Test backup file creates bak in same dir.
+     */
     public function testBackupFileCreatesBakInSameDir(): void
     {
         $this->ensureSampleImage();

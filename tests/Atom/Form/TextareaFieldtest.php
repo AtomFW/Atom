@@ -8,34 +8,28 @@ use Atom\Form\TextareaField;
 use Atom\Model;
 use PHPUnit\Framework\TestCase;
 
+/**
+ * Test suite for the TextareaField component.
+ */
 class TextareaFieldTest extends TestCase
 {
+    /**
+     * Test render input with model value.
+     */
     public function testRenderInputWithModelValue()
     {
-        $model = $this->createMock(Model::class);
-        $model->method('getProperty')
-            ->will($this->returnCallback(function ($attribute, $property) {
-                if ($attribute === 'testAttribute' && $property === 'class') {
-                    return 'form-control';
-                }
-                return null;
-            }));
+        $model = new class extends Model {
+            public $testAttribute = 'Test value';
+            
+            public function form(): array {
+                return [
+                    'testAttribute' => [
+                        'class' => 'form-control'
+                    ]
+                ];
+            }
+        };
         
-        $model->expects($this->any())
-            ->method('__get')
-            ->with('testAttribute')
-            ->willReturn('Test value');
-            
-        $model->expects($this->any())
-            ->method('hasError')
-            ->with('testAttribute')
-            ->willReturn(false);
-            
-        $model->expects($this->any())
-            ->method('property')
-            ->with('testAttribute')
-            ->willReturn('');
-            
         $field = new TextareaField($model, 'testAttribute');
         $result = $field->renderInput();
         
@@ -44,99 +38,58 @@ class TextareaFieldTest extends TestCase
         $this->assertStringContainsString('Test value', $result);
     }
     
+    /**
+     * Test render input with value attribute.
+     */
     public function testRenderInputWithValueAttribute()
     {
-        $model = $this->createMock(Model::class);
-        $model->method('getProperty')
-            ->will($this->returnCallback(function ($attribute, $property) {
-                if ($attribute === 'testAttribute' && $property === 'class') {
-                    return null;
-                }
-                if ($attribute === 'testAttribute' && $property === 'value') {
-                    return 'value from attribute';
-                }
-                return null;
-            }));
+        $model = new class extends Model {
+            public $testAttribute = '';
+            
+            public function form(): array {
+                return [
+                    'testAttribute' => [
+                        'value' => 'value from attribute'
+                    ]
+                ];
+            }
+        };
         
-        $model->expects($this->any())
-            ->method('__get')
-            ->with('testAttribute')
-            ->willReturn(null);
-            
-        $model->expects($this->any())
-            ->method('hasError')
-            ->with('testAttribute')
-            ->willReturn(false);
-            
-        $model->expects($this->any())
-            ->method('property')
-            ->with('testAttribute')
-            ->willReturn('');
-            
         $field = new TextareaField($model, 'testAttribute');
         $result = $field->renderInput();
         
-        $this->assertStringContainsString('value="value from attribute"', $result);
+        // Textarea renders its value between the tags, not as a value="" attribute
+        $this->assertStringContainsString('>value from attribute</textarea>', $result);
     }
     
+    /**
+     * Test render input with error.
+     */
     public function testRenderInputWithError()
     {
-        $model = $this->createMock(Model::class);
-        $model->method('getProperty')
-            ->will($this->returnCallback(function ($attribute, $property) {
-                if ($attribute === 'testAttribute' && $property === 'class') {
-                    return null;
-                }
-                return null;
-            }));
+        $model = new class extends Model {
+            public $testAttribute = 'Test value';
+            
+            public function hasError($attribute) {
+                return true;
+            }
+        };
         
-        $model->expects($this->any())
-            ->method('__get')
-            ->with('testAttribute')
-            ->willReturn('Test value');
-            
-        $model->expects($this->any())
-            ->method('hasError')
-            ->with('testAttribute')
-            ->willReturn(true);
-            
-        $model->expects($this->any())
-            ->method('property')
-            ->with('testAttribute')
-            ->willReturn('');
-            
         $field = new TextareaField($model, 'testAttribute');
         $result = $field->renderInput();
         
         $this->assertStringContainsString('is-invalid', $result);
     }
     
+    /**
+     * Test render input without value.
+     */
     public function testRenderInputWithoutValue()
     {
-        $model = $this->createMock(Model::class);
-        $model->method('getProperty')
-            ->will($this->returnCallback(function ($attribute, $property) {
-                if ($attribute === 'testAttribute' && $property === 'class') {
-                    return null;
-                }
-                return null;
-            }));
+        $model = new class extends Model {
+            public $testAttribute = '';
+        };
         
-        $model->expects($this->any())
-            ->method('__get')
-            ->with('testAttribute')
-            ->willReturn(null);
-            
-        $model->expects($this->any())
-            ->method('hasError')
-            ->with('testAttribute')
-            ->willReturn(false);
-            
-        $model->expects($this->any())
-            ->method('property')
-            ->with('testAttribute')
-            ->willReturn('');
-            
         $field = new TextareaField($model, 'testAttribute');
         $result = $field->renderInput();
         

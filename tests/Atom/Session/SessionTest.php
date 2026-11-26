@@ -28,6 +28,9 @@ final class SessionTest extends TestCase
         $this->session = new Session($config);
     }
 
+    /**
+     * Test session starts correctly.
+     */
     public function testSessionStartsCorrectly(): void
     {
         $this->expectNotToPerformAssertions();
@@ -35,6 +38,9 @@ final class SessionTest extends TestCase
         $this->session->set('test', 'value');
     }
 
+    /**
+     * Test set and get session value.
+     */
     public function testSetAndGetSessionValue(): void
     {
         $key = 'test_key';
@@ -46,12 +52,18 @@ final class SessionTest extends TestCase
         $this->assertEquals($value, $result);
     }
 
+    /**
+     * Test get non existent session value.
+     */
     public function testGetNonExistentSessionValue(): void
     {
         $result = $this->session->get('non_existent_key');
         $this->assertFalse($result);
     }
 
+    /**
+     * Test remove session value.
+     */
     public function testRemoveSessionValue(): void
     {
         $key = 'test_key';
@@ -64,6 +76,9 @@ final class SessionTest extends TestCase
         $this->assertFalse($result);
     }
 
+    /**
+     * Test set and retrieve flash message.
+     */
     public function testSetAndRetrieveFlashMessage(): void
     {
         $key = 'test_flash';
@@ -75,6 +90,9 @@ final class SessionTest extends TestCase
         $this->assertEquals($message, $result);
     }
 
+    /**
+     * Test set and retrieve multiple flash messages.
+     */
     public function testSetAndRetrieveMultipleFlashMessages(): void
     {
         $flash1 = 'First flash message';
@@ -90,6 +108,9 @@ final class SessionTest extends TestCase
         $this->assertEquals($flash2, $result2);
     }
 
+    /**
+     * Test session destroy.
+     */
     public function testSessionDestroy(): void
     {
         // This is more of an integration test since session_destroy() behavior
@@ -99,6 +120,9 @@ final class SessionTest extends TestCase
         // Since the destroy method is private, we can't directly test it in this case.
     }
 
+    /**
+     * Test session regenerate id.
+     */
     public function testSessionRegenerateId(): void
     {
         $this->expectNotToPerformAssertions();

@@ -38,7 +38,7 @@ class Response
 
         echo $message;
 
-        exit;
+        $this->terminate();
     }
 
     /**
@@ -53,7 +53,7 @@ class Response
 
         echo $message;
 
-        exit;
+        $this->terminate();
     }
 
     /**
@@ -74,6 +74,16 @@ class Response
             echo $message;
         }
 
+        $this->terminate();
+    }
+
+    /**
+     * Terminate the script execution
+     * 
+     * @return never
+     */
+    protected function terminate(): never
+    {
         exit;
     }
 }

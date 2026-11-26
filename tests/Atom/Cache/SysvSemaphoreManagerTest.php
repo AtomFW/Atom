@@ -9,6 +9,9 @@ use Atom\Cache\SysvSemaphoreManager;
 use Atom\Cache\SysvIpcException;
 use Atom\Cache\SysvIpcSupport;
 
+/**
+ * Test suite for the SysvSemaphoreManager component.
+ */
 class SysvSemaphoreManagerTest extends TestCase
 {
     private SysvSemaphoreManager $semaphoreManager;
@@ -16,17 +19,27 @@ class SysvSemaphoreManagerTest extends TestCase
 
     protected function setUp(): void
     {
+        if (!extension_loaded('sysvsem')) {
+            $this->markTestSkipped('sysvsem is not available in this PHP runtime.');
+        }
+
         // Create a test semaphore manager with a unique base key
         $baseKey = 12345 + getmypid(); // Use process ID to make it unique
         $this->semaphoreManager = new SysvSemaphoreManager($baseKey, 0666, $this->testNamespace);
     }
 
+    /**
+     * Test constructor creates semaphore.
+     */
     public function testConstructorCreatesSemaphore()
     {
         // Test that constructor properly creates a semaphore
         $this->assertInstanceOf(SysvSemaphoreManager::class, $this->semaphoreManager);
     }
 
+    /**
+     * Test get native semaphore returns resource.
+     */
     public function testGetNativeSemaphoreReturnsResource()
     {
         // Test that getNativeSemaphore returns the expected resource type
@@ -34,6 +47,9 @@ class SysvSemaphoreManagerTest extends TestCase
         $this->assertNotNull($semaphore);
     }
 
+    /**
+     * Test acquire release.
+     */
     public function testAcquireRelease()
     {
         // Test basic acquire and release functionality
@@ -45,6 +61,9 @@ class SysvSemaphoreManagerTest extends TestCase
         $this->assertTrue($releaseResult);
     }
 
+    /**
+     * Test with lock.
+     */
     public function testWithLock()
     {
         // Test withLock method executes callback and releases semaphore
@@ -59,6 +78,9 @@ class SysvSemaphoreManagerTest extends TestCase
         $this->assertTrue($called);
     }
 
+    /**
+     * Test is available.
+     */
     public function testIsAvailable()
     {
         // Test that isAvailable works correctly
@@ -66,6 +88,9 @@ class SysvSemaphoreManagerTest extends TestCase
         $this->assertTrue($available);
     }
 
+    /**
+     * Test remove.
+     */
     public function testRemove()
     {
         // Note: This test only validates that the method exists and returns bool
@@ -74,6 +99,9 @@ class SysvSemaphoreManagerTest extends TestCase
         $this->assertTrue(is_bool($result));
     }
 
+    /**
+     * Test with lock exception handling.
+     */
     public function testWithLockExceptionHandling()
     {
         // Test that withLock properly handles exceptions in callback
@@ -86,6 +114,9 @@ class SysvSemaphoreManagerTest extends TestCase
         $this->semaphoreManager->withLock($callback);
     }
 
+    /**
+     * Test acquire with nowait.
+     */
     public function testAcquireWithNowait()
     {
         // Test acquire with nowait parameter

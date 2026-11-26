@@ -1,47 +1,74 @@
 <?php
 
+declare(strict_types=1);
+
 namespace App\Models;
 
 use Atom\Atom;
 use Atom\Model;
-use Atom\DataBase\Attr\Cast;
 
-class LoginForm extends Model
+final class LoginForm extends Model
 {
     public string $email = '';
     public string $password = '';
 
+    /**
+     * @return array<int|string, string>
+     */
     public static function attributes(): array
     {
-        return ['id', 'userUuid', 'isOnline', 'username', 'email', 'firstName', 'lastName', 'country', 'language', 'accountTypeId', 'roleId', 'statusId', 'avatarUri', 'registrationIpId', 'lastLoginIpId', 'createdAt', 'updatedAt', 'lastActiveAt', 'lastLoginAt', 'password' => 'password_hash'];
+        return [
+            'id',
+            'userUuid',
+            'isOnline',
+            'username',
+            'email',
+            'firstName',
+            'lastName',
+            'country',
+            'language',
+            'accountTypeId',
+            'roleId',
+            'statusId',
+            'avatarUri',
+            'registrationIpId',
+            'lastLoginIpId',
+            'createdAt',
+            'updatedAt',
+            'lastActiveAt',
+            'lastLoginAt',
+            'password' => 'password_hash',
+        ];
     }
 
-    public function rules()
+    #[\Override]
+    public function rules(): array
     {
         return [
-            'email' => [self::RULE_REQUIRED],
+            'email' => [self::RULE_REQUIRED, self::RULE_EMAIL],
             'password' => [self::RULE_REQUIRED],
         ];
     }
 
-    public function labels()
+    #[\Override]
+    public function labels(): array
     {
         return [
             'email' => 'Your Email address',
-            'password' => 'Password'
+            'password' => 'Password',
         ];
     }
 
-    public function login()
+    public function login(): bool
     {
         $user = User::findOne(['email' => $this->email]);
 
-        if (!$user) {
+        if (!$user instanceof User) {
             $this->addError('email', 'User does not exist with this email address');
             return false;
         }
 
-        if (!password_verify($this->password, $user->password)) {
+        if (!\password_verify($this->password, $user->password)) {
             $this->addError('password', 'Password is incorrect');
             return false;
         }

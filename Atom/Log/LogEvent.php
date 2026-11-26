@@ -4,97 +4,130 @@ declare(strict_types=1);
 
 namespace Atom\Log;
 
-use Atom\Account\Account;
-use Atom\Component\Cache\CacheWrapper;
 use Atom\DataBase\AutoMapped;
 use Atom\DataBase\Database;
 use Atom\DateTime\DateTime;
 use Atom\Security\SafetyDataStructureVariable;
+use DateTimeImmutable;
+use InvalidArgumentException;
+use RuntimeException;
+use Throwable;
 
-final class LogEvent
+/**
+ * Audit & system event logger persisting structured events into `system_events` with deterministic cleanup.
+ */
+final readonly class LogEvent
 {
+    private const array SENSITIVE_KEYS = [
+        'password',
+        'secret',
+        'token',
+        'api_key',
+        'apikey',
+        'authorization',
+        'cookie',
+    ];
+
     /**
-     * Returns an array of column names mapped to their respective
-     * @return array
+     * @return array<string, string>
      */
     protected static function attributesTypes(): array
     {
         return [
-            'ip' => "binary",
-            'event_time' => "datetime",
-            'metadata' => "json",
-            'event_type' => "string",
-            'user_id' => "integer" ,
-            'entity_id' => "integer" ,
-            'new_values' => "json",
-            'old_values' => "json",
+            'ip' => 'binary',
+            'event_time' => 'datetime',
+            'metadata' => 'json',
+            'event_type' => 'string',
+            'user_id' => 'integer',
+            'entity_id' => 'integer',
+            'new_values' => 'json',
+            'old_values' => 'json',
         ];
     }
 
     public function __construct(
-        private readonly Database $database,
-        private readonly T4LOG $log,
-        private readonly DateTime $datetime,
-        private readonly SafetyDataStructureVariable $cache,
-        private readonly bool $account,
-        private readonly int $idUser,
-        private readonly int $connectionIpId,
-        private readonly int $serverId,
-        private readonly string $tableName = 'system_events',
-    ) {
-    }
+        private Database $database,
+        private T4LOG $log,
+        private DateTime $datetime,
+        protected SafetyDataStructureVariable $cache,
+        private bool $account,
+        private int $idUser,
+        private int $connectionIpId,
+        private int $serverId,
+        private string $tableName = 'system_events',
+    ) {}
 
     /**
-     * Adds an event to the database.
-     *
-     * @param array<string, mixed> $context Optional additional event data.
-     *
-     * @return int The inserted row ID.
+     * @param array<string, mixed>|null $newValues
+     * @param array<string, mixed>|null $oldValues
+     * @param array<string, mixed>|null $metadata
      */
     public function add(
-        string $entityType, // server, post, user, file, ban, comment, etc.
+        string $entityType,
         int $eventTypeId,
         int $severityId,
         int $actorTypeId,
         string $description,
-        ?string $actorName = null, // actor_name
-        ?int $entityId = null, // entity_id
-        ?array $newValues = null, // json
-        ?array $oldValues = null, // json
-        ?array $metadata = null, // json
+        ?string $actorName = null,
+        ?int $entityId = null,
+        ?array $newValues = null,
+        ?array $oldValues = null,
+        ?array $metadata = null,
     ): int {
-        $this->verifyData($entityType, $eventTypeId, $severityId, $actorTypeId, $description, $actorName, $entityId, $newValues, $oldValues, $metadata);
+        $this->verifyData(
+            $entityType,
+            $eventTypeId,
+            $severityId,
+            $actorTypeId,
+            $description,
+            $actorName,
+            $entityId,
+            $newValues,
+            $oldValues,
+            $metadata,
+        );
 
         try {
-            $normalizeData = self::dataStructure($entityType, $eventTypeId, $severityId, $actorTypeId, $description, $actorName, $entityId, $newValues, $oldValues, $metadata);
+            $normalizeData = $this->dataStructure(
+                $entityType,
+                $eventTypeId,
+                $severityId,
+                $actorTypeId,
+                $description,
+                $actorName,
+                $entityId,
+                $newValues,
+                $oldValues,
+                $metadata,
+            );
 
-            $mapKeysToValues = [];
-            foreach ($normalizeData as $key => $value) {
-                $mapKeysToValues[$key] = $key;
-            }
-
+            $keys = \array_keys($normalizeData);
+            $mapKeysToValues = \array_combine($keys, $keys);
             $attributesToBindsProperty = $this->database->attributesToBindsProperty($mapKeysToValues);
 
+            $types = self::attributesTypes();
             foreach ($normalizeData as $key => $value) {
-                if (!isset(self::attributesTypes()[$key])) {
-                    continue;
+                if (isset($types[$key])) {
+                    $normalizeData[$key] = AutoMapped::mapValueFromPHP($value, $types[$key]);
                 }
-
-                $normalizeData[$key] = AutoMapped::mapValueFromPHP($value, self::attributesTypes()[$key]);
             }
 
-            $insert = $this->database->insertInto($this->tableName)->values($attributesToBindsProperty)->setParameters($normalizeData);
+            $insert = $this->database
+                ->insertInto($this->tableName)
+                ->values($attributesToBindsProperty)
+                ->setParameters($normalizeData);
 
             $statement = $insert->executeQuery();
-
-            if ($statement->rowCount() === 0) {
-                throw new \Exception("Connection saving failed");
+            try {
+                if ($statement->rowCount() === 0) {
+                    throw new RuntimeException('Event saving failed');
+                }
+            } finally {
+                $statement->free();
             }
 
-            $statement->free();
-
-            return (int)$this->database->lastInsertId();
-        } catch (\Throwable $e) {
+            return (int) $this->database->lastInsertId();
+        } catch (Throwable $e) {
             $this->log->error('Failed to store event.', [
                 'event_type_id' => $eventTypeId,
                 'severity_id' => $severityId,
@@ -103,62 +136,91 @@ final class LogEvent
                 'actor_type_id' => $actorTypeId,
                 'actor_name' => $actorName,
                 'description' => $description,
-                'old_values' => $oldValues,
-                'new_values' => $newValues,
-                'metadata' => $metadata,
-                'exception' => $e
+                'old_values' => self::redactArray($oldValues),
+                'new_values' => self::redactArray($newValues),
+                'metadata' => self::redactArray($metadata),
+                'exception' => $e,
             ]);
 
             throw $e;
         }
     }
 
-    private function now(): \DateTimeImmutable
+    /**
+     * @param array<string, mixed>|null $payload
+     * @return array<string, mixed>|null
+     */
+    private static function redactArray(?array $payload): ?array
     {
-        return new \DateTimeImmutable('now', $this->datetime->getTimezone());
+        if ($payload === null) {
+            return null;
+        }
+
+        $clean = [];
+        foreach ($payload as $key => $val) {
+            $lowKey = \strtolower((string) $key);
+            $isSensitive = \array_any(
+                self::SENSITIVE_KEYS,
+                static fn(string $token): bool => \str_contains($lowKey, $token)
+            );
+            $clean[$key] = $isSensitive ? '[REDACTED]' : (\is_array($val) ? self::redactArray($val) : $val);
+        }
+
+        return $clean;
+    }
+
+    protected function now(): DateTimeImmutable
+    {
+        return new DateTimeImmutable('now', $this->datetime->getTimezone());
     }
 
     private function assertName(?string $name, string $eventType): void
     {
-        if (($name !== null) && (trim($name) === '')) {
-            throw new \InvalidArgumentException("Name of event ({$eventType}) must not be empty.");
+        if ($name !== null && \trim($name) === '') {
+            throw new InvalidArgumentException("Name of event ({$eventType}) must not be empty.");
         }
     }
 
-    private function assertUserId(int $userId): void
+    protected function assertUserId(int $userId): void
     {
         if ($userId <= 0) {
-            throw new \InvalidArgumentException('User ID must be greater than zero.');
+            throw new InvalidArgumentException('User ID must be greater than zero.');
         }
     }
 
     private function assertId(?int $number, string $eventName): void
     {
-        if (($number !== null) && (empty($number) || $number <= 0)) {
-            throw new \InvalidArgumentException("Event ({$eventName}) ID must be greater than zero.");
-        };
-    }
-
-    private function assertArray(?array $array, string $eventName): void
-    {
-        if (($array !== null) && !is_array($array)) {
-            throw new \InvalidArgumentException("Event ({$eventName}) must be an array.");
+        if ($number !== null && $number <= 0) {
+            throw new InvalidArgumentException("Event ({$eventName}) ID must be greater than zero.");
         }
     }
 
+    /**
+     * @param array<string, mixed>|null $array
+     */
+    private function assertArray(?array $array, string $eventName): void
+    {
+        // Typed nullable array already guaranteed by PHP 8.6 strict_types; kept for reflection/API compatibility.
+    }
 
     /**
      * @param array<string, mixed> $context
      */
-    private function encodeContext(array $context): ?string
+    protected function encodeContext(array $context): ?string
     {
         if ($context === []) {
             return null;
         }
 
-        return json_encode($context, JSON_THROW_ON_ERROR | JSON_UNESCAPED_UNICODE);
+        return \json_encode($context, \JSON_THROW_ON_ERROR | \JSON_UNESCAPED_UNICODE);
     }
 
+    /**
+     * @param array<string, mixed>|null $newValues
+     * @param array<string, mixed>|null $oldValues
+     * @param array<string, mixed>|null $metadata
+     * @return array<string, mixed>
+     */
     private function dataStructure(
         string $entityType,
         int $eventTypeId,
@@ -166,55 +228,56 @@ final class LogEvent
         int $actorTypeId,
         string $description,
         ?string $actorName = null,
-        ?int $entityId = null, 
+        ?int $entityId = null,
         ?array $newValues = null,
         ?array $oldValues = null,
-        ?array $metadata = null
-    ) {
-        $datetime = $this->datetime->now()->toSQL();
-        $actorID = $this->account ? 1 : $this->idUser;
-        $isAddFromServer = $this->account ? 1 : 0;
-
+        ?array $metadata = null,
+    ): array {
         return [
-            'event_time' => $datetime,
+            'event_time' => $this->datetime->now()->toSQL(),
             'event_type_id' => $eventTypeId,
             'severity_id' => $severityId,
             'entity_type' => $entityType,
             'entity_id' => $entityId,
             'actor_type_id' => $actorTypeId,
-            'actor_id' => $actorID,
+            'actor_id' => $this->account ? 1 : $this->idUser,
             'actor_name' => $actorName,
             'ip_address_id' => $this->connectionIpId,
             'description' => $description,
             'old_values' => $oldValues,
             'new_values' => $newValues,
             'server_id' => $this->serverId,
-            'is_add_from_server' => $isAddFromServer,
+            'is_add_from_server' => $this->account ? 1 : 0,
             'metadata' => $metadata,
         ];
     }
 
-    private function verifyData (
+    /**
+     * @param array<string, mixed>|null $newValues
+     * @param array<string, mixed>|null $oldValues
+     * @param array<string, mixed>|null $metadata
+     */
+    private function verifyData(
         string $entityType,
         int $eventTypeId,
         int $severityId,
         int $actorTypeId,
         string $description,
         ?string $actorName = null,
-        ?int $entityId = null, 
+        ?int $entityId = null,
         ?array $newValues = null,
         ?array $oldValues = null,
-        ?array $metadata = null
+        ?array $metadata = null,
     ): void {
-        $this->assertName($entityType, "entityType");
-        $this->assertId($eventTypeId, "eventTypeId");
-        $this->assertId($severityId, "severityId");
-        $this->assertId($actorTypeId, "actorTypeId");
-        $this->assertName($description, "description");
-        $this->assertName($actorName, "actorName");
-        $this->assertId($entityId, "entityId");
-        $this->assertArray($newValues, "newValues");
-        $this->assertArray($oldValues, "oldValues");
-        $this->assertArray($metadata, "metadata");
+        $this->assertName($entityType, 'entityType');
+        $this->assertId($eventTypeId, 'eventTypeId');
+        $this->assertId($severityId, 'severityId');
+        $this->assertId($actorTypeId, 'actorTypeId');
+        $this->assertName($description, 'description');
+        $this->assertName($actorName, 'actorName');
+        $this->assertId($entityId, 'entityId');
+        $this->assertArray($newValues, 'newValues');
+        $this->assertArray($oldValues, 'oldValues');
+        $this->assertArray($metadata, 'metadata');
     }
 }

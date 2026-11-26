@@ -1,103 +1,110 @@
 <?php
 
+declare(strict_types=1);
+
 namespace App\Controllers;
 
+use App\Models\LoginForm;
+use App\Models\User;
 use Atom\Atom;
 use Atom\Component\WebPush\WebPushAdapter;
 use Atom\Controller;
-use Atom\Middlewares\AuthMiddleware;
+use Atom\FileSytem\BrowserUploadManager;
 use Atom\HttpFoundation\Request;
 use Atom\HttpFoundation\Response;
-use App\Models\LoginForm;
-use App\Models\User;
+use Atom\Middlewares\AuthMiddleware;
 
-class SiteController extends Controller
+final class SiteController extends Controller
 {
     public function __construct()
     {
         $this->registerMiddleware(new AuthMiddleware(['profile']));
     }
 
-    public function home()
+    public function home(): string
     {
         return $this->render('home', [
             'name' => 'The Atom!',
-            'title' => "The Atom Start!"
+            'title' => 'The Atom Start!',
         ]);
     }
 
-    public function login(Request $request)
+    public function login(Request $request, Response $response): string
     {
-        echo '<pre>';
-        var_dump($request->getBody(), $request->getRouteParam('id'));
-        echo '</pre>';
         $loginForm = new LoginForm();
-        if ($request->getMethod() === 'post') {
-            $loginForm->loadData($request->getBody());
+        if ($request->isPost()) {
+            $request->fillModel($loginForm);
             if ($loginForm->validate() && $loginForm->login()) {
-                Atom::$app->response->redirect(Atom::$ROOT_URI);
-                return;
+                $response->redirect(Atom::$ROOT_URI);
+                return '';
             }
         }
+
         $this->setLayout('auth');
         return $this->render('login', [
-            'model' => $loginForm
+            'model' => $loginForm,
         ]);
     }
 
-    public function register(Request $request)
+    public function register(Request $request, Response $response): string
     {
         $registerModel = new User();
-        if ($request->getMethod() === 'post') {
-            $registerModel->loadData($request->getBody());
+        if ($request->isPost()) {
+            $request->fillModel($registerModel);
             if ($registerModel->validate() && $registerModel->save()) {
                 Atom::$app->session->setFlash('success', 'Thanks for registering');
-                Atom::$app->response->redirect(Atom::$ROOT_URI);
+                $response->redirect(Atom::$ROOT_URI);
                 return 'Show success page';
             }
         }
+
         $this->setLayout('auth');
         return $this->render('register', [
-            'model' => $registerModel
+            'model' => $registerModel,
         ]);
     }
 
-    public function logout(Request $request, Response $response)
+    public function logout(Request $request, Response $response): string
     {
         Atom::$app->account->logout();
         $response->redirect(Atom::$ROOT_URI);
+        return '';
     }
 
-    public function contact()
+    public function contact(): string
     {
         return $this->render('contact');
     }
 
-    public function profile()
+    public function profile(): string
     {
         return $this->render('profile');
     }
 
-    public function profileWithId(Request $request)
+    public function profileWithId(Request $request, Response $response): string
     {
-        echo '<pre>';
-        var_dump($request->getBody());
-        echo '</pre>';
+        $response->setHeader('Content-Type', 'application/json; charset=utf-8');
+        return (string) \json_encode([
+            'body' => $request->getBody(),
+            'routeParams' => $request->getRouteParams(),
+        ], \JSON_UNESCAPED_UNICODE | \JSON_PRETTY_PRINT);
     }
 
-    public function uploads(Request $request) {
+    public function uploads(Request $request): string
+    {
         return $this->render('upload');
     }
-    
-    public function uploadsMulti(Request $request) {
+
+    public function uploadsMulti(Request $request): string
+    {
         return $this->render('uploadMulti');
     }
 
-    public function upload(Request $request)
+    public function upload(Request $request, Response $response): string
     {
-        $uploader = new \Atom\FileSytem\BrowserUploadManager([
-            'upload_dir' => __DIR__ . '/../../runtime/tempUpload/',
-            'temp_dir' => __DIR__ . '/../../runtime/temp/',
+        $uploader = new BrowserUploadManager([
+            'upload_dir' => \dirname(__DIR__, 2) . '/runtime/tempUpload',
+            'temp_dir' => \dirname(__DIR__, 2) . '/runtime/temp',
             'max_file_size' => 20 * 1024 * 1024,
             'max_total_size' => 50 * 1024 * 1024,
             'allowed_extensions' => ['jpg', 'jpeg', 'png', 'pdf', 'zip'],
@@ -106,186 +113,146 @@ class SiteController extends Controller
             'max_files' => 5,
         ]);
 
+        $body = $request->getBody();
         $result = $uploader->uploadMultipleFromField('file', [
-            'title' => $_POST['title'] ?? 'No Title',
-        ]);
+            'title' => (string) ($body['title'] ?? 'No Title'),
+        ], $request->getFiles());
 
-        header('Content-Type: application/json; charset=utf-8');
-        echo json_encode($result, JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT);
-        exit();
+        $response->setHeader('Content-Type', 'application/json; charset=utf-8');
+        return (string) \json_encode($result, \JSON_UNESCAPED_UNICODE | \JSON_PRETTY_PRINT);
     }
 
-    public function uploadMulti(Request $request)
+    public function uploadMulti(Request $request, Response $response): string
     {
-        $uploader = new \Atom\FileSytem\BrowserUploadManager([
-            'upload_dir' => __DIR__ . '/../../runtime/tempUpload/',
-            'temp_dir' => __DIR__ . '/../../runtime/temp/',
+        $uploader = new BrowserUploadManager([
+            'upload_dir' => \dirname(__DIR__, 2) . '/runtime/tempUpload',
+            'temp_dir' => \dirname(__DIR__, 2) . '/runtime/temp',
             'allow_chunked' => true,
             'chunk_size' => 100 * 1024,
         ]);
 
-        $action = $_GET['action'] ?? '';
+        $query = $request->getQueryParams();
+        $post = $request->getBody();
+        $action = (string) ($query['action'] ?? '');
 
-        header('Content-Type: application/json; charset=utf-8');
+        $payload = match ($action) {
+            'start' => $uploader->startChunkSession(
+                (string) ($post['filename'] ?? 'file.bin'),
+                (int) ($post['total_size'] ?? 0),
+                (int) ($post['total_chunks'] ?? 0),
+                ['title' => (string) ($post['title'] ?? '')],
+            ),
+            'chunk' => $uploader->saveChunkFromRequest(
+                (string) ($post['upload_id'] ?? ''),
+                $post,
+                $request->getFiles(),
+            ),
+            'finalize' => $uploader->finalizeChunk((string) ($post['upload_id'] ?? '')),
+            'pause' => $uploader->pause((string) ($post['upload_id'] ?? '')),
+            'resume' => $uploader->resume((string) ($post['upload_id'] ?? '')),
+            'cancel' => $uploader->cancel((string) ($post['upload_id'] ?? '')),
+            'status' => $uploader->status((string) ($query['upload_id'] ?? '')),
+            default => ['ok' => false, 'error' => 'Unknown action.'],
+        };
 
-        switch ($action) {
-            case 'start':
-                echo json_encode(
-                    $uploader->startChunkSession(
-                        $_POST['filename'] ?? 'file.bin',
-                        (int)($_POST['total_size'] ?? 0),
-                        (int)($_POST['total_chunks'] ?? 0),
-                        ['title' => $_POST['title'] ?? '']
-                    ),
-                    JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT
-                );
-                break;
-
-            case 'chunk':
-                echo json_encode(
-                    $uploader->saveChunkFromRequest($_POST['upload_id'] ?? ''),
-                    JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT
-                );
-                break;
-
-            case 'finalize':
-                echo json_encode(
-                    $uploader->finalizeChunk($_POST['upload_id'] ?? ''),
-                    JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT
-                );
-                break;
-
-            case 'pause':
-                echo json_encode($uploader->pause($_POST['upload_id'] ?? ''), JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT);
-                break;
-
-            case 'resume':
-                echo json_encode($uploader->resume($_POST['upload_id'] ?? ''), JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT);
-                break;
-
-            case 'cancel':
-                echo json_encode($uploader->cancel($_POST['upload_id'] ?? ''), JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT);
-                break;
-
-            case 'status':
-                echo json_encode($uploader->status($_GET['upload_id'] ?? ''), JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT);
-                break;
-
-            default:
-                echo json_encode(['ok' => false, 'error' => 'Unknown action.'], JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT);
-        }
-        exit();
+        $response->setHeader('Content-Type', 'application/json; charset=utf-8');
+        return (string) \json_encode($payload, \JSON_UNESCAPED_UNICODE | \JSON_PRETTY_PRINT);
     }
 
-    public function subscribe () {
-        header('Content-Type: application/json; charset=utf-8');
+    public function subscribe(Request $request, Response $response): string
+    {
+        $response->setHeader('Content-Type', 'application/json; charset=utf-8');
 
-        $raw = file_get_contents('php://input');
-
-        if (!$raw) {
-            http_response_code(400);
-
-            echo json_encode([
-                'success' => false,
-                'error' => 'Empty body',
-            ]);
-
-            exit;
+        $raw = $request->getRawBody();
+        if ($raw === '') {
+            $response->statusCode(400);
+            return (string) \json_encode(['success' => false, 'error' => 'Empty body']);
         }
 
-        $data = json_decode($raw, true);
-
-        if (!$data) {
-            http_response_code(400);
-
-            echo json_encode([
-                'success' => false,
-                'error' => 'Invalid JSON',
-            ]);
-
-            exit;
+        $data = \json_decode($raw, true);
+        if (!\is_array($data)) {
+            $response->statusCode(400);
+            return (string) \json_encode(['success' => false, 'error' => 'Invalid JSON']);
         }
 
-        $subscriptionsFile = __DIR__ . '/../../runtime/temp/subscriptions.json';
+        $subscriptionsFile = \dirname(__DIR__, 2) . '/runtime/temp/subscriptions.json';
+        $subscriptionsDir = \dirname($subscriptionsFile);
+        if (!\is_dir($subscriptionsDir)) {
+            \mkdir($subscriptionsDir, 0775, true);
+        }
 
         $list = [];
-
-        if (is_file($subscriptionsFile)) {
-            $list = json_decode(
-                file_get_contents($subscriptionsFile),
-                true
-            ) ?: [];
+        if (\is_file($subscriptionsFile)) {
+            $existing = \file_get_contents($subscriptionsFile);
+            $decoded = $existing !== false ? \json_decode($existing, true) : null;
+            $list = \is_array($decoded) ? $decoded : [];
         }
 
-        $exists = false;
-
-        foreach ($list as $item) {
-            if (($item['endpoint'] ?? null) === ($data['endpoint'] ?? null)) {
-                $exists = true;
-                break;
-            }
-        }
+        $endpoint = $data['endpoint'] ?? null;
+        $exists = \array_any(
+            $list,
+            static fn(mixed $item): bool => \is_array($item) && ($item['endpoint'] ?? null) === $endpoint,
+        );
 
         if (!$exists) {
             $list[] = $data;
-
-            file_put_contents(
+            \file_put_contents(
                 $subscriptionsFile,
-                json_encode(
-                    $list,
-                    JSON_PRETTY_PRINT |
-                    JSON_UNESCAPED_UNICODE |
-                    JSON_UNESCAPED_SLASHES
-                )
+                (string) \json_encode($list, \JSON_PRETTY_PRINT | \JSON_UNESCAPED_UNICODE | \JSON_UNESCAPED_SLASHES),
+                \LOCK_EX,
             );
         }
 
-        echo json_encode([
-            'success' => true,
-        ]);
-
-        exit();
+        return (string) \json_encode(['success' => true]);
     }
 
-    public function push () {
-        $subscriptions = json_decode(
-            file_get_contents(__DIR__ . '/../../runtime/temp/subscriptions.json'),
-            true
-        );
+    public function push(Request $request, Response $response): string
+    {
+        $subscriptionsFile = \dirname(__DIR__, 2) . '/runtime/temp/subscriptions.json';
+        if (!\is_file($subscriptionsFile)) {
+            return 'No subscriptions registered.';
+        }
+
+        $raw = \file_get_contents($subscriptionsFile);
+        $subscriptions = $raw !== false ? \json_decode($raw, true) : null;
+        if (!\is_array($subscriptions)) {
+            return 'Invalid subscriptions store.';
+        }
+
+        $appCfg = Atom::$app->config->get('app');
+        $webPushCfg = \is_array($appCfg['webPush'] ?? null) ? $appCfg['webPush'] : [];
 
         $webPush = new WebPushAdapter([
             'VAPID' => [
-                'subject' => Atom::$app->config->get("app")['webPush']['mail'],
-                'publicKey' => Atom::$app->config->get("app")['webPush']['publicKey'],
-                'privateKey' => Atom::$app->config->get("app")['webPush']['privateKey'],
+                'subject' => (string) ($webPushCfg['mail'] ?? ''),
+                'publicKey' => (string) ($webPushCfg['publicKey'] ?? ''),
+                'privateKey' => (string) ($webPushCfg['privateKey'] ?? ''),
             ],
         ]);
 
         foreach ($subscriptions as $item) {
-
+            if (!\is_array($item)) {
+                continue;
+            }
             $subscription = WebPushAdapter::subscription($item);
-
-            $webPush->sendText (
+            $webPush->queueText(
                 $subscription,
                 'Push it works 🚀',
                 'This is a test notification (web push).',
-                ['url' => 'https://example.com']
+                ['url' => 'https://example.com'],
             );
         }
 
+        $lines = [];
         foreach ($webPush->flush() as $report) {
-
-            if ($report->isSuccess()) {
-                echo 'OK' . PHP_EOL;
-            } else {
-                echo $report->getReason() . PHP_EOL;
-            }
+            $lines[] = $report->isSuccess() ? 'OK' : $report->getReason();
         }
 
-        exit();
+        return \implode(\PHP_EOL, $lines);
     }
 
-    public function webPush () {
+    public function webPush(): string
+    {
         return $this->render('webPush');
     }
 }

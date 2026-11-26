@@ -6,8 +6,8 @@ namespace Atom\Exception\Trait\Generative;
 
 trait GenerativeExceptionTrait
 {
-    public function __construct(string $format, ...$params)
+    public function __construct(string $format, string|int|float ...$params)
     {
-        $this->message = \sprintf($format, ...$params);
+        parent::__construct(\sprintf($format, ...$params), (int) $this->code);
     }
 }

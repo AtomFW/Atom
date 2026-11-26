@@ -4,11 +4,16 @@ declare(strict_types=1);
 
 namespace Atom\Exception;
 
-use Atom\Atom;
+use Exception;
 
-// Exception class for I/O related errors
-class IOException extends \Exception
+/**
+ * General I/O exception in root exception namespace.
+ */
+class IOException extends Exception
 {
-    protected $message = 'You don\'t have permission to access this page';
-    protected $code = 403;
+    /** @var string */
+    protected $message = 'An I/O operation error occurred.';
+
+    /** @var int */
+    protected $code = 500;
 }

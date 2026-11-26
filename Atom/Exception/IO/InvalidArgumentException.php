@@ -4,15 +4,13 @@ declare(strict_types=1);
 
 namespace Atom\Exception\IO;
 
-/**
- * InvalidArgumentException
- *
- * @package Atom\Exception\IO
- */
-class InvalidArgumentException extends \Exception implements
-    \Stringable,
-    \Throwable
+use Exception;
+
+final class InvalidArgumentException extends Exception
 {
-    protected $message = 'A I/O invalid argument error occurred.';
+    /** @var string */
+    protected $message = 'An I/O invalid argument error occurred.';
+
+    /** @var int */
     protected $code = 601;
 }

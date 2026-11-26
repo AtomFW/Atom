@@ -6,24 +6,15 @@ namespace Atom\Exception\IO\Generative;
 
 use Atom\Exception\Interface\Generative\GenerativeExceptionInterface;
 use Atom\Exception\Trait\Generative\GenerativeExceptionTrait;
+use Exception;
 
-/**
- * FileNotFoundGenerativeException
- *
- * @package Atom\Exception\IO\Generative
- */
-final class FileNotFoundGenerativeException extends \Exception implements
-    GenerativeExceptionInterface,
-    \Stringable,
-    \Throwable
+final class FileNotFoundGenerativeException extends Exception implements GenerativeExceptionInterface
 {
     use GenerativeExceptionTrait;
 
+    /** @var string */
     protected $message = 'A file could not be found.';
-    protected $code = 604;
 
-    public function __construct(string $format, ...$params)
-    {
-        $this->message = \sprintf($format, ...$params);
-    }
+    /** @var int */
+    protected $code = 604;
 }

@@ -4,28 +4,28 @@ declare(strict_types=1);
 
 namespace Atom\Component\Scheme;
 
-use Atom\Component\Scheme\SchemaWrapper;
-
 /**
- * Generate Schema.org JSON-LD script block
+ * Generates Schema.org WebPage JSON-LD metadata safely without undefined property warnings.
  */
-final class SchemeGenerate
+final readonly class SchemeGenerate
 {
-
     /**
-     * Auto generate schema.org JSON-LD script block
-     *
-     * @param array $option - The options for generating schema.org
-     * @param object $data - The data for generating schema.org
-     * @return string - The generated schema.org JSON-LD script block
+     * @param array<string, mixed> $option
      */
     public static function autoGenerate(array $option, object $data): string
     {
+        $uri = \property_exists($data, 'uri') ? (string) ($data->uri ?? '') : '';
+        $imageBase = \property_exists($data, 'image') ? (string) ($data->image ?? '') : '';
+        $iconSuffix = isset($option['iconSvg']) ? (string) $option['iconSvg'] : '';
+        $lang = \property_exists($data, 'lang') ? (string) ($data->lang ?? '') : '';
+        $title = \property_exists($data, 'title') ? (string) ($data->title ?? '') : '';
+
         $scheme = SchemaWrapper::webPage()
-        ->url($data->uri)
-        ->image($data->image . $option["iconSvg"])
-        ->inLanguage($data->lang)
-        ->name($data->title);
+            ->url($uri)
+            ->image($imageBase . $iconSuffix)
+            ->inLanguage($lang)
+            ->name($title);
+
         return $scheme->toJsonLd();
     }
 }

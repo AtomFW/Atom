@@ -4,32 +4,38 @@ declare(strict_types=1);
 
 namespace Atom\Head;
 
-use Atom\Log\T4LOG;
-use Atom\Head\Enum\OpenGraphTag;
+use Atom\Filter\InputFilter;
 use Atom\Head\Enum\ColorScheme;
+use Atom\Head\Enum\OpenGraphTag;
+use Stringable;
 
 /**
- * Head class
- *
- * This class is responsible for managing the HTML head section of a web page.
- *
- * It provides methods to set the title, add CSS and JavaScript files, add meta tags,
- * add link tags, add property tags, add generator tags and set other head section
- * attributes.
- *
- * @final
+ * Fluent HTML `<head>` section builder with XSS-safe attribute escaping.
  */
-final class Head
+final class Head implements Stringable
 {
-    public const VERSION = '1.0';
+    public const string VERSION = '1.1';
 
     private string $title = '';
+
+    /** @var list<string> */
     private array $css = [];
+
+    /** @var list<string> */
     private array $js = [];
+
+    /** @var list<string> */
     private array $meta = [];
+
+    /** @var list<string> */
     private array $link = [];
+
+    /** @var list<string> */
     private array $property = [];
+
+    /** @var list<string> */
     private array $generator = [];
+
     private string $keywords = '';
     private string $author = '';
     private string $description = '';
@@ -44,30 +50,13 @@ final class Head
     private string $creationdate = '';
     private string $copyright = '';
     private string $colorScheme = '';
+
+    /** @var list<string> */
     private array $apple = [];
+
+    /** @var list<string> */
     private array $ms = [];
 
-    // public function __construct(private T4LOG $logger)
-    // {
-    // }
-
-    /**
-     * Add a node to the head.
-     *
-     * The node can either be a standalone node (i.e. `<meta>`) or a node with a closing tag (i.e. `<title>`).
-     *
-     * If the node has a closing tag, the content of the node should be set to null.
-     *
-     * @param string $nodeName The name of the node (i.e. "meta", "title", etc...).
-     * @param string|null $tagName The value of the name attribute of the node.
-     * @param string|null $content The content of the node.
-     * @param string $nameAttributePrefix The prefix of the name attribute of the node.
-     * @param string $nameAttributeSubPrefix The sub prefix of the name attribute of the node.
-     * @param string|null $type The value of the type attribute of the node.
-     * @param string|null $typeContent The content of the type attribute of the node.
-     * @param bool $endTagNode Whether the node has a closing tag.
-     * @return string The HTML string of the node.
-     */
     protected function addNode(
         string $nodeName,
         ?string $tagName,
@@ -76,1236 +65,449 @@ final class Head
         string $nameAttributeSubPrefix = 'content',
         ?string $type = null,
         ?string $typeContent = null,
-        bool $endTagNode = false
+        bool $endTagNode = false,
+        bool $rawInnerContent = false,
     ): string {
+        $safeNode = \preg_replace('/[^a-zA-Z0-9\-]/', '', $nodeName) ?: 'meta';
+        $safePrefix = \preg_replace('/[^a-zA-Z0-9\-_:]/', '', $nameAttributePrefix) ?: 'name';
+        $safeSubPrefix = \preg_replace('/[^a-zA-Z0-9\-_:]/', '', $nameAttributeSubPrefix) ?: 'content';
+
         if ($endTagNode) {
-            $add = '';
-            if ($tagName !== null) {
-                $add = "{$nameAttributePrefix}=\"{$tagName}\"";
-            }
-            return "<{$nodeName} {$add}>{$content}</{$nodeName}>";
+            $add = $tagName !== null
+                ? "{$safePrefix}=\"" . InputFilter::escapeHtml($tagName) . '"'
+                : '';
+            $body = $content === null
+                ? ''
+                : ($rawInnerContent ? $content : InputFilter::escapeHtml($content));
+
+            return "<{$safeNode} {$add}>{$body}</{$safeNode}>";
         }
+
         $add = '';
         if ($type !== null && $typeContent !== null) {
-            $add = "{$type}=\"{$typeContent}\"";
+            $safeTypeAttr = \preg_replace('/[^a-zA-Z0-9\-_:]/', '', $type) ?: 'type';
+            $add = "{$safeTypeAttr}=\"" . InputFilter::escapeHtml($typeContent) . '"';
         }
         if ($content !== null) {
-            $add .= " {$nameAttributeSubPrefix}=\"{$content}\"";
+            $add .= " {$safeSubPrefix}=\"" . InputFilter::escapeHtml($content) . '"';
         }
 
-        return "<{$nodeName} {$nameAttributePrefix}=\"{$tagName}\" {$add}>";
+        $safeTagVal = $tagName !== null ? InputFilter::escapeHtml($tagName) : '';
+        return "<{$safeNode} {$safePrefix}=\"{$safeTagVal}\" {$add}>";
     }
 
-    /**
-     * Meta return method
-     *
-     * This method returns a meta node HTML string.
-     *
-     * @param string $name The name of the meta node.
-     * @param string $content The content of the meta node.
-     * @return string The HTML string of the meta node.
-     */
     protected function metaReturn(string $name, string $content): string
     {
-        return $this->addNode("meta", $name, $content);
+        return $this->addNode('meta', $name, $content);
     }
 
-    /**
-     * Meta method
-     *
-     * This method sets a meta node with the given name and content.
-     *
-     * @param string $name The name of the meta node.
-     * @param string $content The content of the meta node.
-     * @return Head The current Head object.
-     */
-    public function meta(string $name, string $content): Head
+    public function meta(string $name, string $content): self
     {
         $this->meta[] = $this->metaReturn($name, $content);
-
         return $this;
     }
 
-    /**
-     * Sets a property node.
-     *
-     * A property node is a type of meta node that is used to define
-     * properties of the HTML document. It is commonly used to define
-     * Open Graph properties.
-     *
-     * @param string $name The name of the property node.
-     * @param string $content The content of the property node.
-     * @return Head The current Head object.
-     */
-    public function property(string $name, string $content): Head
+    public function property(string $name, string $content): self
     {
-        $this->property[] = $this->addNode("meta", $name, $content, "property");
-
+        $this->property[] = $this->addNode('meta', $name, $content, 'property');
         return $this;
     }
 
-    /**
-     * Adds a link node to the head.
-     *
-     * A link node is used to define a resource that is used by the HTML document.
-     * It is commonly used to define stylesheets, scripts, and favicons.
-     *
-     * @param string $name The name of the link node.
-     * @param string $content The content of the link node.
-     * @param string|null $contentType The type of content the link node is referencing.
-     * @return Head The current Head object.
-     */
-    public function link(string $name, string $content, ?string $contentType): Head
+    public function link(string $name, string $content, ?string $contentType): self
     {
-        if ($name === "stylesheet") {
-            $this->css[] = $this->addNode("link", $name, $content, "rel", "href", "type", $contentType);
+        $node = $this->addNode('link', $name, $content, 'rel', 'href', 'type', $contentType);
+        if ($name === 'stylesheet') {
+            $this->css[] = $node;
         }
-        $this->link[] = $this->addNode("link", $name, $content, "rel", "href", "type", $contentType);
+        $this->link[] = $node;
 
         return $this;
     }
 
-    /**
-     * Sets an alternate link node.
-     *
-     * An alternate link node is a type of link node that is used to define
-     * an alternative representation of the HTML document. It is commonly
-     * used to define a canonical URL for the HTML document.
-     *
-     * @param string $content The content of the alternate link node.
-     * @return Head The current Head object.
-     */
-    public function alternate(string $content): Head
+    public function alternate(string $content): self
     {
-        $this->link("alternate", $content, null);
-
-        return $this;
+        return $this->link('alternate', $content, null);
     }
 
-    /**
-     * Adds a script node to the head.
-     *
-     * A script node is used to define a block of JavaScript code that is
-     * executed by the browser when the HTML document is loaded.
-     *
-     * @param string $content The content of the script node.
-     * @param bool $isLdJson Whether the script node contains JSON-LD data.
-     * @return Head The current Head object.
-     */
-    public function script(string $content, bool $isLdJson = false): Head
+    public function script(string $content, bool $isLdJson = false): self
     {
-        $type = "text/javascript";
-        if ($isLdJson) {
-            $type = "application/ld+json";
-        }
-        $this->js[] = $this->addNode("script", $type, $content, "type", "src");
-
+        $type = $isLdJson ? 'application/ld+json' : 'text/javascript';
+        $this->js[] = $this->addNode('script', $type, $content, 'type', 'src');
         return $this;
     }
 
-    /**
-     * Adds a script node with text content to the head.
-     *
-     * A script node with text content is used to define a block of JavaScript code that is
-     * executed by the browser when the HTML document is loaded.
-     *
-     * @param string $content The content of the script node.
-     * @param bool $isLdJson Whether the script node contains JSON-LD data.
-     * @return Head The current Head object.
-     */
-    public function scriptText(string $content, bool $isLdJson = false): Head
+    public function scriptText(string $content, bool $isLdJson = false): self
     {
-        $type = "text/javascript";
-        if ($isLdJson) {
-            $type = "application/ld+json";
-        }
-        $this->js[] = $this->addNode("script", $type, $content, "type", "src", endTagNode: true);
-
+        $type = $isLdJson ? 'application/ld+json' : 'text/javascript';
+        $safeInline = \str_ireplace('</script>', '<\/script>', $content);
+        $this->js[] = $this->addNode('script', $type, $safeInline, 'type', 'src', endTagNode: true, rawInnerContent: true);
         return $this;
     }
 
-    /**
-     * Adds a stylesheet node with a reference to an external CSS file to the head.
-     *
-     * A stylesheet node with a reference to an external CSS file is used to define
-     * the styles of the HTML document.
-     *
-     * @param string $content The URL of the external CSS file.
-     * @return Head The current Head object.
-     */
-    public function stylesheet(string $content): Head
+    public function stylesheet(string $content): self
     {
-        $this->link("stylesheet", $content, "text/css");
-
-        return $this;
+        return $this->link('stylesheet', $content, 'text/css');
     }
 
-    /**
-     * Adds a stylesheet node with inline CSS code to the head.
-     *
-     * A stylesheet node with inline CSS code is used to define the styles of the HTML document.
-     *
-     * @param string $content The inline CSS code.
-     * @return Head The current Head object.
-     */
-    public function stylesheetText(string $content): Head
+    public function stylesheetText(string $content): self
     {
-        $this->css[] = $this->addNode("link", "stylesheet", $content, "type", "src", endTagNode: true);
-
+        $safeCss = \str_ireplace('</style>', '', $content);
+        $this->css[] = $this->addNode('style', 'text/css', $safeCss, 'type', 'src', endTagNode: true, rawInnerContent: true);
         return $this;
     }
 
-    /**
-     * Adds a base node with a reference to an external URL to the head.
-     *
-     * A base node with a reference to an external URL is used to define the base URL
-     * of the HTML document.
-     *
-     * @param string $content The URL of the external URL.
-     * @return Head The current Head object.
-     */
-    public function base(string $content): Head
+    public function base(string $content): self
     {
-        $this->meta[] = $this->addNode("base", $content, null, "href");
-
+        $this->meta[] = $this->addNode('base', $content, null, 'href');
         return $this;
     }
-    
-    /**
-     * Adds a title node with the title of the HTML document to the head.
-     *
-     * A title node with the title of the HTML document is used to define the title of the HTML document.
-     *
-     * @param string $title The title of the HTML document.
-     *
-     * @return Head The current Head object.
-     */
-    public function title(string $title): Head
+
+    public function title(string $title): self
     {
-        $this->title = $this->addNode("title", null, $title, endTagNode: true);
-
+        $this->title = $this->addNode('title', null, $title, endTagNode: true);
         return $this;
     }
 
-    /*
-        ready tags
-    */
-
-    /**
-     * Adds a generator node to the head.
-     *
-     * A generator node is used to define the name of the software that generated the HTML document.
-     *
-     * @param string $content The name of the software that generated the HTML document.
-     *
-     * @return Head The current Head object.
-     */
-    public function generator(string $content): Head
+    public function generator(string $content): self
     {
-        $this->generator[] = $this->metaReturn("generator", $content);
-
+        $this->generator[] = $this->metaReturn('generator', $content);
         return $this;
     }
 
-    /**
-     * Adds a keywords node to the head.
-     *
-     * A keywords node is used to define the keywords of the HTML document.
-     *
-     * @param string $content The keywords of the HTML document.
-     *
-     * @return Head The current Head object.
-     */
-    public function keywords(string $content): Head
+    public function keywords(string $content): self
     {
-        $this->keywords = $this->metaReturn("keywords", $content);
-
+        $this->keywords = $this->metaReturn('keywords', $content);
         return $this;
     }
 
-    /**
-     * Adds an author node to the head.
-     *
-     * An author node is used to define the author of the HTML document.
-     *
-     * @param string $content The author of the HTML document.
-     *
-     * @return Head The current Head object.
-     */
-    public function author(string $content): Head
+    public function author(string $content): self
     {
-        $this->author = $this->metaReturn("author", $content);
-
+        $this->author = $this->metaReturn('author', $content);
         return $this;
     }
 
-    /**
-     * Adds a description node to the head.
-     *
-     * A description node is used to define a short description of the HTML document.
-     *
-     * @param string $content The description of the HTML document.
-     *
-     * @return Head The current Head object.
-     */
-    public function description(string $content): Head
+    public function description(string $content): self
     {
-        $this->description = $this->metaReturn("description", $content);
-
+        $this->description = $this->metaReturn('description', $content);
         return $this;
     }
 
-    /**
-     * Adds a viewport node to the head.
-     *
-     * A viewport node is used to define the zooming behavior of the HTML document.
-     *
-     * @param string|null $content The content of the viewport node.
-     *     If null, it will be set to the default value.
-     *
-     * @return Head The current Head object.
-     */
-    public function viewport(?string $content = null): Head
+    public function viewport(?string $content = null): self
     {
-        if ($content === null) {
-            $content =
-            "width=1920, initial-scale=1.0, width=device-width, user-scalable=no, minimum-scale=1.0, " .
-            "maximum-scale=1.0, initial-scale=1.0, viewport-fit=cover";
-        }
-        $this->viewport = $this->metaReturn("viewport", $content);
-
+        $viewportValue = $content ?? 'width=device-width, initial-scale=1.0, viewport-fit=cover';
+        $this->viewport = $this->metaReturn('viewport', $viewportValue);
         return $this;
     }
 
-    /**
-     * Adds an authoring tool node to the head.
-     *
-     * An authoring tool node is used to define the tool that was used to create the HTML document.
-     *
-     * @param string $content The authoring tool used to create the HTML document.
-     *
-     * @return Head The current Head object.
-     */
-    public function authoringTool(string $content): Head
+    public function authoringTool(string $content): self
     {
-        $this->authoringTool = $this->metaReturn("authoring_tool", $content);
-
+        $this->authoringTool = $this->metaReturn('authoring_tool', $content);
         return $this;
     }
 
-    /**
-     * Adds a robots node to the head.
-     *
-     * A robots node is used to define the instructions that are given to web crawlers and other web robots.
-     *
-     * @param string $content The instructions that are given to web crawlers and other web robots.
-     *
-     * @return Head The current Head object.
-     */
-    public function robots(string $content): Head
+    public function robots(string $content): self
     {
-        $this->robots = $this->metaReturn("robots", $content);
-
+        $this->robots = $this->metaReturn('robots', $content);
         return $this;
     }
 
-    /**
-     * Adds a theme color node to the head.
-     *
-     * A theme color node is used to define the preferred color scheme of the HTML document.
-     *
-     * @param string $content The preferred color scheme of the HTML document.
-     * @param bool $isDarkMode Whether to use the dark color scheme or not.
-     *     If true, the dark color scheme will be used.
-     *     If false, the light color scheme will be used.
-     *
-     * @return Head The current Head object.
-     */
-    public function themeColor(string $content, bool $isDarkMode = true): Head
+    public function themeColor(string $content, bool $isDarkMode = true): self
     {
-        if ($isDarkMode) {
-            $this->themeColor = $this->addNode(
-                "meta",
-                "theme-color",
-                $content,
-                type: "media",
-                typeContent: "(prefers-color-scheme: dark)"
-            );
-        } else {
-            $this->themeColor = $this->addNode(
-                "meta",
-                "theme-color",
-                $content,
-                type: "media",
-                typeContent: "(prefers-color-scheme: light)"
-            );
-        }
+        $this->themeColor = $this->addNode(
+            'meta',
+            'theme-color',
+            $content,
+            type: 'media',
+            typeContent: $isDarkMode ? '(prefers-color-scheme: dark)' : '(prefers-color-scheme: light)',
+        );
 
         return $this;
     }
 
-    /**
-     * Adds a color scheme node to the head.
-     *
-     * A color scheme node is used to define the preferred color scheme of the HTML document.
-     *
-     * @param ColorScheme $content The preferred color scheme of the HTML document.
-     *
-     * @return Head The current Head object.
-     */
-    public function colorScheme(ColorScheme $content): Head
+    public function colorScheme(ColorScheme $content): self
     {
-        $this->colorScheme = $this->metaReturn("color-scheme", $content->value);
-
+        $this->colorScheme = $this->metaReturn('color-scheme', $content->value);
         return $this;
     }
 
-    /**
-     * Adds a revisit-after node to the head.
-     *
-     * A revisit-after node is used to define the time after which a search engine should revisit the HTML document.
-     *
-     * @param string $content The time after which a search engine should revisit the HTML document.
-     *
-     * @return Head The current Head object.
-     */
-    public function revisitAfter(string $content): Head
+    public function revisitAfter(string $content): self
     {
-        $this->revisitAfter = $this->metaReturn("revisit-after", $content);
-
+        $this->revisitAfter = $this->metaReturn('revisit-after', $content);
         return $this;
     }
 
-    /**
-     * Adds a rating node to the head.
-     *
-     * A rating node is used to define the content rating of the HTML document.
-     *
-     * @param string $content The content rating of the HTML document.
-     *
-     * @return Head The current Head object.
-     */
-    public function rating(string $content): Head
+    public function rating(string $content): self
     {
-        $this->rating = $this->metaReturn("rating", $content);
-
+        $this->rating = $this->metaReturn('rating', $content);
         return $this;
     }
 
-    /**
-     * Adds a distribution node to the head.
-     *
-     * A distribution node is used to define the distribution of the HTML document.
-     *
-     * @param string $content The distribution of the HTML document.
-     *
-     * @return Head The current Head object.
-     */
-    public function distribution(string $content): Head
+    public function distribution(string $content): self
     {
-        $this->distribution = $this->metaReturn("distribution", $content);
-
+        $this->distribution = $this->metaReturn('distribution', $content);
         return $this;
     }
 
-    /**
-     * Adds a creation date node to the head.
-     *
-     * A creation date node is used to define the date of creation of the HTML document.
-     *
-     * @param string $content The date of creation of the HTML document.
-     *
-     * @return Head The current Head object.
-     */
-    public function creationdate(string $content): Head
+    public function creationdate(string $content): self
     {
-        $this->creationdate = $this->metaReturn("creationdate", $content);
-
+        $this->creationdate = $this->metaReturn('creationdate', $content);
         return $this;
     }
 
-    /**
-     * Adds a copyright node to the head.
-     *
-     * A copyright node is used to define the copyright of the HTML document.
-     *
-     * @param string $content The copyright of the HTML document.
-     *
-     * @return Head The current Head object.
-     */
-    public function copyright(string $content): Head
+    public function copyright(string $content): self
     {
-        $this->copyright = $this->metaReturn("copyright", $content);
-
+        $this->copyright = $this->metaReturn('copyright', $content);
         return $this;
     }
 
-    /**
-     * Adds a charset node to the head.
-     *
-     * A charset node is used to define the character encoding of the HTML document.
-     *
-     * @param string $content The character encoding of the HTML document. Default to "UTF-8".
-     *
-     * @return Head The current Head object.
-     */
-    public function charset(string $content = "UTF-8"): Head
+    public function charset(string $content = 'UTF-8'): self
     {
-        $this->charset = $this->addNode("meta", $content, null, "charset");
+        $this->charset = $this->addNode('meta', $content, null, 'charset');
         return $this;
     }
 
-    /**
-     * Adds a shortcut icon node to the head.
-     *
-     * A shortcut icon node is used to define a shortcut icon for the HTML document.
-     *
-     * @param string $content The shortcut icon of the HTML document.
-     *
-     * @return Head The current Head object.
-     */
-    public function shortcutIcon(string $content): Head
+    public function shortcutIcon(string $content): self
     {
-        $this->link("shortcut icon", $content, "image/x-icon");
-
-        return $this;
+        return $this->link('shortcut icon', $content, 'image/x-icon');
     }
 
-    /**
-     * Adds a favicon node to the head.
-     *
-     * A favicon node is used to define a favicon for the HTML document.
-     *
-     * @param string $content The favicon of the HTML document.
-     *
-     * @return Head The current Head object.
-     */
-    public function favicon(string $content): Head
+    public function favicon(string $content): self
     {
-        $this->link("icon", $content, "image/svg+xml");
-
-        return $this;
+        return $this->link('icon', $content, 'image/svg+xml');
     }
 
-    /**
-     * Adds an icon node to the head.
-     *
-     * An icon node is used to define an icon for the HTML document.
-     *
-     * @param string $content The icon of the HTML document.
-     *
-     * @return Head The current Head object.
-     */
-    public function icon(string $content): Head
+    public function icon(string $content): self
     {
-        $this->link("icon", $content, "image/webp");
-
-        return $this;
+        return $this->link('icon', $content, 'image/webp');
     }
 
-    /**
-     * Adds a canonical node to the head.
-     *
-     * A canonical node is used to define a canonical URL for the HTML document.
-     *
-     * @param string $content The canonical URL of the HTML document.
-     *
-     * @return Head The current Head object.
-     */
-    public function canonical(string $content): Head
+    public function canonical(string $content): self
     {
-        $this->link("canonical", $content, null);
-
-        return $this;
+        return $this->link('canonical', $content, null);
     }
-    
-    /**
-     * Adds a manifest node to the head.
-     *
-     * A manifest node is used to define a web app manifest for the HTML document.
-     * The web app manifest is a JSON file that contains information about the web application,
-     * such as its name, description, icons, and start URL.
-     *
-     * @param string $content The content of the manifest node.
-     *
-     * @return Head The current Head object.
-     */
-    public function manifest(string $content): Head
+
+    public function manifest(string $content): self
     {
-        $this->link("manifest", $content, null);
-
-        return $this;
+        return $this->link('manifest', $content, null);
     }
 
-    /*
-        og tags
-    */
-    /**
-     * Adds an OpenGraph meta tag to the head.
-     *
-     * OpenGraph meta tags are used to provide structured data about the HTML document.
-     * They are used by Facebook and other services to provide additional information about the
-     * document, such as its title, description, and images.
-     *
-     * @param OpenGraphTag $ogName The name of the OpenGraph meta tag.
-     * @param string $content The content of the OpenGraph meta tag.
-     *
-     * @return Head The current Head object.
-     */
-    public function og(OpenGraphTag $ogName, string $content): Head
+    public function og(OpenGraphTag $ogName, string $content): self
     {
-        $this->property("og:{$ogName->value}", $content);
-
-        return $this;
+        return $this->property("og:{$ogName->value}", $content);
     }
 
-    /**
-     * Adds an OpenGraph meta tag to the head.
-     *
-     * OpenGraph meta tags are used to provide structured data about the HTML document.
-     * They are used by Facebook and other services to provide additional information about the
-     * document, such as its title, description, and images.
-     *
-     * @param string $content The title of the HTML document.
-     *
-     * @return Head The current Head object.
-     */
-    public function ogTitle(string $content): Head
+    public function ogTitle(string $content): self
     {
-        $this->property("og:title", $content);
-
-        return $this;
+        return $this->property('og:title', $content);
     }
 
-    /**
-     * Adds an OpenGraph site name meta tag to the head.
-     *
-     * The OpenGraph site name meta tag is used to define the name of the website that the
-     * HTML document is associated with.
-     *
-     * @param string $content The name of the website.
-     *
-     * @return Head The current Head object.
-     */
-    public function ogSiteName(string $content): Head
+    public function ogSiteName(string $content): self
     {
-        $this->property("og:site_name", $content);
-
-        return $this;
+        return $this->property('og:site_name', $content);
     }
 
-    /**
-     * Adds an OpenGraph meta tag to the head.
-     *
-     * OpenGraph meta tags are used to provide structured data about the HTML document.
-     * They are used by Facebook and other services to provide additional information about the
-     * document, such as its title, description, and images.
-     *
-     * @param string $content The description of the HTML document.
-     *
-     * @return Head The current Head object.
-     */
-    public function ogDescription(string $content): Head
+    public function ogDescription(string $content): self
     {
-        $this->property("og:description", $content);
-
-        return $this;
+        return $this->property('og:description', $content);
     }
 
-    /**
-     * Adds an OpenGraph URL meta tag to the head.
-     *
-     * The OpenGraph URL meta tag is used to define the canonical URL of the HTML document.
-     * It is used by Facebook and other services to determine the URL of the document.
-     *
-     * @param string $content The canonical URL of the HTML document.
-     *
-     * @return Head The current Head object.
-     */
-    public function ogUrl(string $content): Head
+    public function ogUrl(string $content): self
     {
-        $this->property("og:url", $content);
-
-        return $this;
+        return $this->property('og:url', $content);
     }
 
-    /**
-     * Adds an OpenGraph image meta tag to the head.
-     *
-     * The OpenGraph image meta tag is used to define the image that is associated with the HTML document.
-     * It is used by Facebook and other services to provide additional information about the
-     * document, such as its title, description, and images.
-     *
-     * @param string $content The image URL.
-     *
-     * @return Head The current Head object.
-     */
-    public function ogImage(string $content): Head
+    public function ogImage(string $content): self
     {
-        $this->property("og:image", $content);
-
-        return $this;
+        return $this->property('og:image', $content);
     }
 
-    /**
-     * Adds an OpenGraph image width meta tag to the head.
-     *
-     * The OpenGraph image width meta tag is used to define the width of the image that is associated with the HTML document.
-     * It is used by Facebook and other services to provide additional information about the
-     * document, such as its title, description, and images.
-     *
-     * @param string $content The width of the image in pixels.
-     *
-     * @return Head The current Head object.
-     */
-    public function ogImageWidth(string $content): Head
+    public function ogImageWidth(string $content): self
     {
-        $this->property("og:image:width", $content);
-
-        return $this;
+        return $this->property('og:image:width', $content);
     }
 
-    /**
-     * Adds an OpenGraph image height meta tag to the head.
-     *
-     * The OpenGraph image height meta tag is used to define the height of the image that is associated with the HTML document.
-     * It is used by Facebook and other services to provide additional information about the
-     * document, such as its title, description, and images.
-     *
-     * @param string $content The height of the image in pixels.
-     *
-     * @return Head The current Head object.
-     */
-    public function ogImageHeight(string $content): Head
+    public function ogImageHeight(string $content): self
     {
-        $this->property("og:image:height", $content);
-
-        return $this;
+        return $this->property('og:image:height', $content);
     }
 
-    /**
-     * Adds an OpenGraph type meta tag to the head.
-     *
-     * The OpenGraph type meta tag is used to define the type of the HTML document.
-     * It is used by Facebook and other services to provide additional information about the
-     * document, such as its title, description, and images.
-     *
-     * @param string $content The type of the document (e.g. "article", "blog", etc...).
-     *
-     * @return Head The current Head object.
-     */
-    public function ogType(string $content): Head
+    public function ogType(string $content): self
     {
-        $this->property("og:type", $content);
-
-        return $this;
+        return $this->property('og:type', $content);
     }
 
-    /**
-     * Adds an OpenGraph locale meta tag to the head.
-     *
-     * The OpenGraph locale meta tag is used to define the locale of the HTML document.
-     * It is used by Facebook and other services to provide additional information about the
-     * document, such as its title, description, and images.
-     *
-     * @param string $content The locale of the document (e.g. "en_US", "pl_PL", etc...).
-     *
-     * @return Head The current Head object.
-     */
-    public function ogLocale(string $content): Head
+    public function ogLocale(string $content): self
     {
-        $this->property("og:locale", $content);
-
-        return $this;
+        return $this->property('og:locale', $content);
     }
 
-    /**
-     * Adds an OpenGraph Determiner meta tag to the head.
-     *
-     * The OpenGraph Determiner meta tag is used to define whether the HTML document is
-     * an instant article or not.
-     *
-     * @param string $content The content of the og:determiner meta tag.
-     *
-     * @return Head The current Head object.
-     */
-    public function ogDeterminer(string $content): Head
+    public function ogDeterminer(string $content): self
     {
-        $this->property("og:determiner", $content);
-
-        return $this;
+        return $this->property('og:determiner', $content);
     }
 
-    /*
-        apple tag
-    */
-    /**
-     * Adds an Apple mobile web app title meta tag to the head.
-     *
-     * The Apple mobile web app title meta tag is used to define the title of the HTML document
-     * when it is displayed on an Apple device.
-     *
-     * @param string $content The title of the document when it is displayed on an Apple device.
-     *
-     * @return Head The current Head object.
-     */
-    public function appleMobileWebAppTitle(string $content): Head
+    public function appleMobileWebAppTitle(string $content): self
     {
-        $this->apple[] = $this->metaReturn("apple-mobile-web-app-title", $content);
-
+        $this->apple[] = $this->metaReturn('apple-mobile-web-app-title', $content);
         return $this;
     }
 
-    /**
-     * Adds an Apple mobile web app status bar style meta tag to the head.
-     *
-     * The Apple mobile web app status bar style meta tag is used to define the style of the
-     * status bar when the HTML document is displayed on an Apple device.
-     *
-     * @param string $content The style of the status bar (e.g. "default", "black", "black-translucent").
-     *
-     * @return Head The current Head object.
-     */
-    public function appleMobileWebAppStatusBarStyle(string $content): Head
+    public function appleMobileWebAppStatusBarStyle(string $content): self
     {
-        $this->apple[] = $this->metaReturn("apple-mobile-web-app-status-bar-style", $content);
-
+        $this->apple[] = $this->metaReturn('apple-mobile-web-app-status-bar-style', $content);
         return $this;
     }
 
-    /**
-     * Adds an Apple touch icon meta tag to the head.
-     *
-     * The Apple touch icon meta tag is used to define the icon that is displayed on an Apple
-     * device when the HTML document is saved to the home screen.
-     *
-     * @param string $content The URL of the icon.
-     *
-     * @return Head The current Head object.
-     */
-    public function appleTouchIcon(string $content): Head
+    public function appleTouchIcon(string $content): self
     {
-        $this->link("apple-touch-icon", $content, null);
-
-        return $this;
+        return $this->link('apple-touch-icon', $content, null);
     }
 
-    /**
-     * Adds an Apple touch startup image meta tag to the head.
-     *
-     * The Apple touch startup image meta tag is used to define the image that is displayed on an Apple
-     * device when the HTML document is saved to the home screen.
-     *
-     * @param string $content The URL of the image.
-     *
-     * @return Head The current Head object.
-     */
-    public function appleTouchStartupImage(string $content): Head
+    public function appleTouchStartupImage(string $content): self
     {
-        $this->link("apple-touch-startup-image", $content, null);
-
-        return $this;
+        return $this->link('apple-touch-startup-image', $content, null);
     }
 
-    /**
-     * Adds an Apple mask icon meta tag to the head.
-     *
-     * The Apple mask icon meta tag is used to define the icon that is displayed on an Apple
-     * device when the HTML document is saved to the home screen.
-     *
-     * @param string $content The URL of the icon.
-     * @param string $color The color of the icon.
-     *
-     * @return Head The current Head object.
-     */
-    public function appleMaskIcon(string $content, string $color): Head
+    public function appleMaskIcon(string $content, string $color): self
     {
-        $this->link[] = $this->addNode("link", "mask-icon", $content, "rel", "href", "color", $color);
-
+        $this->link[] = $this->addNode('link', 'mask-icon', $content, 'rel', 'href', 'color', $color);
         return $this;
     }
 
-    /**
-     * Adds an Apple mobile web app capable meta tag to the head.
-     *
-     * The Apple mobile web app capable meta tag is used to define whether the HTML document is
-     * an Apple mobile web app or not.
-     *
-     * @param bool $content If true, the HTML document is an Apple mobile web app. If false,
-     * it is not.
-     *
-     * @return Head The current Head object.
-     */
-    public function appleMobileWebAppCapable(bool $content = true): Head
+    public function appleMobileWebAppCapable(bool $content = true): self
     {
-        if ($content) {
-            $this->apple[] = $this->metaReturn("apple-mobile-web-app-capable", "yes");
-
-            return $this;
-        }
-        $this->apple[] = $this->metaReturn("apple-mobile-web-app-capable", "no");
-
+        $this->apple[] = $this->metaReturn('apple-mobile-web-app-capable', $content ? 'yes' : 'no');
         return $this;
     }
 
-    /**
-     * Adds an Apple iTunes app meta tag to the head.
-     *
-     * The Apple iTunes app meta tag is used to define the ID of the iTunes app that is
-     * associated with the HTML document.
-     *
-     * @param string $content The ID of the iTunes app.
-     *
-     * @return Head The current Head object.
-     */
-    public function appleItunesApp(string $content): Head
+    public function appleItunesApp(string $content): self
     {
-        $this->apple[] = $this->metaReturn("apple-itunes-app", "app-id={$content}");
-
+        $this->apple[] = $this->metaReturn('apple-itunes-app', "app-id={$content}");
         return $this;
     }
 
-    /**
-     * Adds an Apple telephone format detection meta tag to the head.
-     *
-     * The Apple telephone format detection meta tag is used to define whether the HTML document
-     * is able to detect phone numbers in the document and convert them to clickable links or not.
-     *
-     * @param bool $content If true, the HTML document is able to detect phone numbers. If false,
-     * it is not.
-     *
-     * @return Head The current Head object.
-     */
-    public function appleTelephoneDetection(bool $content = true): Head
+    public function appleTelephoneDetection(bool $content = true): self
     {
-        if ($content) {
-            $this->apple[] = $this->metaReturn("format-detection", "telephone=yes");
-
-            return $this;
-        }
-        $this->apple[] = $this->metaReturn("format-detection", "telephone=no");
-
+        $this->apple[] = $this->metaReturn('format-detection', $content ? 'telephone=yes' : 'telephone=no');
         return $this;
     }
 
-    /**
-     * Adds an Apple email format detection meta tag to the head.
-     *
-     * The Apple email format detection meta tag is used to define whether the HTML document
-     * is able to detect email addresses in the document and convert them to clickable links or not.
-     *
-     * @param bool $content If true, the HTML document is able to detect email addresses. If false,
-     * it is not.
-     *
-     * @return Head The current Head object.
-     */
-    public function appleEmailDetection(bool $content = true): Head
+    public function appleEmailDetection(bool $content = true): self
     {
-        if ($content) {
-            $this->apple[] = $this->metaReturn("format-detection", "email=yes");
-
-            return $this;
-        }
-        $this->apple[] = $this->metaReturn("format-detection", "email=no");
-
+        $this->apple[] = $this->metaReturn('format-detection', $content ? 'email=yes' : 'email=no');
         return $this;
     }
 
-    /**
-     * Adds an Apple address format detection meta tag to the head.
-     *
-     * The Apple address format detection meta tag is used to define whether the HTML document
-     * is able to detect addresses in the document and convert them to clickable links or not.
-     *
-     * @param bool $content If true, the HTML document is able to detect addresses. If false,
-     * it is not.
-     *
-     * @return Head The current Head object.
-     */
-    public function appleaAdressDetection(bool $content = true): Head
+    public function appleaAdressDetection(bool $content = true): self
     {
-        if ($content) {
-            $this->apple[] = $this->metaReturn("format-detection", "address=yes");
-
-            return $this;
-        }
-        $this->apple[] = $this->metaReturn("format-detection", "address=no");
-
+        $this->apple[] = $this->metaReturn('format-detection', $content ? 'address=yes' : 'address=no');
         return $this;
     }
 
-    /**
-     * Adds an Apple date format detection meta tag to the head.
-     *
-     * The Apple date format detection meta tag is used to define whether the HTML document
-     * is able to detect dates in the document and convert them to clickable links or not.
-     *
-     * @param bool $content If true, the HTML document is able to detect dates. If false,
-     * it is not.
-     *
-     * @return Head The current Head object.
-     */
-    public function appleaDateDetection(bool $content = true): Head
+    public function appleaDateDetection(bool $content = true): self
     {
-        if ($content) {
-            $this->apple[] = $this->metaReturn("format-detection", "date=yes");
-
-            return $this;
-        }
-        $this->apple[] = $this->metaReturn("format-detection", "date=no");
-
+        $this->apple[] = $this->metaReturn('format-detection', $content ? 'date=yes' : 'date=no');
         return $this;
     }
 
-    /**
-     * Adds an Apple format detection meta tag to the head.
-     *
-     * The Apple format detection meta tag is used to define whether the HTML document
-     * is able to detect phone numbers, email addresses, addresses and dates in the document
-     * and convert them to clickable links or not.
-     *
-     * @param bool $isTelephone If true, the HTML document is able to detect phone numbers. If false,
-     * it is not.
-     * @param bool $isEmail If true, the HTML document is able to detect email addresses. If false,
-     * it is not.
-     * @param bool $isAddress If true, the HTML document is able to detect addresses. If false,
-     * it is not.
-     * @param bool $isDate If true, the HTML document is able to detect dates. If false,
-     * it is not.
-     *
-     * @return Head The current Head object.
-     */
     public function appleFormatDetection(
         bool $isTelephone = true,
         bool $isEmail = true,
         bool $isAddress = true,
-        bool $isDate = true
-    ): Head {
-        $telephone = "no";
-        $email = "no";
-        $address = "no";
-        $date = "no";
-
-        if ($isTelephone) {
-            $telephone = "yes";
-        }
-
-        if ($isEmail) {
-            $email = "yes";
-        }
-
-        if ($isAddress) {
-            $address = "yes";
-        }
-
-        if ($isDate) {
-            $date = "yes";
-        }
+        bool $isDate = true,
+    ): self {
+        $telephone = $isTelephone ? 'yes' : 'no';
+        $email = $isEmail ? 'yes' : 'no';
+        $address = $isAddress ? 'yes' : 'no';
+        $date = $isDate ? 'yes' : 'no';
 
         $this->apple[] = $this->metaReturn(
-            "format-detection",
+            'format-detection',
             "telephone={$telephone}, email={$email}, address={$address}, date={$date}"
         );
 
         return $this;
     }
 
-    /*
-        al tag
-    */
-    /**
-     * Sets the Android package meta tag.
-     *
-     * The Android package meta tag is used by Google Play to determine which app to open
-     * when a user clicks on an Android App Link.
-     *
-     * @param string $content The value of the Android package meta tag.
-     *
-     * @return Head The current Head object.
-     */
-    public function alAndroidPackage(string $content): Head
+    public function alAndroidPackage(string $content): self
     {
-        $this->property("al:android:package", $content);
+        return $this->property('al:android:package', $content);
+    }
 
+    public function alAndroidAppName(string $content): self
+    {
+        return $this->property('al:android:app_name', $content);
+    }
+
+    public function alAndroidUrl(string $content): self
+    {
+        return $this->property('al:android:url', $content);
+    }
+
+    public function alAndroidClass(string $content): self
+    {
+        return $this->property('al:android:class', $content);
+    }
+
+    public function msApplicationID(string $content): self
+    {
+        $this->ms[] = $this->metaReturn('msApplication-ID', $content);
         return $this;
     }
 
-    /**
-     * Sets the Android app name meta tag.
-     *
-     * The Android app name meta tag is used by Google Play to determine which app to open
-     * when a user clicks on an Android App Link.
-     *
-     * @param string $content The value of the Android app name meta tag.
-     *
-     * @return Head The current Head object.
-     */
-    public function alAndroidAppName(string $content): Head
+    public function msApplicationPackageFamilyName(string $content): self
     {
-        $this->property("al:android:app_name", $content);
-
+        $this->ms[] = $this->metaReturn('msApplication-PackageFamilyName', $content);
         return $this;
     }
 
-    /**
-     * Sets the Android URL meta tag.
-     *
-     * The Android URL meta tag is used to define the URL that the app is associated with.
-     *
-     * @param string $content The value of the Android URL meta tag.
-     *
-     * @return Head The current Head object.
-     */
-    public function alAndroidUrl(string $content): Head
+    public function msApplicationName(string $content): self
     {
-        $this->property("al:android:url", $content);
-
+        $this->ms[] = $this->metaReturn('application-name', $content);
         return $this;
     }
 
-    /**
-     * Sets the Android class meta tag.
-     *
-     * The Android class meta tag is used to specify the class of the app that is associated with the URL.
-     *
-     * @param string $content The value of the Android class meta tag.
-     *
-     * @return Head The current Head object.
-     */
-    public function alAndroidClass(string $content): Head
+    public function msApplicationTooltip(string $content): self
     {
-        $this->property("al:android:class", $content);
-
+        $this->ms[] = $this->metaReturn('msapplication-tooltip', $content);
         return $this;
     }
 
-    /*
-        ms Tag
-    */
-    /**
-     * Sets the Microsoft application ID meta tag.
-     *
-     * The Microsoft application ID meta tag is used to specify the ID of the app that is associated with the URL.
-     *
-     * @param string $content The value of the Microsoft application ID meta tag.
-     *
-     * @return Head The current Head object.
-     */
-    public function msApplicationID(string $content): Head
+    public function msApplicationStarturl(string $content): self
     {
-        $this->ms[] = $this->metaReturn("msApplication-ID", $content);
-
+        $this->ms[] = $this->metaReturn('msapplication-starturl', $content);
         return $this;
     }
 
-    /**
-     * Sets the Microsoft application package family name meta tag.
-     *
-     * The Microsoft application package family name meta tag is used to specify the package family name of the app that is associated with the URL.
-     *
-     * @param string $content The value of the Microsoft application package family name meta tag.
-     *
-     * @return Head The current Head object.
-     */
-    public function msApplicationPackageFamilyName(string $content): Head
-    {
-        $this->ms[] = $this->metaReturn("msApplication-PackageFamilyName", $content);
-
-        return $this;
-    }
-
-    /**
-     * Sets the Microsoft application name meta tag.
-     *
-     * The Microsoft application name meta tag is used to specify the name of the app that is associated with the URL.
-     *
-     * @param string $content The value of the Microsoft application name meta tag.
-     *
-     * @return Head The current Head object.
-     */
-    public function msApplicationName(string $content): Head
-    {
-        $this->ms[] = $this->metaReturn("application-name", $content);
-
-        return $this;
-    }
-
-    /**
-     * Sets the Microsoft application tooltip meta tag.
-     *
-     * The Microsoft application tooltip meta tag is used to specify the tooltip text that should be displayed when the user hovers over the app tile in the Windows start menu.
-     *
-     * @param string $content The value of the Microsoft application tooltip meta tag.
-     *
-     * @return Head The current Head object.
-     */
-    public function msApplicationTooltip(string $content): Head
-    {
-        $this->ms[] = $this->metaReturn("msapplication-tooltip", $content);
-
-        return $this;
-    }
-
-    /**
-     * Sets the Microsoft application start URL meta tag.
-     *
-     * The Microsoft application start URL meta tag is used to specify the URL that should be opened when the user clicks on the app tile in the Windows start menu.
-     *
-     * @param string $content The value of the Microsoft application start URL meta tag.
-     *
-     * @return Head The current Head object.
-     */
-    public function msApplicationStarturl(string $content): Head
-    {
-        $this->ms[] = $this->metaReturn("msapplication-starturl", $content);
-
-        return $this;
-    }
-
-    /**
-     * Builds the HTML head section based on the current Head object.
-     *
-     * This method will return a string containing the HTML head section based on the current Head object.
-     *
-     * @return string The HTML head section based on the current Head object.
-     */
     public function build(): string
     {
-        $head = "";
-
-        $head .= $this->title;
-        $head .= implode("\n", $this->meta);
-        $head .= implode("\n", $this->link);
-        $head .= implode("\n", $this->property);
-        $head .= implode("\n", $this->generator);
-        $head .= $this->viewport . PHP_EOL;
-        $head .= $this->keywords . PHP_EOL;
-        $head .= $this->author . PHP_EOL;
-        $head .= $this->description . PHP_EOL;
-        $head .= $this->charset . PHP_EOL;
-        $head .= $this->authoringTool . PHP_EOL;
-        $head .= $this->robots . PHP_EOL;
-        $head .= $this->themeColor . PHP_EOL;
-        $head .= $this->revisitAfter . PHP_EOL;
-        $head .= $this->rating . PHP_EOL;
-        $head .= $this->distribution . PHP_EOL;
-        $head .= $this->creationdate . PHP_EOL;
-        $head .= $this->copyright . PHP_EOL;
-        $head .= $this->colorScheme . PHP_EOL;
-        $head .= implode("\n", $this->apple);
-        $head .= implode("\n", $this->ms);
-        $head .= implode("\n", $this->css);
-        $head .= implode("\n", $this->js);
-
-        return $head;
+        return $this->title
+            . \implode("\n", $this->meta)
+            . \implode("\n", $this->link)
+            . \implode("\n", $this->property)
+            . \implode("\n", $this->generator)
+            . $this->viewport . \PHP_EOL
+            . $this->keywords . \PHP_EOL
+            . $this->author . \PHP_EOL
+            . $this->description . \PHP_EOL
+            . $this->charset . \PHP_EOL
+            . $this->authoringTool . \PHP_EOL
+            . $this->robots . \PHP_EOL
+            . $this->themeColor . \PHP_EOL
+            . $this->revisitAfter . \PHP_EOL
+            . $this->rating . \PHP_EOL
+            . $this->distribution . \PHP_EOL
+            . $this->creationdate . \PHP_EOL
+            . $this->copyright . \PHP_EOL
+            . $this->colorScheme . \PHP_EOL
+            . \implode("\n", $this->apple)
+            . \implode("\n", $this->ms)
+            . \implode("\n", $this->css)
+            . \implode("\n", $this->js);
     }
 
     /**
-     * Return an array containing the debug information of the current Head object.
-     *
-     * This method is used by the var_dump() function to display the debug information of the current Head object.
-     *
-     * @return array The debug information of the current Head object.
+     * @return array<string, mixed>
      */
     public function __debugInfo(): array
     {
@@ -1332,33 +534,17 @@ final class Head
             'copyright' => $this->copyright,
             'colorScheme' => $this->colorScheme,
             'apple' => $this->apple,
-            'ms' => $this->ms
+            'ms' => $this->ms,
         ];
     }
 
-    /**
-     * This magic method is used to convert the Head object to a string.
-     *
-     * When the Head object is converted to a string, this method will be called.
-     * It will return the HTML head tag with all the meta tags and other information.
-     *
-     * @return string The HTML head tag with all the meta tags and other information.
-     */
     public function __invoke(): string
     {
-        return implode("\n", $this->meta);
+        return \implode("\n", $this->meta);
     }
 
-    /**
-     * This magic method is used to convert the Head object to a string.
-     *
-     * When the Head object is converted to a string, this method will be called.
-     * It will return the HTML head tag with all the meta tags and other information.
-     *
-     * @return string The HTML head tag with all the meta tags and other information.
-     */
     public function __toString(): string
     {
-        return implode("\n", $this->meta);
+        return \implode("\n", $this->meta);
     }
 }

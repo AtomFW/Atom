@@ -4,12 +4,20 @@ declare(strict_types=1);
 
 namespace Atom\Structure;
 
+use Attribute;
+
 /**
- * A helper class to cast values to specific types.
- *
- * @package Atom\Structure
+ * Declares automatic type conversion rules for a model or DTO property
+ * across Database reads (`$type`), Database writes (`$detype`), and Form input (`$formType`).
  */
-#[\Attribute]
-class Cast {
-    public function __construct(public string $type, public ?string $detype = null) {}
+#[Attribute(Attribute::TARGET_PROPERTY)]
+final readonly class Cast
+{
+    public function __construct(
+        public string $type,
+        public ?string $detype = null,
+        public ?string $formType = null,
+        public int|float|null $min = null,
+        public int|float|null $max = null,
+    ) {}
 }

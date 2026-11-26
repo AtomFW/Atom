@@ -1,4 +1,5 @@
 <?php
+
 declare(strict_types=1);
 
 namespace Atom\Component\Task\Tasks;
@@ -6,15 +7,15 @@ namespace Atom\Component\Task\Tasks;
 use Atom\Component\Task\TaskInterface;
 
 /**
- * Task that instructs worker to resize an image file.
+ * Immutable image resize task DTO.
  */
-final class ImageResizeTask implements TaskInterface
+final readonly class ImageResizeTask implements TaskInterface
 {
     public function __construct(
-        public readonly string $sourcePath,
-        public readonly string $destPath,
-        public readonly int $width,
-        public readonly int $height,
-        public readonly int $quality = 90,
+        public string $sourcePath,
+        public string $destPath,
+        public int $width,
+        public int $height,
+        public int $quality = 90,
     ) {}
 }

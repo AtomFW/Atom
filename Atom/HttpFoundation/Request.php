@@ -4,187 +4,225 @@ declare(strict_types=1);
 
 namespace Atom\HttpFoundation;
 
+use Atom\Filter\InputFilter;
+use Atom\Filter\TypeCaster;
+use Atom\Model;
+
 /**
- * Represents an HTTP request.
- *
- * The Request class provides methods for accessing information about the current
- * HTTP request such as headers, cookies, and input data.
+ * HTTP request abstraction supporting isolated DTO data (Swoole / FrankenPHP / testing)
+ * and standard PHP superglobal fallbacks, with built-in safe input cleaning and typed model binding.
  */
 class Request
 {
-    /**
-     * Array to store route parameters.
-     */
+    /** @var array<string, mixed> */
     private array $routeParams = [];
 
     /**
-     * Gets the HTTP method of the request.
-     *
-     * This method returns the HTTP method used for the current request,
-     * ensuring the method is returned in lowercase format.
-     *
-     * @return string The HTTP method in lowercase
+     * @param array<string, mixed>|null $query     Optional isolated GET parameters
+     * @param array<string, mixed>|null $post      Optional isolated POST parameters
+     * @param array<string, mixed>|null $server    Optional isolated server parameters
+     * @param array<string, mixed>|null $cookies   Optional isolated cookies
+     * @param string|null               $rawBody   Optional raw HTTP payload
+     * @param list<string>              $rawFields Fields excluded from trimming (e.g. passwords)
+     * @param array<string, mixed>|null $files     Optional isolated uploaded files bag
      */
-    public function getMethod()
-    {
-        return strtolower($_SERVER['REQUEST_METHOD']);
-    }
+    public function __construct(
+        private readonly ?array $query = null,
+        private readonly ?array $post = null,
+        private readonly ?array $server = null,
+        private readonly ?array $cookies = null,
+        private readonly ?string $rawBody = null,
+        private readonly array $rawFields = ['password', 'passwordConfirm', 'currentPassword', 'token', 'secret'],
+        private readonly ?array $files = null,
+    ) {}
 
     /**
-     * Gets the URL of the current request.
+     * Creates an isolated stateless Request instance from explicit arrays (ideal for Swoole HTTP Server).
      *
-     * This method returns the path component of the current request URI,
-     * excluding any query string parameters. It processes the REQUEST_URI
-     * server variable to remove the query string portion.
-     *
-     * @return string The URL path without query parameters
+     * @param array<string, mixed> $query
+     * @param array<string, mixed> $post
+     * @param array<string, mixed> $server
+     * @param array<string, mixed> $cookies
+     * @param array<string, mixed> $files
      */
-    public function getUrl()
+    public static function create(
+        array $query = [],
+        array $post = [],
+        array $server = [],
+        array $cookies = [],
+        ?string $rawBody = null,
+        array $files = [],
+    ): self {
+        return new self($query, $post, $server, $cookies, $rawBody, files: $files);
+    }
+
+    public function getMethod(): string
     {
-        $path = $_SERVER['REQUEST_URI'];
-        $position = strpos($path, '?');
+        $server = $this->server ?? $_SERVER;
+        $method = (string) ($server['REQUEST_METHOD'] ?? 'GET');
+        return \strtolower($method);
+    }
+
+    public function getUrl(): string
+    {
+        $server = $this->server ?? $_SERVER;
+        $path = (string) ($server['REQUEST_URI'] ?? '/');
+        $position = \strpos($path, '?');
         if ($position !== false) {
-            $path = substr($path, 0, $position);
+            $path = \substr($path, 0, $position);
         }
-        return $path;
+
+        return $path === '' ? '/' : $path;
     }
 
-    /**
-     * Checks if the current request is a GET request.
-     *
-     * This method checks whether the HTTP method of the current request
-     * is 'get' (case-insensitive comparison).
-     *
-     * @return bool True if the request method is 'get', false otherwise
-     */
-    public function isGet()
+    public function isGet(): bool
     {
         return $this->getMethod() === 'get';
     }
 
-    /**
-     * Checks if the current request is a POST request.
-     *
-     * This method checks whether the HTTP method of the current request
-     * is 'post' (case-insensitive comparison).
-     *
-     * @return bool True if the request method is 'post', false otherwise
-     */
-    public function isPost()
+    public function isPost(): bool
     {
         return $this->getMethod() === 'post';
     }
 
-    /**
-     * Checks if the current request is a PUT request.
-     *
-     * This method checks whether the HTTP method of the current request
-     * is 'put' (case-insensitive comparison).
-     *
-     * @return bool True if the request method is 'put', false otherwise
-     */
-    public function isPut()
+    public function isPut(): bool
     {
         return $this->getMethod() === 'put';
     }
 
-    /**
-     * Checks if the current request is a DELETE request.
-     *
-     * This method checks whether the HTTP method of the current request
-     * is 'delete' (case-insensitive comparison).
-     *
-     * @return bool True if the request method is 'delete', false otherwise
-     */
-    public function isDelete()
+    public function isDelete(): bool
     {
         return $this->getMethod() === 'delete';
     }
 
-    /**
-     * Checks if the current request is a PATCH request.
-     *
-     * This method checks whether the HTTP method of the current request
-     * is 'patch' (case-insensitive comparison).
-     *
-     * @return bool True if the request method is 'patch', false otherwise
-     */
-    public function isPatch()
+    public function isPatch(): bool
     {
         return $this->getMethod() === 'patch';
     }
 
-    /**
-     * Checks if the current request is an OPTIONS request.
-     *
-     * This method checks whether the HTTP method of the current request
-     * is 'options' (case-insensitive comparison).
-     *
-     * @return bool True if the request method is 'options', false otherwise
-     */
-    public function isOptions()
+    public function isOptions(): bool
     {
         return $this->getMethod() === 'options';
     }
 
-    /**
-     * Checks if the current request is a HEAD request.
-     *
-     * This method checks whether the HTTP method of the current request
-     * is 'head' (case-insensitive comparison).
-     *
-     * @return bool True if the request method is 'head', false otherwise
-     */
-    public function isHead()
+    public function isHead(): bool
     {
         return $this->getMethod() === 'head';
     }
 
-    /**
-     * @return array
-     */
-    public function getBody()
+    public function isJson(): bool
     {
-        $data = [];
-        if ($this->isGet()) {
-            foreach ($_GET as $key => $value) {
-                $data[$key] = filter_input(INPUT_GET, $key, FILTER_SANITIZE_SPECIAL_CHARS);
-            }
-        }
-        if ($this->isPost()) {
-            foreach ($_POST as $key => $value) {
-                $data[$key] = filter_input(INPUT_POST, $key, FILTER_SANITIZE_SPECIAL_CHARS);
-            }
-        }
-        return $data;
+        $server = $this->server ?? $_SERVER;
+        $contentType = (string) ($server['CONTENT_TYPE'] ?? $server['HTTP_CONTENT_TYPE'] ?? '');
+        return \stripos($contentType, 'application/json') !== false;
     }
 
     /**
-     * @param $params
-     * @return self
+     * @return array<string, mixed>
      */
-    public function setRouteParams($params)
+    public function getQueryParams(): array
+    {
+        $source = $this->query ?? $_GET;
+        return InputFilter::cleanArray($source, false, $this->rawFields);
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    public function getFiles(): array
+    {
+        return $this->files ?? $_FILES;
+    }
+
+    public function getRawBody(): string
+    {
+        if ($this->rawBody !== null) {
+            return $this->rawBody;
+        }
+
+        $input = \file_get_contents('php://input');
+        return $input !== false ? $input : '';
+    }
+
+    /**
+     * Returns cleaned request payload (GET query, POST form, or decoded JSON body) without corrupting passwords/types.
+     *
+     * @return array<string, mixed>
+     */
+    public function getBody(): array
+    {
+        if ($this->isGet()) {
+            $source = $this->query ?? $_GET;
+            return InputFilter::cleanArray($source, false, $this->rawFields);
+        }
+
+        if ($this->isJson()) {
+            $raw = $this->getRawBody();
+            if ($raw !== '') {
+                $decoded = \json_decode($raw, true);
+                if (\is_array($decoded)) {
+                    return InputFilter::cleanArray($decoded, false, $this->rawFields);
+                }
+            }
+        }
+
+        if ($this->isPost()) {
+            $source = $this->post ?? $_POST;
+            return InputFilter::cleanArray($source, false, $this->rawFields);
+        }
+
+        if ($this->isPut() || $this->isPatch() || $this->isDelete()) {
+            if ($this->post !== null && $this->post !== []) {
+                return InputFilter::cleanArray($this->post, false, $this->rawFields);
+            }
+            $raw = $this->getRawBody();
+            if ($raw !== '') {
+                $parsed = [];
+                \parse_str($raw, $parsed);
+                return InputFilter::cleanArray($parsed, false, $this->rawFields);
+            }
+        }
+
+        return [];
+    }
+
+    /**
+     * Automatically filters and casts request data directly into a typed Model instance.
+     *
+     * @template T of Model
+     * @param T $model
+     * @return T
+     */
+    public function fillModel(Model $model): Model
+    {
+        TypeCaster::populateFromForm($model, $this->getBody());
+        return $model;
+    }
+
+    public function getCookie(string $name, mixed $default = null): mixed
+    {
+        $cookies = $this->cookies ?? $_COOKIE;
+        return $cookies[$name] ?? $default;
+    }
+
+    /**
+     * @param array<string, mixed> $params
+     */
+    public function setRouteParams(array $params): self
     {
         $this->routeParams = $params;
         return $this;
     }
 
     /**
-     * @return array
+     * @return array<string, mixed>
      */
-    public function getRouteParams()
+    public function getRouteParams(): array
     {
         return $this->routeParams;
     }
 
-    /**
-     * Get a route parameter value.
-     *
-     * @param  string  $param
-     * @param  mixed  $default
-     * @return mixed
-     */
-    public function getRouteParam($param, $default = null)
+    public function getRouteParam(string $param, mixed $default = null): mixed
     {
         return $this->routeParams[$param] ?? $default;
     }

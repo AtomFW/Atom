@@ -4,13 +4,13 @@ declare(strict_types=1);
 
 namespace Atom\Exception\IO;
 
-/**
- * FileNotFoundException
- *
- * @package Atom\Exception\IO
- */
-final class FileNotFoundException extends \Exception implements \Stringable, \Throwable
+use Exception;
+
+final class FileNotFoundException extends Exception
 {
+    /** @var string */
     protected $message = 'A file could not be found.';
+
+    /** @var int */
     protected $code = 404;
 }

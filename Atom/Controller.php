@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace Atom;
 
-use Atom\middlewares\BaseMiddleware;
+use Atom\Middlewares\BaseMiddleware;
 
 class Controller
 {
@@ -12,27 +12,30 @@ class Controller
     public string $action = '';
 
     /**
-     * @var \Atom\middlewares\BaseMiddleware[]
+     * @var list<BaseMiddleware>
      */
     protected array $middlewares = [];
 
-    public function setLayout($layout): void
+    public function setLayout(string $layout): void
     {
         $this->layout = $layout;
     }
 
-    public function render($view, $params = []): string
+    /**
+     * @param array<string, mixed> $params
+     */
+    public function render(string $view, array $params = []): string
     {
         return Atom::$app->router->renderView($view, $params);
     }
 
-    public function registerMiddleware(BaseMiddleware $middleware)
+    public function registerMiddleware(BaseMiddleware $middleware): void
     {
         $this->middlewares[] = $middleware;
     }
 
     /**
-     * @return \Atom\middlewares\BaseMiddleware[]
+     * @return list<BaseMiddleware>
      */
     public function getMiddlewares(): array
     {

@@ -6,41 +6,30 @@ namespace Atom\Middlewares;
 
 use Atom\Atom;
 use Atom\Exception\ForbiddenException;
+use Override;
 
 /**
- * AuthMiddleware
- *
- * This middleware is responsible for checking if a user is authenticated.
- * If the user is not authenticated, it will throw a ForbiddenException.
- *
- * @package Atom\Middlewares
+ * Middleware enforcing user authentication for protected controller actions.
  */
 final class AuthMiddleware extends BaseMiddleware
 {
-    protected array $actions = [];
-
     /**
-     * AuthMiddleware constructor
-     *
-     * @param array $actions List of actions that do not require authentication
+     * @param list<string> $actions Protected actions requiring authentication (empty = all actions protected).
      */
-    public function __construct($actions = [])
-    {
-        $this->actions = $actions;
-    }
+    public function __construct(
+        protected array $actions = [],
+    ) {}
 
     /**
-     * Executes the middleware.
-     *
-     * This method will check if the user is authenticated. If the user is not authenticated,
-     * it will throw a ForbiddenException.
-     *
      * @throws ForbiddenException If the user is not authenticated.
      */
+    #[Override]
     public function execute(): void
     {
-        if (Atom::$app->account->isGuest()) {
-            if (empty($this->actions) || \in_array(Atom::$app->controller->action, $this->actions)) {
+        if (Atom::$app->account::isGuest()) {
+            $controller = Atom::$app->controller;
+            $currentAction = $controller !== null ? $controller->action : '';
+            if ($this->actions === [] || \in_array($currentAction, $this->actions, true)) {
                 throw new ForbiddenException();
             }
         }

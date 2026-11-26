@@ -4,59 +4,54 @@ declare(strict_types=1);
 
 namespace Atom;
 
-use Atom\Cache\ApcuManager;
 use Atom\Account\Account;
-use Atom\Cache\SysVManager;
+use Atom\Component\Cache\CacheWrapper;
 use Atom\Component\Scheme\SchemeGenerate;
 use Atom\Config\Config;
 use Atom\DataBase\Database;
-use Atom\Exception\NotFoundException;
-use Atom\HttpFoundation\Request;
-use Atom\HttpFoundation\Response;
-use Atom\Log\T4LOG;
-use Atom\Component\Mail\MailerProxy;
-use Atom\HttpFoundation\Header;
-use Atom\HttpFoundation\BrowserDetector;
-use Atom\HttpFoundation\ConnectionInformation;
-use Atom\Component\Cache\CacheWrapper;
-use Atom\FileSytem\Path;
-use Atom\Detect\BotDetector;
-use Atom\Images\ImageTransformer;
-use Atom\Dom\Dom;
-use Atom\FileSytem\ResourcesPath;
-use Atom\Session\Session;
-use Atom\Shrink\Shrink;
-use Atom\FileSytem\FileSystem;
-use Atom\Head\Head;
-use Atom\Head\HeadGenerate;
 use Atom\DateTime\DateTime;
+use Atom\Detect\BotDetector;
+use Atom\Dom\Dom;
+use Atom\FileSytem\FileSystem;
+use Atom\FileSytem\ResourcesPath;
 use Atom\FileSytem\WebResourcesPath;
 use Atom\Generate\Manifest\WebAppManifest;
+use Atom\Head\Head;
+use Atom\Head\HeadGenerate;
+use Atom\HttpFoundation\BrowserDetector;
+use Atom\HttpFoundation\ConnectionInformation;
+use Atom\HttpFoundation\Request;
+use Atom\HttpFoundation\Response;
 use Atom\Log\LogEvent;
+use Atom\Log\T4LOG;
 use Atom\Modules\Modul;
 use Atom\Security\ConnectionSaving;
 use Atom\Security\SafetyDataStructureVariable;
 use Atom\Security\ServerDataVariable;
-use Exception;
+use Atom\Session\Session;
+use Atom\Shrink\Shrink;
+use RuntimeException;
+use Throwable;
 
 /**
- * Class Atom
- * @package Atom
- * @author Timonix <timonix@timonix.pl>
- * @version 2.0
+ * Core application kernel for the Atom framework (PHP 8.6+ / Swoole-ready).
  */
 class Atom
 {
-    public const EVENT_BEFORE_REQUEST = 'beforeRequest';
-    public const EVENT_AFTER_REQUEST = 'afterRequest';
+    public const string EVENT_BEFORE_REQUEST = 'beforeRequest';
+    public const string EVENT_AFTER_REQUEST = 'afterRequest';
 
+    /** @var array<string, list<callable>> */
     protected array $eventListeners = [];
 
-    public static array $about;
+    /** @var array<string, mixed> */
+    public static array $about = [];
 
     public static Atom $app;
-    public static string $ROOT_DIR;
-    public static string $ROOT_URI;
+    public static string $ROOT_DIR = '';
+    public static string $ROOT_URI = '';
+
+    /** @var class-string<UserModel> */
     public string $userClass;
     public string $layout = 'main';
     public FileSystem $filesystem;
@@ -67,7 +62,7 @@ class Atom
     public Database $db;
     public Session $session;
     public View $view;
-    public ?UserModel $user;
+    public ?UserModel $user = null;
     public T4LOG $log;
     public Config $config;
     public BrowserDetector $browserDetector;
@@ -81,222 +76,270 @@ class Atom
     public FileSystem $fileSystem;
     public Head $head;
     public WebResourcesPath $webResourcesPath;
-    public string $scheme;
-    public string $headTag;
+    public string $scheme = '';
+    public string $headTag = '';
     public WebAppManifest $webManifest;
     public DateTime $datetime;
     public SafetyDataStructureVariable $safetyDataStructureVariable;
-    public int $connectionIpId;
+    public int $connectionIpId = 0;
     public ServerDataVariable $serverDataVariable;
-    public array $currentServerData;
+
+    /** @var array<string, mixed> */
+    public array $currentServerData = [];
     public LogEvent $logEvent;
     public Modul $modul;
 
     public function __construct(string $rootDir)
     {
-        self::$ROOT_DIR = realpath($rootDir);
-        
-        if (!self::$ROOT_DIR) {
-            die ("invalid base path configuration specified!!!!");
+        $resolvedRoot = $rootDir !== '' ? \realpath($rootDir) : false;
+        if ($resolvedRoot === false) {
+            throw new RuntimeException('Invalid base path configuration specified.');
         }
 
-        self::$ROOT_DIR .= DIRECTORY_SEPARATOR;
+        self::$ROOT_DIR = $resolvedRoot . \DIRECTORY_SEPARATOR;
+        /** @var array<string, mixed> $about */
+        $about = require __DIR__ . '/AboutAtom.php';
+        self::$about = $about;
 
-        self::$about = require_once __DIR__ . '/AboutAtom.php';
         $this->filesystem = new FileSystem();
+        $this->fileSystem = $this->filesystem;
         $this->config = new Config(self::$ROOT_DIR, true);
-        $this->log = new T4LOG(["logRootDir" => $this->config->get('logger')['driver']['path']]);
-        Atom::$ROOT_URI = $this->config->get('app')["uri"];
+
+        $appConfig = $this->config->get('app');
+        $loggerConfig = $this->config->get('logger');
+        $cacheConfig = $this->config->get('cache');
+        $authConfig = $this->config->get('auth');
+        $dbConfig = $this->config->get('database');
+
+        $this->log = new T4LOG(['logRootDir' => $loggerConfig['driver']['path']]);
+        self::$ROOT_URI = (string) ($appConfig['uri'] ?? '');
+
         $this->cacheAtom = new CacheWrapper();
         $this->cacheAtom->initFilesystemAdapter(
-            $this->config->get('cache')['prefix'] . "atom",
+            ($cacheConfig['prefix'] ?? 'atom_') . 'atom',
             1000,
-            $this->config->get('cache')['driver']['path']
+            $cacheConfig['driver']['path'] ?? (self::$ROOT_DIR . 'runtime/cache')
         );
+        $this->cacheAtom->setLogger($this->log);
 
         $this->datetime = new DateTime();
-        $this->datetime::setGlobalDefine((object)[
-            'date' => $this->config->get('app')['dateFormat'],
-            'time' => $this->config->get('app')['timeFormat'],
-            'locale' => $this->config->get('app')['locale'],
-            'datetime' => $this->config->get('app')['datetimeFormat'],
-            'timezone' => $this->config->get('app')['toTimezone']
+        $this->datetime::setGlobalDefine((object) [
+            'date' => $appConfig['dateFormat'],
+            'time' => $appConfig['timeFormat'],
+            'locale' => $appConfig['locale'],
+            'datetime' => $appConfig['datetimeFormat'],
+            'timezone' => $appConfig['toTimezone'],
         ]);
         $this->datetime::setDefaultLocale();
         $this->datetime->setDefaultTimezone();
         $this->datetime::setMacro();
 
-        $this->cacheAtom->setLogger($this->log);
         self::$app = $this;
-        $this->fileSystem = new FileSystem();
         $this->user = null;
-        $this->userClass = $this->config->get('auth')['driver']['provider']['model'];
+        $this->userClass = $authConfig['driver']['provider']['model'];
 
-        if ($this->config->get('app')["browserDetector"]) {
+        if (!empty($appConfig['browserDetector'])) {
             $this->browserDetector = new BrowserDetector();
         }
-        if ($this->config->get('app')["connectionInformation"]['on']) {
+
+        if (!empty($appConfig['connectionInformation']['on'])) {
             $this->connectionInformation = new ConnectionInformation(
-                extends: $this->config->get('app')['connectionInformation']['extension'],
                 cache: $this->cacheAtom,
-                logger: $this->log
+                logger: $this->log,
+                extends: (bool) ($appConfig['connectionInformation']['extension'] ?? false),
             );
         }
-        if ($this->config->get('app')["botDetection"]['on']) {
+
+        if (!empty($appConfig['botDetection']['on'])) {
             $this->botDetector = new BotDetector(
                 logger: $this->log,
-                isBotFile: self::$ROOT_DIR . "/Atom/Lib/Is_bot/is_bot.php",
-                extends: $this->config->get('app')['botDetection']['extension']
+                isBotFile: self::$ROOT_DIR . 'Atom/Lib/Is_bot/is_bot.php',
+                extends: (bool) ($appConfig['botDetection']['extension'] ?? false),
             );
         }
 
         $this->request = new Request();
         $this->response = new Response();
         $this->router = new Router($this->request, $this->response);
-        $this->db = new Database($this->datetime, [...$this->config->get('database')['driver'], 'uri' => Atom::$ROOT_URI]);
+        $this->db = new Database($this->datetime, [...$dbConfig['driver'], 'uri' => self::$ROOT_URI]);
 
+        $serverAddr = (string) ($_SERVER['SERVER_ADDR'] ?? '127.0.0.1');
         $this->serverDataVariable = new ServerDataVariable($this->db, $this->cacheAtom, $this->datetime);
-        $this->currentServerData = $this->serverDataVariable->get($_SERVER['SERVER_ADDR']);
-        $this->serverDataVariable->touchLastActiveAt($_SERVER['SERVER_ADDR']); // touch last active at
+        $this->currentServerData = $this->serverDataVariable->get($serverAddr);
+        $this->serverDataVariable->touchLastActiveAt($serverAddr);
 
         $this->safetyDataStructureVariable = new SafetyDataStructureVariable($this->db, $this->cacheAtom, 3600);
 
-        if (\count((array)$this->currentServerData) === 0) {
-			$this->log->critical("no server data, check if the server configuration is correct in .env and db");
-			throw new Exception("no data about the server");
-		}
+        if (\count($this->currentServerData) === 0) {
+            $this->log->critical('No server data found; verify .env and database server configuration.');
+            throw new RuntimeException('No data about the server.');
+        }
 
-        if ($this->config->get('app')["connectionSaving"]['on']) {
+        if (!empty($appConfig['connectionSaving']['on'])) {
             ConnectionSaving::changeDatabase($this->db);
             ConnectionSaving::changeDateTime($this->datetime);
-            ConnectionSaving::changeServerId($this->currentServerData["id"]);
-            $this->connectionIpId = ConnectionSaving::add($this->browserDetector->toArray(), $this->connectionInformation->toArray(), $this->botDetector->toArray());
+            ConnectionSaving::changeServerId((int) $this->currentServerData['id']);
+            $this->connectionIpId = ConnectionSaving::add(
+                isset($this->browserDetector) ? $this->browserDetector->toArray() : [],
+                isset($this->connectionInformation) ? $this->connectionInformation->toArray() : [],
+                isset($this->botDetector) ? $this->botDetector->toArray() : [],
+            );
         }
 
         $this->session = new Session(config: $this->config->get('session'));
-        if ($this->config->get('app')["actionEventSaving"]['on']) {
-            if (!isset($this->connectionIpId)) {
-                $this->log->critical("connectionSaving must be on");
-                throw new Exception("connectionSaving must be on");
+
+        if (!empty($appConfig['actionEventSaving']['on'])) {
+            if ($this->connectionIpId <= 0) {
+                $this->log->critical('connectionSaving must be enabled when actionEventSaving is active.');
+                throw new RuntimeException('connectionSaving must be on');
             }
 
+            $sessionUser = $this->session->get('user');
             $this->logEvent = new LogEvent(
                 $this->db,
                 $this->log,
                 $this->datetime,
                 $this->safetyDataStructureVariable,
-                !$this->user,
-                Atom::$app->session->get('user') ? Atom::$app->session->get('user') : 1,
+                empty($sessionUser),
+                $sessionUser ? (int) $sessionUser : 1,
                 $this->connectionIpId,
-                $this->currentServerData["id"]
+                (int) $this->currentServerData['id'],
             );
         }
 
-
-        if ($this->config->get('app')["dom"]['on']) {
+        if (!empty($appConfig['dom']['on'])) {
             $this->dom = new Dom();
         }
+
         $this->account = new Account();
-        $this->resourcesPath = new ResourcesPath(self::$ROOT_DIR, $this->config->get('app')["shrink"]);
-        $this->webResourcesPath = new WebResourcesPath($this->config->get('app')["uri"], $this->config->get('app')["shrink"]);
-        if ($this->config->get('app')["shrink"]['on']) {
-            $optinsShrink = [
-                ...$this->resourcesPath->all(),
-                ...$this->config->get('app')["shrink"]
+        $this->resourcesPath = new ResourcesPath(self::$ROOT_DIR, $appConfig['shrink']);
+        $this->webResourcesPath = new WebResourcesPath($appConfig['uri'], $appConfig['shrink']);
+        $resPaths = $this->resourcesPath->all();
+        $webResPaths = $this->webResourcesPath->all();
+
+        if (!empty($appConfig['shrink']['on'])) {
+            $shrinkOptions = [
+                ...$resPaths,
+                ...$appConfig['shrink'],
             ];
 
-            $this->shrink = new Shrink($this->log, $optinsShrink);
-            $this->shrink->autoScanCssDir($this->resourcesPath->resourcesCssDirPath);
-            $this->shrink->autoScanJsDir($this->resourcesPath->resourcesJsDirPath);
+            $this->shrink = new Shrink($this->log, $shrinkOptions);
+            $this->shrink->autoScanCssDir($resPaths['resourcesCssDirPath']);
+            $this->shrink->autoScanJsDir($resPaths['resourcesJsDirPath']);
             $this->shrink->save();
         }
 
-        if ($this->config->get('app')['webManifest']['on']) {
+        if (!empty($appConfig['webManifest']['on'])) {
             $this->webManifest = new WebAppManifest([
-                'name' => $this->config->get('app')['name'],
-                'short_name' => $this->config->get('app')['name'],
-                'start_url' => $this->config->get('app')['uri'],
-                'theme_color' => $this->config->get('app')['webManifest']['colorTheme'],
-                'background_color' => $this->config->get('app')['webManifest']['backgroundColor'],
-                'description' => $this->config->get('app')['head']['description'],
-                'lang' => $this->config->get('app')['locale'],
+                'name' => $appConfig['name'],
+                'short_name' => $appConfig['name'],
+                'start_url' => $appConfig['uri'],
+                'theme_color' => $appConfig['webManifest']['colorTheme'],
+                'background_color' => $appConfig['webManifest']['backgroundColor'],
+                'description' => $appConfig['head']['description'],
+                'lang' => $appConfig['locale'],
             ]);
-            if ($this->config->get('app')['webManifest']['autoSave'] && !file_exists($this->resourcesPath->webManifest)) {
-                $this->webManifest->saveToFile($this->resourcesPath->webManifest);
+            if (!empty($appConfig['webManifest']['autoSave']) && !\file_exists($resPaths['webManifest'])) {
+                $this->webManifest->saveToFile($resPaths['webManifest']);
             }
         }
 
-        if ($this->config->get('app')['scheme']['on']) {
+        if (!empty($appConfig['scheme']['on'])) {
             $this->scheme = SchemeGenerate::autoGenerate(
-                $this->config->get('app')['scheme'],
-                (object)[
-                    'title' => $this->config->get('app')['name'],
-                    'uri' => $this->config->get('app')['uri'],
-                    'lang' => $this->config->get('app')['locale'],
-                    'image' => $this->webResourcesPath->resources
+                $appConfig['scheme'],
+                (object) [
+                    'title' => $appConfig['name'],
+                    'uri' => $appConfig['uri'],
+                    'lang' => $appConfig['locale'],
+                    'image' => $webResPaths['resources'],
                 ]
             );
-
         }
 
-        if ($this->config->get('app')['head']['on']) {
+        if (!empty($appConfig['head']['on'])) {
             $this->head = new Head();
-            if ($this->config->get('app')['head']['autoGenerate']) {
+            if (!empty($appConfig['head']['autoGenerate'])) {
                 $this->headTag = HeadGenerate::autoGenerate(
                     $this->head,
-                    $this->config->get('app')["head"],
-                    (object)[
-                        'title' => $this->config->get('app')['name'],
-                        'description' => $this->config->get('app')['head']['description'],
-                        'uri' => $this->config->get('app')['uri'],
+                    $appConfig['head'],
+                    (object) [
+                        'title' => $appConfig['name'],
+                        'description' => $appConfig['head']['description'],
+                        'uri' => $appConfig['uri'],
                         'canonical' => $this->request->getUrl(),
-                        'image' => $this->webResourcesPath->resources,
-                        'manifest' => $this->webResourcesPath->webManifest,
+                        'image' => $webResPaths['resources'],
+                        'manifest' => $webResPaths['webManifest'],
                         'script' => [
-                            'scheme' => $this->scheme
-                        ]
+                            'scheme' => $this->scheme,
+                        ],
                     ]
                 );
             }
         }
 
-        if (($this->scheme !== '') && $this->config->get('app')['scheme']['automaticallyFreeMemory']) {
+        if ($this->scheme !== '' && !empty($appConfig['scheme']['automaticallyFreeMemory'])) {
             $this->scheme = '';
         }
 
         $this->modul = new Modul($this->config->get('modul'), $this->filesystem, $this->log);
-
         $this->view = new View();
 
-        $userId = Atom::$app->session->get('user');
-
+        $userId = $this->session->get('user');
         if ($userId) {
-            $key = $this->userClass::primaryKey();
-            $this->user = $this->userClass::findOne([$key => $userId]);
+            $userClass = $this->userClass;
+            $key = $userClass::primaryKey();
+            $foundUser = $userClass::findOne([$key => $userId]);
+            $this->user = $foundUser instanceof UserModel ? $foundUser : null;
         }
     }
 
-    public function run()
+    /**
+     * Stateless request handler returning the rendered response body (Swoole / FrankenPHP worker friendly).
+     */
+    public function handle(?Request $request = null, ?Response $response = null): string
     {
+        if ($request !== null) {
+            $this->request = $request;
+        }
+        if ($response !== null) {
+            $this->response = $response;
+        }
+
         $this->triggerEvent(self::EVENT_BEFORE_REQUEST);
         try {
-            echo $this->router->resolve();
-        } catch (\Exception $e) {
-            echo $this->router->renderView('_error', [
+            $output = $this->router->resolve($this->request, $this->response);
+            return \is_string($output) ? $output : (string) ($output ?? '');
+        } catch (Throwable $e) {
+            $code = (int) $e->getCode();
+            if ($code >= 400 && $code <= 599) {
+                $this->response->statusCode($code);
+            } else {
+                $this->response->statusCode(500);
+            }
+
+            return $this->router->renderView('_error', [
                 'exception' => $e,
             ]);
+        } finally {
+            $this->controller = null;
+            $this->triggerEvent(self::EVENT_AFTER_REQUEST);
         }
     }
 
-    public function triggerEvent($eventName)
+    public function run(): void
+    {
+        echo $this->handle();
+    }
+
+    public function triggerEvent(string $eventName): void
     {
         $callbacks = $this->eventListeners[$eventName] ?? [];
         foreach ($callbacks as $callback) {
-            \call_user_func($callback);
+            $callback();
         }
     }
 
-    public function on($eventName, $callback)
+    public function on(string $eventName, callable $callback): void
     {
         $this->eventListeners[$eventName][] = $callback;
     }

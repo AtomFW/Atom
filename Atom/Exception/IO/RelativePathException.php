@@ -4,15 +4,13 @@ declare(strict_types=1);
 
 namespace Atom\Exception\IO;
 
-/**
- * RelativePathException
- *
- * @package Atom\Exception\IO
- */
-class RelativePathException extends \Exception implements
-    \Stringable,
-    \Throwable
+use Exception;
+
+final class RelativePathException extends Exception
 {
-    protected $message = 'A I/O relative path error occurred.';
+    /** @var string */
+    protected $message = 'An I/O relative path error occurred.';
+
+    /** @var int */
     protected $code = 621;
 }

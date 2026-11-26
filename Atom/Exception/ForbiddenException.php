@@ -4,15 +4,16 @@ declare(strict_types=1);
 
 namespace Atom\Exception;
 
-use Atom\Atom;
+use Exception;
 
 /**
- * ForbiddenException
- *
- * @package Atom\Exception
+ * Exception thrown when access to a protected resource is forbidden (HTTP 403).
  */
-class ForbiddenException extends \Exception
+final class ForbiddenException extends Exception
 {
-    protected $message = 'A temporary file could not be created.';
+    /** @var string */
+    protected $message = 'You don\'t have permission to access this page';
+
+    /** @var int */
     protected $code = 403;
 }

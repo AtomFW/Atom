@@ -7,83 +7,94 @@ namespace Atom;
 use Atom\Exception\NotFoundException;
 use Atom\HttpFoundation\Request;
 use Atom\HttpFoundation\Response;
-// use Atom\Log\T4LOG;
-
-use App\Controllers;
 
 class Router
 {
-    private Request $request;
-    private Response $response;
+    /** @var array<string, array<string, callable|array{0: class-string<Controller>|Controller, 1: string}|string>> */
     private array $routeMap = [];
 
-    public function __construct(Request $request, Response $response)
-    {
-        $this->request = $request;
-        $this->response = $response;
-    }
+    public function __construct(
+        private Request $request,
+        private Response $response,
+    ) {}
 
-    public function get(string $url, $callback)
+    public function get(string $url, callable|array|string $callback): void
     {
         $this->routeMap['get'][$url] = $callback;
     }
 
-    public function post(string $url, $callback)
+    public function post(string $url, callable|array|string $callback): void
     {
         $this->routeMap['post'][$url] = $callback;
     }
 
-    /**
-     * @return array
-     */
-    public function getRouteMap($method): array
+    public function put(string $url, callable|array|string $callback): void
     {
-        return $this->routeMap[$method] ?? [];
+        $this->routeMap['put'][$url] = $callback;
     }
 
-    public function getCallback()
+    public function patch(string $url, callable|array|string $callback): void
     {
-        $method = $this->request->getMethod();
-        $url = $this->request->getUrl();
-        // Trim slashes
-        $url = trim($url, '/');
+        $this->routeMap['patch'][$url] = $callback;
+    }
 
-        // Get all routes for current request method
+    public function delete(string $url, callable|array|string $callback): void
+    {
+        $this->routeMap['delete'][$url] = $callback;
+    }
+
+    public function options(string $url, callable|array|string $callback): void
+    {
+        $this->routeMap['options'][$url] = $callback;
+    }
+
+    public function any(string $url, callable|array|string $callback): void
+    {
+        foreach (['get', 'post', 'put', 'patch', 'delete', 'options', 'head'] as $method) {
+            $this->routeMap[$method][$url] = $callback;
+        }
+    }
+
+    /**
+     * @return array<string, callable|array{0: class-string<Controller>|Controller, 1: string}|string>
+     */
+    public function getRouteMap(string $method): array
+    {
+        return $this->routeMap[\strtolower($method)] ?? [];
+    }
+
+    public function getCallback(?Request $request = null): callable|array|string|false
+    {
+        $req = $request ?? $this->request;
+        $method = $req->getMethod();
+        $url = \trim($req->getUrl(), '/');
         $routes = $this->getRouteMap($method);
 
-        $routeParams = false;
-
-        // Start iterating registed routes
         foreach ($routes as $route => $callback) {
-            // Trim slashes
-            $route = trim($route, '/');
-            $routeNames = [];
-
-            if (!$route) {
+            $trimmedRoute = \trim($route, '/');
+            if ($trimmedRoute === '') {
                 continue;
             }
 
-            // Find all route names from route and save in $routeNames
-            if (preg_match_all('/\{(\w+)(:[^}]+)?}/', $route, $matches)) {
+            $routeNames = [];
+            if (\preg_match_all('/\{(\w+)(:[^}]+)?}/', $trimmedRoute, $matches)) {
                 $routeNames = $matches[1];
             }
 
-            // Convert route name into regex pattern
-            $routeRegex = "@^" . preg_replace_callback(
+            $routeRegex = '@^' . \preg_replace_callback(
                 '/\{\w+(:([^}]+))?}/',
-                fn($m) => isset($m[2]) ? "({$m[2]})" : '(\w+)',
-                $route
-            ) . "$@";
+                static fn(array $m): string => isset($m[2]) ? "({$m[2]})" : '(\w+)',
+                $trimmedRoute
+            ) . '$@';
 
-            // Test and match current route against $routeRegex
-            if (preg_match_all($routeRegex, $url, $valueMatches)) {
+            if (\preg_match_all($routeRegex, $url, $valueMatches)) {
                 $values = [];
-                for ($i = 1; $i < \count($valueMatches); $i++) {
+                $matchCount = \count($valueMatches);
+                for ($i = 1; $i < $matchCount; $i++) {
                     $values[] = $valueMatches[$i][0];
                 }
-                $routeParams = array_combine($routeNames, $values);
-
-                $this->request->setRouteParams($routeParams);
+                $routeParams = \array_combine($routeNames, $values);
+                $req->setRouteParams($routeParams);
                 return $callback;
             }
         }
@@ -91,45 +102,55 @@ class Router
         return false;
     }
 
-    public function resolve(): mixed
+    public function resolve(?Request $request = null, ?Response $response = null): mixed
     {
-        $method = $this->request->getMethod();
-        $url = $this->request->getUrl();
-        $callback = $this->routeMap[$method][$url] ?? false;
-        if (!$callback) {
-            $callback = $this->getCallback();
+        $req = $request ?? $this->request;
+        $res = $response ?? $this->response;
+        $method = $req->getMethod();
+        $url = $req->getUrl();
 
+        $callback = $this->routeMap[$method][$url] ?? false;
+        if ($callback === false) {
+            $callback = $this->getCallback($req);
             if ($callback === false) {
                 throw new NotFoundException();
             }
         }
+
         if (\is_string($callback)) {
             return $this->renderView($callback);
         }
+
         if (\is_array($callback)) {
-            /**
-             * @var Controller
-             */
-            // TODO dodać container klasę w której jest new ReflectionClass
-            $controller = new $callback[0]();
-            $controller->action = $callback[1];
+            $controllerOrClass = $callback[0];
+            /** @var Controller $controller */
+            $controller = \is_string($controllerOrClass) ? new $controllerOrClass() : $controllerOrClass;
+            $controller->action = (string) $callback[1];
             Atom::$app->controller = $controller;
-            $middlewares = $controller->getMiddlewares();
-            foreach ($middlewares as $middleware) {
+
+            foreach ($controller->getMiddlewares() as $middleware) {
                 $middleware->execute();
             }
+
             $callback[0] = $controller;
         }
 
-        return \call_user_func($callback, $this->request, $this->response);
+        /** @var callable $callback */
+        return $callback($req, $res);
     }
 
-    public function renderView($view, $params = [])
+    /**
+     * @param array<string, mixed> $params
+     */
+    public function renderView(string $view, array $params = []): string
     {
         return Atom::$app->view->renderView($view, $params);
     }
 
-    public function renderViewOnly($view, $params = [])
+    /**
+     * @param array<string, mixed> $params
+     */
+    public function renderViewOnly(string $view, array $params = []): string
     {
         return Atom::$app->view->renderViewOnly($view, $params);
     }

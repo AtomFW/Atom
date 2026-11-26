@@ -4,15 +4,13 @@ declare(strict_types=1);
 
 namespace Atom\Exception\IO;
 
-/**
- * AbsolutePathException
- *
- * @package Atom\Exception\IO
- */
-class AbsolutePathException extends \Exception implements
-    \Stringable,
-    \Throwable
+use Exception;
+
+final class AbsolutePathException extends Exception
 {
-    protected $message = 'A I/O absolute path error occurred.';
+    /** @var string */
+    protected $message = 'An I/O absolute path error occurred.';
+
+    /** @var int */
     protected $code = 620;
 }

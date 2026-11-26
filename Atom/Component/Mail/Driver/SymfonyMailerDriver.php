@@ -2,26 +2,34 @@
 
 declare(strict_types=1);
 
-namespace Atom\Mail\Driver;
+namespace Atom\Component\Mail\Driver;
 
+use Atom\Component\Mail\Interface\MailerDriverInterface;
+use SensitiveParameter;
 use Throwable;
-use Atom\Mail\MailerDriverInterface;
 
-// -------------------------
-// Symfony Mailer driver
-// -------------------------
-class SymfonyMailerDriver implements MailerDriverInterface
+/**
+ * Symfony Mailer-backed MailerDriverInterface implementation.
+ */
+final class SymfonyMailerDriver implements MailerDriverInterface
 {
+    /** @var array<string, mixed> */
     private array $data = [];
     private ?string $error = null;
-    private ?\Symfony\Component\Mailer\MailerInterface $mailer = null;
-    private ?\Symfony\Component\Mailer\Transport\TransportInterface $transport = null;
-    private ?\Symfony\Component\Mime\Email $email = null;
+    private ?object $mailer = null;
+    private ?object $transport = null;
+    private ?object $email = null;
 
-    public function __construct(array $options = [])
+    /**
+     * @param array<string, mixed> $options
+     */
+    public function __construct(#[SensitiveParameter] array $options = [])
     {
-        // $options may contain 'dsn' (MAILER_DSN) or direct transport config
-        $this->email = new \Symfony\Component\Mime\Email();
+        if (\class_exists('Symfony\\Component\\Mime\\Email')) {
+            $emailClass = 'Symfony\\Component\\Mime\\Email';
+            $this->email = new $emailClass();
+        }
+
         $this->data = [
             'from' => null,
             'to' => [],
@@ -38,194 +46,218 @@ class SymfonyMailerDriver implements MailerDriverInterface
             'priority' => null,
         ];
 
-        // transport: prefer explicit 'dsn' in options, else expect that Transport::fromDsn will be able to load from env
-        $dsn = $options['dsn'] ?? $options['MAILER_DSN'] ?? null;
-        if ($dsn !== null) {
-            try {
-                $this->transport = \Symfony\Component\Mailer\Transport::fromDsn($dsn);
-                $this->mailer = new \Symfony\Component\Mailer\Mailer($this->transport);
-            } catch (Throwable) {
-                // leave null — send() will fail gracefully
-                $this->transport = null;
-                $this->mailer = null;
-            }
-        } else {
-            // try default: application should have provided Mailer via DI; attempt to construct Transport from env MAILER_DSN
-            try {
-                $this->transport = \Symfony\Component\Mailer\Transport::fromDsn($_ENV['MAILER_DSN'] ?? ($_SERVER['MAILER_DSN'] ?? 'smtp://localhost'));
-                $this->mailer = new \Symfony\Component\Mailer\Mailer($this->transport);
-            } catch (Throwable) {
-                $this->transport = null;
-                $this->mailer = null;
-            }
+        $dsn = $options['dsn']
+            ?? $options['MAILER_DSN']
+            ?? (\function_exists('env') ? \env('MAILER_DSN', 'smtp://localhost') : 'smtp://localhost');
+
+        if (\is_string($dsn) && $dsn !== '' && \class_exists('Symfony\\Component\\Mailer\\Transport')) {
+            $this->initTransport($dsn);
         }
     }
 
-    public function setCharSet(string $charset): void
+    private function initTransport(#[SensitiveParameter] string $dsn): void
     {
-        // Symfony Email uses UTF-8 by default; set charset on headers if necessary
-        $this->email->charset($charset);
+        try {
+            $transportClass = (string) ($this->data['transportClass'] ?? 'Symfony\\Component\\Mailer\\Transport');
+            $mailerClass = (string) ($this->data['mailerClass'] ?? 'Symfony\\Component\\Mailer\\Mailer');
+            if (!\class_exists($transportClass) || !\class_exists($mailerClass) || !\is_callable([$transportClass, 'fromDsn'])) {
+                return;
+            }
+            $this->transport = ($transportClass . '::fromDsn')($dsn);
+            $this->mailer = (new \ReflectionClass($mailerClass))->newInstance($this->transport);
+        } catch (Throwable) {
+            $this->transport = null;
+            $this->mailer = null;
+        }
     }
 
+    #[\Override]
+    public function setCharSet(string $charset): void
+    {
+        if ($this->email !== null && \method_exists($this->email, 'charset')) {
+            $this->email->charset($charset);
+        }
+    }
+
+    #[\Override]
     public function setFrom(string $address, string $name = ''): void
     {
         $this->data['from'] = [$address, $name];
-        if ($name === '') {
-            $this->email->from($address);
-        } else {
-            $this->email->from(sprintf('%s <%s>', $name, $address));
+        if ($this->email !== null) {
+            $this->email->from($name === '' ? $address : \sprintf('%s <%s>', $name, $address));
         }
     }
 
+    #[\Override]
     public function addAddress(string $address, string $name = ''): void
     {
         $this->data['to'][] = [$address, $name];
-        if ($name === '') $this->email->to($address);
-        else $this->email->to(sprintf('%s <%s>', $name, $address));
+        if ($this->email !== null) {
+            $this->email->addTo($name === '' ? $address : \sprintf('%s <%s>', $name, $address));
+        }
     }
 
+    #[\Override]
     public function addReplyTo(string $address, string $name = ''): void
     {
         $this->data['replyTo'] = [$address, $name];
-        if ($name === '') $this->email->replyTo($address);
-        else $this->email->replyTo(sprintf('%s <%s>', $name, $address));
+        if ($this->email !== null) {
+            $this->email->replyTo($name === '' ? $address : \sprintf('%s <%s>', $name, $address));
+        }
     }
 
+    #[\Override]
     public function addCC(string $address, string $name = ''): void
     {
         $this->data['cc'][] = [$address, $name];
-        if ($name === '') $this->email->cc($address);
-        else $this->email->cc(sprintf('%s <%s>', $name, $address));
+        if ($this->email !== null) {
+            $this->email->addCc($name === '' ? $address : \sprintf('%s <%s>', $name, $address));
+        }
     }
 
+    #[\Override]
     public function addBCC(string $address, string $name = ''): void
     {
         $this->data['bcc'][] = [$address, $name];
-        if ($name === '') $this->email->bcc($address);
-        else $this->email->bcc(sprintf('%s <%s>', $name, $address));
+        if ($this->email !== null) {
+            $this->email->addBcc($name === '' ? $address : \sprintf('%s <%s>', $name, $address));
+        }
     }
 
+    #[\Override]
     public function setSubject(string $subject): void
     {
         $this->data['subject'] = $subject;
-        $this->email->subject($subject);
+        if ($this->email !== null) {
+            $this->email->subject($subject);
+        }
     }
 
+    #[\Override]
     public function setBody(string $body): void
     {
         $this->data['body'] = $body;
-        if ($this->data['isHtml']) {
-            $this->email->html($body);
-        } else {
-            $this->email->text($body);
+        if ($this->email !== null) {
+            if ($this->data['isHtml']) {
+                $this->email->html($body);
+            } else {
+                $this->email->text($body);
+            }
         }
     }
 
+    #[\Override]
     public function setAltBody(string $alt): void
     {
         $this->data['alt'] = $alt;
-        if ($this->data['isHtml']) {
-            $this->email->text($alt);
-        } else {
+        if ($this->email !== null) {
             $this->email->text($alt);
         }
     }
 
+    #[\Override]
     public function setIsHtml(bool $isHtml): void
     {
         $this->data['isHtml'] = $isHtml;
-        // ensure body is set accordingly on next setBody call
-        if (!empty($this->data['body'])) {
+        if (\is_string($this->data['body']) && $this->data['body'] !== '') {
             $this->setBody($this->data['body']);
         }
     }
 
+    #[\Override]
     public function addAttachment(string $path, ?string $name = null): void
     {
         $this->data['attachments'][] = [$path, $name];
-        if ($name === null) {
-            $this->email->attachFromPath($path);
-        } else {
-            $this->email->attachFromPath($path, $name);
+        if ($this->email !== null) {
+            if ($name === null) {
+                $this->email->attachFromPath($path);
+            } else {
+                $this->email->attachFromPath($path, $name);
+            }
         }
     }
 
+    #[\Override]
     public function clearAddresses(): void
     {
-        // Symfony Email is immutable-like; can't remove specific entries easily — recreate email
-        $this->email = new \Symfony\Component\Mime\Email();
-        // re-apply body/charset if present
+        if (\class_exists('Symfony\\Component\\Mime\\Email')) {
+            $emailClass = 'Symfony\\Component\\Mime\\Email';
+            $this->email = new $emailClass();
+        }
         $this->data['to'] = [];
         $this->data['cc'] = [];
         $this->data['bcc'] = [];
     }
 
+    #[\Override]
     public function clearAttachments(): void
     {
-        // Symfony Email does not expose remove attachment, recreate and reapply headers/body
         $existing = $this->data;
-        $this->email = new \Symfony\Component\Mime\Email();
-        $this->data['attachments'] = [];
-        // reapply from/subject/body
-        if (!empty($existing['from'])) {
-            [$addr, $nm] = $existing['from'];
-            $this->setFrom($addr, $nm);
+        if (\class_exists('Symfony\\Component\\Mime\\Email')) {
+            $emailClass = 'Symfony\\Component\\Mime\\Email';
+            $this->email = new $emailClass();
         }
-        if (!empty($existing['subject'])) {
+        $this->data['attachments'] = [];
+
+        if (\is_array($existing['from']) && isset($existing['from'][0])) {
+            $this->setFrom((string) $existing['from'][0], (string) ($existing['from'][1] ?? ''));
+        }
+        if (\is_string($existing['subject']) && $existing['subject'] !== '') {
             $this->setSubject($existing['subject']);
         }
-        if (!empty($existing['body'])) {
+        if (\is_string($existing['body']) && $existing['body'] !== '') {
             $this->setBody($existing['body']);
         }
     }
 
+    #[\Override]
     public function addCustomHeader(string $name, string $value): void
     {
         $this->data['headers'][$name] = $value;
-        $this->email->getHeaders()->addTextHeader($name, $value);
-    }
-
-    public function setPriority(int $priority): void
-    {
-        // map priority 1..5 to X-Priority header
-        $this->data['priority'] = $priority;
-        $this->email->getHeaders()->addTextHeader('X-Priority', (string)$priority);
-    }
-
-    public function setReturnPath(string $address): void
-    {
-        $this->data['returnPath'] = $address;
-        // Symfony Email supports return-path via header
-        $this->email->getHeaders()->addMailboxHeader('Return-Path', $address);
-    }
-
-    public function setDKIM(array $options): void
-    {
-        // Symfony Mailer does not provide built-in DKIM signer by default in all setups.
-        // You may implement signing via Mime/Signer or use third-party packages.
-        // We provide no-op here but store options for potential external signer.
-        $this->data['dkim'] = $options;
-    }
-
-    public function setMailerOptions(array $options): void
-    {
-        // allow setting DSN for transport or replacing Mailer
-        if (!empty($options['dsn'])) {
-            try {
-                $this->transport = \Symfony\Component\Mailer\Transport::fromDsn($options['dsn']);
-                $this->mailer = new \Symfony\Component\Mailer\Mailer($this->transport);
-            } catch (Throwable) {
-                $this->mailer = null;
-                $this->transport = null;
-            }
+        if ($this->email !== null) {
+            $this->email->getHeaders()->addTextHeader($name, $value);
         }
     }
 
+    #[\Override]
+    public function setPriority(int $priority): void
+    {
+        $clamped = \clamp($priority, 1, 5);
+        $this->data['priority'] = $clamped;
+        if ($this->email !== null) {
+            $this->email->getHeaders()->addTextHeader('X-Priority', (string) $clamped);
+        }
+    }
+
+    #[\Override]
+    public function setReturnPath(string $address): void
+    {
+        $this->data['returnPath'] = $address;
+        if ($this->email !== null) {
+            $this->email->getHeaders()->addMailboxHeader('Return-Path', $address);
+        }
+    }
+
+    #[\Override]
+    public function setDKIM(#[SensitiveParameter] array $options): void
+    {
+        $this->data['dkim'] = $options;
+    }
+
+    #[\Override]
+    public function setMailerOptions(#[SensitiveParameter] array $options): void
+    {
+        if (!empty($options['dsn']) && \is_string($options['dsn']) && \class_exists('Symfony\\Component\\Mailer\\Transport')) {
+            $this->initTransport($options['dsn']);
+        }
+    }
+
+    #[\Override]
     public function send(): bool
     {
         $this->error = null;
 
-        if ($this->mailer === null) {
+        if ($this->mailer === null || $this->email === null) {
             $this->error = 'Symfony Mailer not initialized (no transport).';
             return false;
         }
@@ -239,8 +271,13 @@ class SymfonyMailerDriver implements MailerDriverInterface
         }
     }
 
+    #[\Override]
     public function getErrorInfo(): ?string
     {
         return $this->error;
     }
+}
+
+if (!\class_exists('Atom\\Mail\\Driver\\SymfonyMailerDriver', false)) {
+    \class_alias(SymfonyMailerDriver::class, 'Atom\\Mail\\Driver\\SymfonyMailerDriver');
 }

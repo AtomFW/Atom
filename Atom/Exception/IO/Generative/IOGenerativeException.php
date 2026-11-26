@@ -6,24 +6,15 @@ namespace Atom\Exception\IO\Generative;
 
 use Atom\Exception\Interface\Generative\GenerativeExceptionInterface;
 use Atom\Exception\Trait\Generative\GenerativeExceptionTrait;
+use Exception;
 
-/**
- * IOGenerativeException
- *
- * @package Atom\Exception\IO\Generative
- */
-class IOGenerativeException extends \Exception implements
-    GenerativeExceptionInterface,
-    \Stringable,
-    \Throwable
+final class IOGenerativeException extends Exception implements GenerativeExceptionInterface
 {
     use GenerativeExceptionTrait;
 
+    /** @var string */
     protected $message = 'A handler error occurred during I/O operation.';
-    protected $code = 600;
 
-    public function __construct(string $format, ...$params)
-    {
-        $this->message = \sprintf($format, ...$params);
-    }
+    /** @var int */
+    protected $code = 600;
 }

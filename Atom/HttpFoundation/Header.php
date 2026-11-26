@@ -2,206 +2,208 @@
 
 declare(strict_types=1);
 
-/*
-    Header class
-    the header is manager header structure
-*/
-
 namespace Atom\HttpFoundation;
 
 use ArrayAccess;
-use Countable;
-use IteratorAggregate;
 use ArrayIterator;
+use Countable;
 use InvalidArgumentException;
+use IteratorAggregate;
+use Override;
 use Psr\Http\Message\MessageInterface;
+use RuntimeException;
 
 /**
- * HeaderCollection
+ * Case-insensitive HTTP Header collection with optional immutability and CRLF-injection protection.
  *
- * - Immutable by default optionally (pass $immutable = false to mutate in-place)
- * - Uses case-insensitive header keys internally, preserves original-case for output
- *
- * Comments and docblocks in English.
+ * @implements ArrayAccess<mixed, string|null>
+ * @implements IteratorAggregate<string, list<string>>
  */
 final class Header implements ArrayAccess, IteratorAggregate, Countable
 {
-    /** @var array<string, string[]>  Lower-cased header name => array of values */
+    /** @var array<string, list<string>> Lower-cased header name => list of values */
     private array $map = [];
 
-    /** @var array<string, string>  Lower-cased header name => original canonical case ("Content-Type") */
+    /** @var array<string, string> Lower-cased header name => canonical case ("Content-Type") */
     private array $originalNames = [];
 
     private bool $immutable;
 
     /**
-     * Static flag to ensure header_register_callback() is called only once per PHP request lifecycle
+     * Static flag to ensure header_register_callback() is called only once per SAPI lifecycle.
      */
     private static bool $headerCallbackRegistered = false;
 
-
     /**
-     * @param array<string, string|string[]> $headers initial headers (name => value or array of values)
-     * @param bool $immutable if true methods like set/add/remove will return new instance instead of mutating
+     * @param array<string, string|string[]> $headers
      */
     public function __construct(array $headers = [], bool $immutable = false, bool $registerHeaderCallback = true)
     {
-        // set to false even
-        // if $immutable is set to true due to setting initial headers without changing the $immutable settings
         $this->immutable = false;
 
-        // Register header callback to capture headers set by PHP functions (e.g. setcookie) if enabled
         foreach ($headers as $name => $value) {
-            $this->set($name, $value);
+            $this->set((string) $name, $value);
         }
 
         $this->immutable = $immutable;
 
-        // auto-register header callback on construction if enabled and not already registered (e.g. for fromGlobals)
         if ($registerHeaderCallback) {
             $this->registerHeaderCallback();
         }
     }
 
     /**
-     * Create from PHP globals / server variables (fallback polyfill for getallheaders).
+     * Create from PHP server variables / SAPI headers.
+     *
+     * @param array<string, mixed>|null $server Optional explicit server map (Swoole / testing)
      */
-    public static function fromGlobals(bool $immutable = false): self
+    public static function fromGlobals(bool $immutable = false, ?array $server = null): self
     {
-        $raw = function_exists('getallheaders') ? (array) getallheaders() : self::fromServerSuperglobals();
-        $parsed = [];
-        foreach ($raw as $k => $v) {
-            $parsed[$k] = $v;
+        if ($server !== null) {
+            return new self(self::fromServerArray($server), $immutable);
         }
-        return new self($parsed, $immutable);
+
+        $raw = (\PHP_SAPI !== 'cli' && \function_exists('getallheaders'))
+            ? (array) \getallheaders()
+            : self::fromServerArray($_SERVER);
+
+        return new self($raw, $immutable);
     }
 
     /**
-     * Polyfill to extract headers from $_SERVER (works on most SAPI).
+     * @param array<string, mixed> $server
+     * @return array<string, string>
      */
-    private static function fromServerSuperglobals(): array
+    private static function fromServerArray(array $server): array
     {
         $headers = [];
-        foreach ($_SERVER as $key => $value) {
-            if (str_starts_with($key, 'HTTP_')) {
-                $name = str_replace(' ', '-', ucwords(strtolower(str_replace('_', ' ', substr($key, 5)))));
-                $headers[$name] = $value;
+        foreach ($server as $key => $value) {
+            if (!\is_scalar($value)) {
                 continue;
             }
-            // Content-Type, Content-Length are not prefixed with HTTP_
+            $strVal = (string) $value;
+            if (\str_starts_with($key, 'HTTP_')) {
+                $name = \substr($key, 5)
+                    |> (static fn(string $s): string => \str_replace('_', ' ', $s))
+                    |> \strtolower(...)
+                    |> \ucwords(...)
+                    |> (static fn(string $s): string => \str_replace(' ', '-', $s));
+                $headers[$name] = $strVal;
+                continue;
+            }
             if ($key === 'CONTENT_TYPE') {
-                $headers['Content-Type'] = $value;
+                $headers['Content-Type'] = $strVal;
                 continue;
             }
             if ($key === 'CONTENT_LENGTH') {
-                $headers['Content-Length'] = $value;
-                continue;
+                $headers['Content-Length'] = $strVal;
             }
         }
+
         return $headers;
     }
 
-    /**
-     * Normalize header key to lowercase trimmed.
-     */
     private static function normalizeKey(string $name): string
     {
-        return strtolower(trim($name));
+        self::assertSafeHeaderToken($name);
+        return \strtolower(\trim($name));
     }
 
-    /**
-     * Canonicalize header name for output: Title-Case (Content-Type)
-     */
     private static function canonicalizeName(string $name): string
     {
-        $name = trim($name);
-        $parts = explode('-', $name);
-        $parts = array_map(fn($p) => ucfirst(strtolower($p)), $parts);
-        return implode('-', $parts);
+        $parts = \explode('-', \trim($name));
+        $parts = \array_map(static fn(string $p): string => \ucfirst(\strtolower($p)), $parts);
+        return \implode('-', $parts);
+    }
+
+    private static function sanitizeValue(mixed $value): string
+    {
+        $str = (string) $value;
+        if (\str_contains($str, "\r") || \str_contains($str, "\n") || \str_contains($str, "\0")) {
+            throw new InvalidArgumentException('Invalid CRLF/null character in HTTP header value.');
+        }
+
+        return $str;
+    }
+
+    private static function assertSafeHeaderToken(string $name): void
+    {
+        if (\str_contains($name, "\r") || \str_contains($name, "\n") || \str_contains($name, "\0")) {
+            throw new InvalidArgumentException('Invalid CRLF/null character in HTTP header name.');
+        }
     }
 
     /**
-     * Set header (replace existing values). Accepts string or array of strings.
-     *
-     * If immutable mode is enabled, returns new instance. Otherwise returns $this.
-     *
-     * @param string $name
      * @param string|string[] $value
      */
     public function set(string $name, string|array $value): static
     {
         $instance = $this->mutableInstance();
         $key = self::normalizeKey($name);
-        $values = \is_array($value) ? array_values($value) : [$value];
-        $values = array_map('strval', $values);
+        $rawValues = \is_array($value) ? \array_values($value) : [$value];
+        $values = \array_map(self::sanitizeValue(...), $rawValues);
+
         $instance->map[$key] = $values;
         $instance->originalNames[$key] = self::canonicalizeName($name);
+
         return $instance;
     }
 
     /**
-     * Add header value(s) without removing existing ones.
-     *
-     * @param string $name
      * @param string|string[] $value
      */
     public function add(string $name, string|array $value): static
     {
         $instance = $this->mutableInstance();
         $key = self::normalizeKey($name);
-        $values = \is_array($value) ? array_values($value) : [$value];
-        $values = array_map('strval', $values);
+        $rawValues = \is_array($value) ? \array_values($value) : [$value];
+        $values = \array_map(self::sanitizeValue(...), $rawValues);
+
         if (!isset($instance->map[$key])) {
             $instance->map[$key] = [];
             $instance->originalNames[$key] = self::canonicalizeName($name);
         }
-        $instance->map[$key] = \array_merge($instance->map[$key], $values);
+
+        $instance->map[$key] = [...$instance->map[$key], ...$values];
         return $instance;
     }
 
-    /**
-     * Prepend a value for a header (useful for Cache-Control ordering).
-     */
     public function prepend(string $name, string $value): static
     {
         $instance = $this->mutableInstance();
         $key = self::normalizeKey($name);
+        $clean = self::sanitizeValue($value);
+
         if (!isset($instance->map[$key])) {
             $instance->map[$key] = [];
             $instance->originalNames[$key] = self::canonicalizeName($name);
         }
-        array_unshift($instance->map[$key], $value);
+
+        \array_unshift($instance->map[$key], $clean);
         return $instance;
     }
 
-    /**
-     * Remove header entirely.
-     */
     public function remove(string $name): static
     {
         $instance = $this->mutableInstance();
         $key = self::normalizeKey($name);
         unset($instance->map[$key], $instance->originalNames[$key]);
+
         return $instance;
     }
 
-    /**
-     * Get first header value as string (joins multiple values with comma if present).
-     */
     public function get(string $name, ?string $default = null): ?string
     {
         $key = self::normalizeKey($name);
-        if (!isset($this->map[$key]) || \count($this->map[$key]) === 0) {
+        if (!isset($this->map[$key]) || $this->map[$key] === []) {
             return $default;
         }
-        // Per RFC, some headers are comma-joined; return comma-joined by default
-        return implode(', ', $this->map[$key]);
+
+        return \implode(', ', $this->map[$key]);
     }
 
     /**
-     * Get all values for header as array.
-     *
-     * @return string[]
+     * @return list<string>
      */
     public function getAll(string $name): array
     {
@@ -212,72 +214,63 @@ final class Header implements ArrayAccess, IteratorAggregate, Countable
     public function has(string $name): bool
     {
         $key = self::normalizeKey($name);
-        return isset($this->map[$key]) && count($this->map[$key]) > 0;
+        return isset($this->map[$key]) && $this->map[$key] !== [];
     }
 
-    /**
-     * Return count of distinct header names.
-     */
+    #[Override]
     public function count(): int
     {
-        return count($this->map);
+        return \count($this->map);
     }
 
     /**
-     * IteratorAggregate: iterate as name => values[]
-     * Preserves canonical name casing for keys.
-     *
-     * @return ArrayIterator<string, string[]>
+     * @return ArrayIterator<string, list<string>>
      */
+    #[Override]
     public function getIterator(): ArrayIterator
     {
-        $out = [];
-        foreach ($this->map as $k => $values) {
-            $out[$this->originalNames[$k] ?? $k] = $values;
-        }
-        return new ArrayIterator($out);
+        return new ArrayIterator($this->toArray());
     }
 
-    // ArrayAccess: treat offset as header name; offsetGet returns first value (comma-joined) or null
+    #[Override]
     public function offsetExists(mixed $offset): bool
     {
-        if (!\is_string($offset)) {
-            return false;
-        }
-
-        return $this->has($offset);
+        return \is_string($offset) && $this->has($offset);
     }
 
+    #[Override]
     public function offsetGet(mixed $offset): mixed
     {
-        if (!\is_string($offset)) {
-            return null;
-        }
-
-        return $this->get($offset, null);
+        return \is_string($offset) ? $this->get($offset, null) : null;
     }
 
+    /**
+     * @param mixed $offset
+     * @param mixed $value
+     */
+    #[Override]
     public function offsetSet(mixed $offset, mixed $value): void
     {
         if (!\is_string($offset)) {
             throw new InvalidArgumentException('Header name must be a string');
         }
+        if (!\is_string($value) && !\is_array($value)) {
+            throw new InvalidArgumentException('Header value must be a string or array of strings');
+        }
+
         $this->set($offset, $value);
     }
 
+    #[Override]
     public function offsetUnset(mixed $offset): void
     {
-        if (!\is_string($offset)) {
-            return;
+        if (\is_string($offset)) {
+            $this->remove($offset);
         }
-
-        $this->remove($offset);
     }
 
     /**
-     * Return array representation: canonical name => array of values
-     *
-     * @return array<string, string[]>
+     * @return array<string, list<string>>
      */
     public function toArray(): array
     {
@@ -285,14 +278,12 @@ final class Header implements ArrayAccess, IteratorAggregate, Countable
         foreach ($this->map as $k => $values) {
             $out[$this->originalNames[$k] ?? $k] = $values;
         }
+
         return $out;
     }
 
     /**
-     * Return header lines: ["Name: value", ...]
-     * If header has multiple values, each becomes its own line.
-     *
-     * @return string[]
+     * @return list<string>
      */
     public function toLines(): array
     {
@@ -303,248 +294,214 @@ final class Header implements ArrayAccess, IteratorAggregate, Countable
                 $lines[] = $name . ': ' . $v;
             }
         }
+
         return $lines;
     }
 
-    /**
-     * Return raw string representation (CRLF separated).
-     */
     public function toString(string $eol = "\r\n"): string
     {
-        return implode($eol, $this->toLines());
+        return \implode($eol, $this->toLines());
     }
 
-    /**
-     * Send headers to client using header() and optionally set response code.
-     *
-     * Replaces or appends depending on $replace param.
-     */
     public function send(bool $replace = true, ?int $responseCode = null): void
     {
-        if (headers_sent($file, $line)) {
-            throw new \RuntimeException("Headers already sent in $file:$line");
+        if (\headers_sent($file, $line)) {
+            throw new RuntimeException("Headers already sent in {$file}:{$line}");
         }
 
         foreach ($this->map as $k => $values) {
             $name = $this->originalNames[$k] ?? $k;
             foreach ($values as $v) {
-                // Use header() with replace=false to allow multiple same-name headers
-                header(\sprintf('%s: %s', $name, $v), $replace);
+                \header(\sprintf('%s: %s', $name, $v), $replace);
             }
         }
 
         if ($responseCode !== null) {
-            http_response_code($responseCode);
+            \http_response_code($responseCode);
         }
     }
 
     /**
-     * Parse and return Content-Type header structured info:
-     * ['mime'=>'text/html', 'params' => ['charset' => 'utf-8']]
+     * @return array{mime: string, params: array<string, string>}|null
      */
     public function parseContentType(): ?array
     {
         $raw = $this->get('Content-Type', '');
-
-        if ($raw === '') {
+        if ($raw === null || $raw === '') {
             return null;
         }
 
-        $parts = \array_map('trim', \explode(';', $raw));
-        $mime = \array_shift(array: $parts);
+        $parts = \array_map(\trim(...), \explode(';', $raw));
+        $mime = (string) \array_shift($parts);
         $params = [];
+
         foreach ($parts as $p) {
             if ($p === '') {
                 continue;
             }
 
-            [$k, $v] = \array_map('trim', \array_merge(explode('=', $p, 2), ['']));
-            $k = strtolower($k);
-            $v = trim($v, " \t\n\r\0\x0B\"'");
-            $params[$k] = $v;
+            [$k, $v] = \array_map(\trim(...), [...\explode('=', $p, 2), '']);
+            $params[\strtolower($k)] = \trim($v, " \t\n\r\0\x0B\"'");
         }
+
         return ['mime' => \strtolower($mime), 'params' => $params];
     }
 
     /**
-     * Parse Cache-Control header into associative flags/values.
-     * E.g. "max-age=3600, public" => ['max-age' => '3600', 'public' => true]
-     *
      * @return array<string, string|bool>
      */
     public function parseCacheControl(): array
     {
         $raw = $this->get('Cache-Control', '');
-        if ($raw === '') {
+        if ($raw === null || $raw === '') {
             return [];
         }
 
-        $parts = array_map('trim', explode(',', $raw));
+        $parts = \array_map(\trim(...), \explode(',', $raw));
         $out = [];
         foreach ($parts as $p) {
             if ($p === '') {
                 continue;
             }
 
-            if (str_contains($p, '=')) {
-                [$k, $v] = array_map('trim', explode('=', $p, 2));
-                $out[strtolower($k)] = $v;
+            if (\str_contains($p, '=')) {
+                [$k, $v] = \array_map(\trim(...), \explode('=', $p, 2));
+                $out[\strtolower($k)] = $v;
             } else {
-                $out[strtolower($p)] = true;
+                $out[\strtolower($p)] = true;
             }
         }
+
         return $out;
     }
 
-     /**
-     * Parse Accept-like headers (Accept, Accept-Language, Accept-Encoding)
-     * Returns array of ['value' => string, 'q' => float] ordered by q desc then appearance order
+    /**
+     * @return list<array{value: string, q: float}>
      */
     private function parseWeightedHeaderRaw(string $raw): array
     {
-        $items = [];
         if ($raw === '') {
-            return $items;
+            return [];
         }
 
-        $parts = array_map('trim', explode(',', $raw));
+        $parts = \array_map(\trim(...), \explode(',', $raw));
+        $items = [];
         $index = 0;
+
         foreach ($parts as $part) {
             if ($part === '') {
                 continue;
             }
 
-            $segments = array_map('trim', explode(';', $part));
-            $value = array_shift($segments);
+            $segments = \array_map(\trim(...), \explode(';', $part));
+            $value = (string) \array_shift($segments);
             $q = 1.0;
+
             foreach ($segments as $seg) {
-                if (str_starts_with($seg, 'q=')) {
-                    $qVal = substr($seg, 2);
-                    $q = is_numeric($qVal) ? (float) $qVal : $q;
+                if (\str_starts_with($seg, 'q=')) {
+                    $qVal = \substr($seg, 2);
+                    if (\is_numeric($qVal)) {
+                        $q = \clamp((float) $qVal, 0.0, 1.0);
+                    }
                     break;
                 }
             }
+
             $items[] = ['value' => $value, 'q' => $q, 'index' => $index++];
         }
-        // sort by q desc, then index asc to keep stable tie-breaking
-        usort($items, function ($a, $b) {
-            if ($a['q'] === $b['q']) {
-                return $a['index'] <=> $b['index'];
-            }
-            return $b['q'] <=> $a['q'];
-        });
-        // drop index now
-        return array_map(fn($it) => ['value' => $it['value'], 'q' => $it['q']], $items);
-    }
 
-    public function parseAccept(): array
-    {
-        $raw = $this->get('Accept', '');
-        return $this->parseWeightedHeaderRaw($raw);
-    }
+        \usort($items, static fn(array $a, array $b): int => $a['q'] === $b['q']
+            ? ($a['index'] <=> $b['index'])
+            : ($b['q'] <=> $a['q']));
 
-    public function parseAcceptLanguage(): array
-    {
-        $raw = $this->get('Accept-Language', '');
-        return $this->parseWeightedHeaderRaw($raw);
-    }
-
-    public function parseAcceptEncoding(): array
-    {
-        $raw = $this->get('Accept-Encoding', '');
-        return $this->parseWeightedHeaderRaw($raw);
+        return \array_map(static fn(array $it): array => ['value' => $it['value'], 'q' => $it['q']], $items);
     }
 
     /**
-     * Convert PSR-7 MessageInterface headers into HeaderCollection
+     * @return list<array{value: string, q: float}>
      */
+    public function parseAccept(): array
+    {
+        return $this->parseWeightedHeaderRaw((string) $this->get('Accept', ''));
+    }
+
+    /**
+     * @return list<array{value: string, q: float}>
+     */
+    public function parseAcceptLanguage(): array
+    {
+        return $this->parseWeightedHeaderRaw((string) $this->get('Accept-Language', ''));
+    }
+
+    /**
+     * @return list<array{value: string, q: float}>
+     */
+    public function parseAcceptEncoding(): array
+    {
+        return $this->parseWeightedHeaderRaw((string) $this->get('Accept-Encoding', ''));
+    }
+
     public static function fromPsr7(MessageInterface $message, bool $immutable = false): self
     {
         $headers = [];
         foreach ($message->getHeaders() as $name => $values) {
-            $headers[$name] = $values;
+            $headers[(string) $name] = $values;
         }
+
         return new self($headers, $immutable);
     }
 
-    /**
-     * Apply headers from this collection to a PSR-7 MessageInterface instance.
-     * Returns a new MessageInterface instance (PSR-7 objects are immutable).
-     */
     public function toPsr7(MessageInterface $message): MessageInterface
     {
-        // Remove any existing headers that we will replace
         foreach ($this->toArray() as $name => $values) {
-            // withoutHeader exists on PSR-7 MessageInterface
             $message = $message->withoutHeader($name);
             foreach ($values as $v) {
                 $message = $message->withAddedHeader($name, $v);
             }
         }
+
         return $message;
     }
 
-    /**
-     * Register a single header_register_callback for this request lifecycle.
-     * Returns true if callback was registered now, false if it had been registered earlier.
-     */
     public function registerHeaderCallback(?callable $callback = null): bool
     {
-        if (static::$headerCallbackRegistered) {
+        if (self::$headerCallbackRegistered) {
             return false;
         }
 
-        if ($callback === null) {
-            $callback = fn() => $this->send();
+        if (!\function_exists('header_register_callback') || \headers_sent()) {
+            self::$headerCallbackRegistered = true;
+            return true;
         }
 
-        header_register_callback($callback);
-        static::$headerCallbackRegistered = true;
+        $cb = $callback ?? fn() => $this->send();
+        \header_register_callback($cb);
+        self::$headerCallbackRegistered = true;
+
         return true;
     }
 
-    /**
-     * Helper: create a mutable copy or return $this according to $this->immutable.
-     */
     private function mutableInstance(): self
     {
-        if ($this->immutable) {
-            // clone and return new mutable instance (preserve immutability on original)
-            $clone = clone $this;
-            // cloned instance should keep immutable flag as the same (so subsequent ops still return clones)
-            // this design keeps consistent immutable behaviour: operations always return an instance.
-            return $clone;
-        }
-        return $this;
+        return $this->immutable ? clone $this : $this;
     }
 
-    // Prevent external cloning to avoid surprises (we clone internally above)
     private function __clone()
     {
-        $this->map = array_map(function ($a) {
-            return array_values($a);
-        }, $this->map);
-        $this->originalNames = \array_merge([], $this->originalNames);
+        $this->map = \array_map(\array_values(...), $this->map);
+        $this->originalNames = [...$this->originalNames];
     }
 
-    /**
-     * Parse a raw header line like "Name: value" and add to collection.
-     *
-     * @param string $line
-     * @return void
-     */
     public function addRawLine(string $line): void
     {
-        if (!str_contains($line, ':')) {
+        if (!\str_contains($line, ':')) {
             return;
         }
-        [$name, $value] = array_map('trim', explode(':', $line, 2));
+
+        [$name, $value] = \array_map(\trim(...), \explode(':', $line, 2));
         $this->add($name, $value);
     }
 
-    /**
-     * Convenience: create a copy that is immutable.
-     */
     public function withImmutable(bool $immutable = true): self
     {
         $clone = clone $this;

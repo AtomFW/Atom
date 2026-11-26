@@ -6,24 +6,15 @@ namespace Atom\Exception\IO\Generative;
 
 use Atom\Exception\Interface\Generative\GenerativeExceptionInterface;
 use Atom\Exception\Trait\Generative\GenerativeExceptionTrait;
+use Exception;
 
-/**
- * RelativePathGenerativeException
- *
- * @package Atom\Exception\IO\Generative
- */
-class RelativePathGenerativeException extends \Exception implements
-    GenerativeExceptionInterface,
-    \Stringable,
-    \Throwable
+final class RelativePathGenerativeException extends Exception implements GenerativeExceptionInterface
 {
     use GenerativeExceptionTrait;
 
-    protected $message = 'A I/O relative path error occurred.';
-    protected $code = 621;
+    /** @var string */
+    protected $message = 'An I/O relative path error occurred.';
 
-    public function __construct(string $format, ...$params)
-    {
-        $this->message = \sprintf($format, ...$params);
-    }
+    /** @var int */
+    protected $code = 621;
 }

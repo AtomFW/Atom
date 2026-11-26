@@ -4,70 +4,62 @@ declare(strict_types=1);
 
 namespace Atom\Security;
 
+use FilesystemIterator;
+use InvalidArgumentException;
 use Psr\Log\LoggerInterface;
 use Psr\Log\NullLogger;
+use RecursiveDirectoryIterator;
+use RecursiveIteratorIterator;
+use SplFileInfo;
+use Throwable;
 
 /**
- * FileSafetyScanner
- *
- * Efficient, chunked file scanner using fopen/fread to avoid large memory usage.
- *
+ * Constant-memory streaming file scanner (`fopen`/`fread` with `try/finally` handle safety and PHP 8.6 `clamp()`).
  */
 final class FileSafetyScanner
 {
-    /** @var int Default chunk size (8 MB). Can be increased (e.g. 50MB) but be careful with memory. */
     private int $chunkSize;
-
-    /** @var int|null Maximum bytes to scan per file (null = unlimited) */
     private ?int $maxBytesPerFile;
 
-    /** @var array<string> Whitelist of extensions (no dot), if non-empty => only these are scanned (priority). */
+    /** @var list<string> */
     private array $includeExtensions;
 
-    /** @var array<string> Blacklist of extensions (no dot) to skip. Ignored when includeExtensions not empty. */
+    /** @var list<string> */
     private array $excludeExtensions;
 
-    /** @var array<string> Paths (substrings) or regex patterns to exclude (directories/files) */
+    /** @var list<string> */
     private array $excludePaths;
 
-    /** @var LoggerInterface|null Logger to use (null = no logging) */
-    private ?LoggerInterface $logger;
+    private LoggerInterface $logger;
 
-    /**
-     * Signatures to search for.
-     * Each item can be:
-     *  - string (literal substring search)
-     *  - array of form ['regex' => '...'] to use preg_match (PCRE)
-     *
-     * @var array<int, string|array>
-     */
+    /** @var array<int, string|array{regex?: string}> */
     private array $signatures;
 
-    /** @var bool Whether string searches are case-insensitive (stripos) */
     private bool $caseInsensitive;
 
-    /** @var callable|null Callback invoked when a finding is detected: function(array $finding): void */
+    /** @var callable|null */
     private $findingCallback = null;
 
-    /** @var array<int,array> Accumulated findings */
+    /** @var list<array<string, mixed>> */
     private array $findings = [];
 
-    /** @var int Maximum length of signature (bytes) used for overlap */
-    private int $maxSignatureLength = 0;
+    private int $maxSignatureLength = 1;
 
-    /** @param array{
+    /**
+     * @param array{
      *   chunkSize?: int,
      *   maxBytesPerFile?: int|null,
-     *   includeExtensions?: array<string>,
-     *   excludeExtensions?: array<string>,
-     *   excludePaths?: array<string>,
-     *   signatures?: array<int, string|array>,
+     *   includeExtensions?: list<string>,
+     *   excludeExtensions?: list<string>,
+     *   excludePaths?: list<string>,
+     *   signatures?: array<int, string|array{regex?: string}>,
      *   caseInsensitive?: bool,
      * } $options
      */
     public function __construct(array $options = [], ?LoggerInterface $logger = null)
     {
-        $this->chunkSize = $options['chunkSize'] ?? (8 * 1024 * 1024); // 8MB default
+        $rawChunkSize = (int) ($options['chunkSize'] ?? (8 * 1024 * 1024));
+        $this->chunkSize = \clamp($rawChunkSize, 64, 64 * 1024 * 1024);
         $this->maxBytesPerFile = $options['maxBytesPerFile'] ?? null;
         $this->includeExtensions = $this->normalizeExtensions($options['includeExtensions'] ?? []);
         $this->excludeExtensions = $this->normalizeExtensions($options['excludeExtensions'] ?? []);
@@ -76,33 +68,28 @@ final class FileSafetyScanner
         $this->caseInsensitive = $options['caseInsensitive'] ?? true;
 
         $this->computeMaxSignatureLength();
-
         $this->logger = $logger ?? new NullLogger();
     }
 
     /**
-     * Normalize extensions to lowercase, no dot.
-     *
-     * @param array<int,string> $exts
-     * @return array<string>
+     * @param array<int, string> $exts
+     * @return list<string>
      */
     private function normalizeExtensions(array $exts): array
     {
         $out = [];
         foreach ($exts as $e) {
-            $e = (string)$e;
-            $e = ltrim($e, '. ');
-            if ($e !== '') {
-                $out[strtolower($e)] = true;
+            $clean = \ltrim((string) $e, '. ');
+            if ($clean !== '') {
+                $out[\strtolower($clean)] = true;
             }
         }
-        return array_keys($out);
+
+        return \array_keys($out);
     }
 
     /**
-     * Default signatures to look for (as required in prompt).
-     *
-     * @return array<int,string>
+     * @return list<string>
      */
     private function defaultSignatures(): array
     {
@@ -116,106 +103,69 @@ final class FileSafetyScanner
             'exec(',
             'popen(',
             'proc_open(',
-            '`', // backtick operator (note: may be noisy)
+            '`',
         ];
     }
 
-    /**
-     * Compute maximum signature length (used to determine overlap between chunks).
-     */
     private function computeMaxSignatureLength(): void
     {
-        $max = 0;
+        $max = 1;
         foreach ($this->signatures as $s) {
-            if (\is_array($s) && isset($s['regex'])) {
-                // roughly estimate regex length as 256 (can't know); make overlap conservative
-                $len = 256;
-            } else {
-                $len = strlen((string)$s);
-            }
+            $len = (\is_array($s) && isset($s['regex'])) ? 256 : \strlen((string) $s);
             if ($len > $max) {
                 $max = $len;
             }
         }
-        $this->maxSignatureLength = max(1, $max);
+
+        $this->maxSignatureLength = $max;
     }
 
-    /**
-     * Set callback to be invoked for each finding.
-     *
-     * Callback signature: function(array $finding): void
-     * Finding array keys:
-     *  - file (string)
-     *  - signature (string)
-     *  - offset (int) byte offset in file
-     *  - line (int) line number (1-based) (approximate)
-     *  - snippet (string) surrounding content (up to ~160 chars)
-     *  - truncated (bool) whether file scanning was truncated because of maxBytesPerFile
-     *
-     * @param callable $cb
-     */
     public function setFindingCallback(callable $cb): void
     {
         $this->findingCallback = $cb;
     }
 
     /**
-     * Get accumulated findings (array).
-     *
-     * @return array<int,array>
+     * @return list<array<string, mixed>>
      */
     public function getFindings(): array
     {
         return $this->findings;
     }
 
-    /**
-     * Clear findings.
-     */
     public function clearFindings(): void
     {
         $this->findings = [];
     }
 
-    /**
-     * Scan given path. If path is a directory, scan recursively.
-     *
-     * @param string $path
-     * @return void
-     */
     public function isSafe(string $path): void
     {
-        if (!file_exists($path)) {
+        if (!\file_exists($path)) {
             $this->logger->warning('Path does not exist', ['method' => __METHOD__, 'path' => $path]);
-            throw new \InvalidArgumentException("Path does not exist: {$path}");
+            throw new InvalidArgumentException("Path does not exist: {$path}");
         }
 
-        if (is_file($path)) {
+        if (\is_file($path)) {
             $this->isFileSafe($path);
             return;
         }
 
-        $flags = \FilesystemIterator::SKIP_DOTS | \FilesystemIterator::FOLLOW_SYMLINKS;
-        $rdi = new \RecursiveDirectoryIterator($path, $flags);
-        $rii = new \RecursiveIteratorIterator($rdi, \RecursiveIteratorIterator::SELF_FIRST);
+        $flags = FilesystemIterator::SKIP_DOTS;
+        $rdi = new RecursiveDirectoryIterator($path, $flags);
+        $rii = new RecursiveIteratorIterator($rdi, RecursiveIteratorIterator::SELF_FIRST);
 
         foreach ($rii as $item) {
-            /** @var \SplFileInfo $item */
+            /** @var SplFileInfo $item */
             $full = $item->getPathname();
 
-            // exclude paths (substring or regex)
             if ($this->isPathExcluded($full)) {
                 continue;
             }
 
-            if ($item->isFile()) {
-                // check extensions against include/exclude lists
-                if (!$this->shouldScanByExtension($full)) {
-                    continue;
-                }
+            if ($item->isFile() && $this->shouldScanByExtension($full)) {
                 try {
                     $this->isFileSafe($full);
-                } catch (\Throwable $e) {
+                } catch (Throwable $e) {
                     $this->logger->error(
                         'scanFile failed',
                         ['exception' => $e, 'method' => __METHOD__, 'file' => $full]
@@ -225,224 +175,180 @@ final class FileSafetyScanner
         }
     }
 
-    /**
-     * Decide whether a path should be excluded by excludePaths.
-     *
-     * @param string $path
-     * @return bool
-     */
     private function isPathExcluded(string $path): bool
     {
         foreach ($this->excludePaths as $pattern) {
             if ($pattern === '') {
                 continue;
             }
-            // if pattern starts and ends with delimiter '/', treat as regex
-            if (@preg_match($pattern, '') !== false &&
-                \strlen($pattern) > 2 &&
-                $pattern[0] === '/' &&
-                strrpos($pattern, '/') !== 0
+
+            if (
+                \strlen($pattern) > 2
+                && $pattern[0] === '/'
+                && \strrpos($pattern, '/') !== 0
+                && self::isValidRegex($pattern)
             ) {
-                // assume regex
-                if (@preg_match($pattern, $path) === 1) {
+                if (\preg_match($pattern, $path) === 1) {
                     return true;
                 }
-            } else {
-                // substring match (case-insensitive)
-                if (stripos($path, $pattern) !== false) {
-                    return true;
-                }
+            } elseif (\stripos($path, $pattern) !== false) {
+                return true;
             }
         }
+
         return false;
     }
 
-    /**
-     * Decide whether to scan file by extension rules.
-     *
-     * @param string $file
-     * @return bool
-     */
-    private function shouldScanByExtension(string $file): bool
+    private static function isValidRegex(string $pattern): bool
     {
-        $ext = strtolower(pathinfo($file, PATHINFO_EXTENSION) ?: '');
-        if (!empty($this->includeExtensions)) {
-            // whitelist has priority
-            return \in_array($ext, $this->includeExtensions, true);
+        \set_error_handler(static fn(): bool => true);
+        try {
+            return \preg_match($pattern, '') !== false;
+        } finally {
+            \restore_error_handler();
         }
-        if (!empty($this->excludeExtensions)) {
-            return !\in_array($ext, $this->excludeExtensions, true);
-        }
-        return true; // no rules => scan all
     }
 
-    /**
-     * Scan a single file using fopen/fread and chunked scanning.
-     *
-     * @param string $filePath
-     * @return void
-     */
+    private function shouldScanByExtension(string $file): bool
+    {
+        $ext = \strtolower((string) \pathinfo($file, \PATHINFO_EXTENSION));
+        if ($this->includeExtensions !== []) {
+            return \in_array($ext, $this->includeExtensions, true);
+        }
+        if ($this->excludeExtensions !== []) {
+            return !\in_array($ext, $this->excludeExtensions, true);
+        }
+
+        return true;
+    }
+
     public function isFileSafe(string $filePath): void
     {
-        // skip unreadable files
-        if (!is_readable($filePath) || !is_file($filePath)) {
+        if (!\is_file($filePath)) {
             return;
         }
 
-        $handle = @fopen($filePath, 'rb');
+        \set_error_handler(static fn(): bool => true);
+        try {
+            $handle = \fopen($filePath, 'rb');
+        } finally {
+            \restore_error_handler();
+        }
+
         if ($handle === false) {
             return;
         }
 
-        $overlap = max(1, $this->maxSignatureLength - 1);
-        $prevTail = '';
-        $filePos = 0; // bytes already read before current chunk
-        $lineOffset = 1; // approximate line number (1-based). We'll update as we go.
-        $bytesScanned = 0;
-        $truncated = false;
+        try {
+            $overlap = \max(1, $this->maxSignatureLength - 1);
+            $prevTail = '';
+            $filePos = 0;
+            $lineOffset = 1;
+            $bytesScanned = 0;
+            $truncated = false;
+            $maxToScan = $this->maxBytesPerFile;
 
-        // if maxBytesPerFile is set we will read at most that many bytes
-        $maxToScan = $this->maxBytesPerFile;
-
-        while (!feof($handle)) {
-            // check max bytes
-            if ($maxToScan !== null && $bytesScanned >= $maxToScan) {
-                $truncated = true;
-                break;
-            }
-
-            $toRead = $this->chunkSize;
-            if ($maxToScan !== null) {
-                $remaining = $maxToScan - $bytesScanned;
-                if ($remaining <= 0) {
+            while (!\feof($handle)) {
+                if ($maxToScan !== null && $bytesScanned >= $maxToScan) {
                     $truncated = true;
                     break;
                 }
-                if ($remaining < $toRead) {
-                    $toRead = $remaining;
+
+                $toRead = $this->chunkSize;
+                if ($maxToScan !== null) {
+                    $remaining = $maxToScan - $bytesScanned;
+                    if ($remaining <= 0) {
+                        $truncated = true;
+                        break;
+                    }
+                    if ($remaining < $toRead) {
+                        $toRead = $remaining;
+                    }
                 }
+
+                $chunk = \fread($handle, $toRead);
+                if ($chunk === false || $chunk === '') {
+                    break;
+                }
+
+                $chunkLen = \strlen($chunk);
+                $buffer = $prevTail . $chunk;
+
+                $this->searchBufferForSignatures(
+                    $buffer,
+                    $filePath,
+                    $filePos,
+                    \strlen($prevTail),
+                    $lineOffset,
+                    $truncated,
+                );
+
+                $filePos += $chunkLen;
+                $bytesScanned += $chunkLen;
+                $lineOffset += \substr_count($chunk, "\n");
+
+                $prevTail = \strlen($buffer) <= $overlap
+                    ? $buffer
+                    : \substr($buffer, -$overlap);
             }
-
-            $chunk = @fread($handle, $toRead);
-            if ($chunk === false || $chunk === '') {
-                // nothing read; break
-                break;
-            }
-            $chunkLen = \strlen($chunk);
-
-            $buffer = $prevTail . $chunk;
-
-            // Search all signatures inside $buffer.
-            $this->searchBufferForSignatures(
-                $buffer,
-                $filePath,
-                $filePos,
-                \strlen($prevTail),
-                $lineOffset,
-                $truncated
-            );
-
-            // update counters
-            $filePos += $chunkLen;
-            $bytesScanned += $chunkLen;
-
-            // update line offset: count newlines in chunk only (not prevTail)
-            $nlCount = substr_count($chunk, "\n");
-            $lineOffset += $nlCount;
-
-            // prepare prevTail: last $overlap bytes of buffer
-            if (\strlen($buffer) <= $overlap) {
-                $prevTail = $buffer;
-            } else {
-                $prevTail = substr($buffer, -$overlap);
-            }
-        }
-
-        // After loop: if prevTail still contains signature that crosses end-of-file, still scanned above.
-
-        fclose($handle);
-        // optionally mark truncated info in findings (we include truncated flag in each finding callback)
-        if ($truncated) {
-            // nothing special here — each finding included truncated flag already
+        } finally {
+            \fclose($handle);
         }
     }
 
-    /**
-     * Search given buffer (which is prevTail + chunk) for configured signatures.
-     *
-     * @param string $buffer The concatenated buffer
-     * @param string $filePath
-     * @param int $filePosStart Bytes already consumed before current chunk (position of chunk start)
-     * @param int $prevTailLen Length of prevTail prepended to buffer
-     * @param int $lineOffset Approximate line number offset at start of chunk (1-based).
-     * //   This function may update this by reference.
-     * @param bool $truncated Whether scanning of file will be truncated (passed to callback)
-     */
     private function searchBufferForSignatures(
         string $buffer,
         string $filePath,
         int $filePosStart,
         int $prevTailLen,
         int $lineOffset,
-        bool $truncated
+        bool $truncated,
     ): void {
-        $bufferLen = \strlen($buffer);
-        // We'll search for each signature.
-        //      For performance we iterate signatures and use stripos or preg_match_all accordingly.
         foreach ($this->signatures as $sig) {
             if (\is_array($sig) && isset($sig['regex'])) {
-                $pattern = $sig['regex'];
-                // Use preg_match_all with PREG_OFFSET_CAPTURE on the buffer
-                $flags = PREG_OFFSET_CAPTURE;
-                // If user wants case-insensitive, ensure 'i' modifier present
-                if ($this->caseInsensitive && strpos($pattern, 'i') === false && substr($pattern, -1) !== 'i') {
-                    // naive: if pattern lacks modifiers, add i
-                    if (@preg_match($pattern, '') === false) {
-                        // if pattern invalid, try to append i ? skip
-                        // TODO zweryfikować to
-                    }
+                $pattern = (string) $sig['regex'];
+                if (!self::isValidRegex($pattern)) {
+                    continue;
                 }
-                $matches = null;
-                // we catch warnings from invalid regex
+
                 try {
-                    if (@preg_match_all($pattern, $buffer, $matches, PREG_OFFSET_CAPTURE) && !empty($matches[0])) {
+                    $matches = [];
+                    if (\preg_match_all($pattern, $buffer, $matches, \PREG_OFFSET_CAPTURE) && !empty($matches[0])) {
                         foreach ($matches[0] as $m) {
-                            $mText = $m[0];
-                            $mPos = (int)$m[1];
                             $this->recordFindingFromBuffer(
                                 $filePath,
-                                $mText,
-                                $mPos,
+                                (string) $m[0],
+                                (int) $m[1],
                                 $buffer,
                                 $filePosStart,
                                 $prevTailLen,
                                 $lineOffset,
-                                $truncated
+                                $truncated,
                             );
                         }
                     }
-                } catch (\Throwable $e) {
+                } catch (Throwable $e) {
                     $this->logger->error(
                         'Failed to match regex',
                         ['exception' => $e, 'method' => __METHOD__, 'file' => $filePath]
                     );
                 }
             } else {
-                $needle = (string)$sig;
+                $needle = (string) $sig;
                 if ($needle === '') {
                     continue;
                 }
-                // Choose case-sensitive or insensitive search
+
                 $offset = 0;
                 while (true) {
-                    if ($this->caseInsensitive) {
-                        $pos = stripos($buffer, $needle, $offset);
-                    } else {
-                        $pos = strpos($buffer, $needle, $offset);
-                    }
+                    $pos = $this->caseInsensitive
+                        ? \stripos($buffer, $needle, $offset)
+                        : \strpos($buffer, $needle, $offset);
+
                     if ($pos === false) {
                         break;
                     }
+
                     $this->recordFindingFromBuffer(
                         $filePath,
                         $needle,
@@ -451,26 +357,14 @@ final class FileSafetyScanner
                         $filePosStart,
                         $prevTailLen,
                         $lineOffset,
-                        $truncated
+                        $truncated,
                     );
-                    $offset = $pos + 1; // continue searching after this position
+                    $offset = $pos + 1;
                 }
             }
         }
     }
 
-    /**
-     * Record a finding based on a match inside the concatenated buffer.
-     *
-     * @param string $filePath
-     * @param string $matchedSignature
-     * @param int $posInBuffer position of match inside $buffer
-     * @param string $buffer full buffer (prevTail + chunk)
-     * @param int $filePosStart bytes already read before current chunk (start of chunk)
-     * @param int $prevTailLen length of prevTail appended before chunk
-     * @param int $lineOffset approximate line offset at start of chunk
-     * @param bool $truncated
-     */
     private function recordFindingFromBuffer(
         string $filePath,
         string $matchedSignature,
@@ -479,38 +373,20 @@ final class FileSafetyScanner
         int $filePosStart,
         int $prevTailLen,
         int $lineOffset,
-        bool $truncated
+        bool $truncated,
     ): void {
-        // Absolute byte offset in file:
-        // buffer index 0 corresponds to file position = $filePosStart - $prevTailLen
-        $absoluteOffset = ($filePosStart - $prevTailLen) + $posInBuffer;
-        if ($absoluteOffset < 0) {
-            $absoluteOffset = 0;
-        }
+        $absoluteOffset = \max(0, ($filePosStart - $prevTailLen) + $posInBuffer);
 
-        // Determine approximate line number:
-        //      count newlines before match in the buffer portion that is from chunk start onwards.
-        // We'll compute newlines in portion from bufferStartToMatch = substr(buffer, max(0, ?), $posInBuffer)
-        // But we need to count newlines from true file start. Simpler:
-        //  count newlines in whole buffer up to match and add a base line count derived from filePosStart and prevTail:
-        $before = substr($buffer, 0, $posInBuffer);
-        $nlCount = substr_count($before, "\n");
-        // line number is lineOffsetForChunkStart + (newlines in chunk portion after prevTail)
-        // If prevTail contains some newlines that we've already counted in previous chunk,
-        //      result is approximate but good enough.
-        $line = $lineOffset - substr_count(substr($buffer, $prevTailLen, 0), "\n") + $nlCount;
-        if ($line < 1) {
-            $line = 1;
-        }
+        $before = \substr($buffer, 0, $posInBuffer);
+        $prevTailNewlines = $prevTailLen > 0 ? \substr_count(\substr($buffer, 0, $prevTailLen), "\n") : 0;
+        $line = \max(1, $lineOffset - $prevTailNewlines + \substr_count($before, "\n"));
 
-        // Create snippet around match (max ~160 chars)
         $contextRadius = 80;
-        $start = max(0, $posInBuffer - $contextRadius);
+        $start = \max(0, $posInBuffer - $contextRadius);
         $length = \strlen($matchedSignature) + ($contextRadius * 2);
-        $snippet = substr($buffer, $start, $length);
-        // Normalize snippet for readability (limit binary noise)
+        $snippet = \substr($buffer, $start, $length);
         if (\strlen($snippet) > 512) {
-            $snippet = substr($snippet, 0, 512) . '...';
+            $snippet = \substr($snippet, 0, 512) . '...';
         }
 
         $finding = [
@@ -526,7 +402,7 @@ final class FileSafetyScanner
         if ($this->findingCallback !== null) {
             try {
                 ($this->findingCallback)($finding);
-            } catch (\Throwable $e) {
+            } catch (Throwable $e) {
                 $this->logger->error(
                     'Failed to invoke finding callback',
                     ['exception' => $e, 'method' => __METHOD__, 'file' => $filePath]

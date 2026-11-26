@@ -6,5 +6,5 @@ namespace Atom\Exception\Interface\Generative;
 
 interface GenerativeExceptionInterface
 {
-    public function __construct(string $format, ...$params);
+    public function __construct(string $format, string|int|float ...$params);
 }

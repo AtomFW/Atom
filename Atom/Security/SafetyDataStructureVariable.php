@@ -6,52 +6,18 @@ namespace Atom\Security;
 
 use Atom\Component\Cache\CacheWrapper;
 use Atom\DataBase\Database;
-use Atom\Exception\IO\InvalidArgumentException;
 use PDO;
+use SortDirection;
+use Time\Duration;
 
 /**
- * SafetyDataStructureVariable
- *
- * High performance static repository for database tables.
- *
- * Features:
- *
- * - static memory storage
- * - optional external cache support
- * - automatic is_active filtering
- * - dynamic searching
- * - multi-column filtering
- * - sorting
- * - pagination
- * - value extraction
- * - existence checks
- * - distinct values
- * - preload support
- *
- * Data source priority:
- *
- * 1. Static memory
- * 2. External cache
- * 3. Database
- *
- * Example:
- *
- * $repo = new SafetyDataStructureVariable(
- *     $pdo,
- *     $cache
- * );
- *
- * $users = $repo->search(
- *     'users',
- *     [
- *         'role'=>'admin'
- *     ],
- *     'created_at',
- *     'desc'
- * );
+ * High-performance lookup repository for `allowed_values` with bounded in-memory cache,
+ * external PSR-16 cache support, and native PHP 8.6 `\SortDirection` & `\Time\Duration` integration.
  */
 final class SafetyDataStructureVariable
 {
+    private const int MAX_MEMORY_SCOPES = 128;
+
     private Database $database;
     private ?CacheWrapper $cache;
     private int $cacheTtl;
@@ -59,41 +25,27 @@ final class SafetyDataStructureVariable
     private string $connectionKey;
 
     /**
-     * Static data store:
-     * [connectionKey][tableName] => array<array<string,mixed>>
+     * Bounded static store: [connectionKey][scope] => list<array<string, mixed>>
+     *
+     * @var array<string, array<string, list<array<string, mixed>>>>
      */
     private static array $memoryStore = [];
 
     public function __construct(
         Database $database,
         ?CacheWrapper $cache = null,
-        int $cacheTtl = 300,
-        string $cachePrefix = 'local'
+        int|Duration $cacheTtl = 300,
+        string $cachePrefix = 'local',
     ) {
         $this->database = $database;
         $this->cache = $cache;
-        $this->cacheTtl = $cacheTtl;
+        $this->cacheTtl = $cacheTtl instanceof Duration ? \max(0, $cacheTtl->seconds) : \max(0, $cacheTtl);
         $this->cachePrefix = $cachePrefix;
-        $this->connectionKey = "prod";
-        // $this->connectionKey = spl_object_hash($database);
+        $this->connectionKey = 'prod';
     }
 
     /**
-     * Preloads the full active dataset into static memory.
-     *
-     * Optionally warms up selected logical table groups by table_name.
-     *
-     * @param array<int,string>|null $tableNames
-     *     Optional list of values from the table_name column.
-     *
-     *     Example:
-     *     [
-     *         'users',
-     *         'products',
-     *         'categories'
-     *     ]
-     *
-     * @return void
+     * @param array<int, string>|null $tableNames
      */
     public function preload(?array $tableNames = null): void
     {
@@ -108,40 +60,18 @@ final class SafetyDataStructureVariable
         }
     }
 
-    /**
-     * Clears static memory and external cache.
-     *
-     * If $tableNameValue is null, the full connection scope is cleared.
-     *
-     * @param string|null $tableNameValue
-     *     Optional value from the table_name column.
-     *
-     * @return void
-     */
     public function clearCache(?string $tableNameValue = null): void
     {
         if ($tableNameValue === null) {
             unset(self::$memoryStore[$this->connectionKey]);
-
-            if ($this->cache !== null) {
-                $this->cache->delete($this->cacheKey('all'));
-            }
-
+            $this->cache?->delete($this->cacheKey('all'));
             return;
         }
 
         unset(self::$memoryStore[$this->connectionKey][$tableNameValue]);
-
-        if ($this->cache !== null) {
-            $this->cache->delete($this->cacheKey($tableNameValue));
-        }
+        $this->cache?->delete($this->cacheKey($tableNameValue));
     }
 
-    /**
-     * Reloads the full dataset from the database.
-     *
-     * @return void
-     */
     public function refresh(): void
     {
         $this->clearCache();
@@ -149,349 +79,144 @@ final class SafetyDataStructureVariable
     }
 
     /**
-     * Returns all active rows matching the given table_name value.
-     *
-     * @param string $tableNameValue
-     *     Value from the table_name column.
-     *
-     *     Example:
-     *     'users'
-     *
-     * @param string $sortBy
-     *     Column used for sorting.
-     *
-     *     Example:
-     *     'sort_order'
-     *     'id'
-     *     'column_name'
-     *
-     * @param string $sortOrder
-     *     Sort direction.
-     *
-     *     Allowed values:
-     *     - asc
-     *     - desc
-     *
-     * @return array<int,array<string,mixed>>
+     * @return list<array<string, mixed>>
      */
     public function all(
         string $tableNameValue,
         string $sortBy = 'sort_order',
-        string $sortOrder = 'asc'
+        string|SortDirection $sortOrder = SortDirection::Ascending,
     ): array {
-        $rows = $this->getRowsByTableNameValue($tableNameValue);
-
-        return $this->sortRows($rows, $sortBy, $sortOrder);
+        return $this->sortRows($this->getRowsByTableNameValue($tableNameValue), $sortBy, $sortOrder);
     }
 
     /**
-     * Alias for all().
-     *
-     * @param string $tableNameValue
-     * @param string $sortBy
-     * @param string $sortOrder
-     *
-     * @return array<int,array<string,mixed>>
+     * @return list<array<string, mixed>>
      */
     public function whereTableName(
         string $tableNameValue,
         string $sortBy = 'sort_order',
-        string $sortOrder = 'asc'
+        string|SortDirection $sortOrder = SortDirection::Ascending,
     ): array {
         return $this->all($tableNameValue, $sortBy, $sortOrder);
     }
 
     /**
-     * Returns rows filtered by table_name and column_name.
-     *
-     * @param string $tableNameValue
-     *     Value from the table_name column.
-     *
-     * @param string $columnName
-     *     Value from the column_name column.
-     *
-     *     Example:
-     *     'email'
-     *
-     * @param mixed $value
-     *     Value to match against a chosen field.
-     *
-     * @param string $sortBy
-     *     Column used for sorting.
-     *
-     * @param string $sortOrder
-     *     Sort direction.
-     *
-     * @return array<int,array<string,mixed>>
+     * @return list<array<string, mixed>>
      */
     public function whereTableAndColumnName(
         string $tableNameValue,
         string $columnName,
         mixed $value,
         string $sortBy = 'sort_order',
-        string $sortOrder = 'asc'
+        string|SortDirection $sortOrder = SortDirection::Ascending,
     ): array {
         return $this->search(
             $tableNameValue,
-            [
-                'column_name' => $columnName,
-                'value' => $value,
-            ],
+            ['column_name' => $columnName, 'value' => $value],
             $sortBy,
-            $sortOrder
+            $sortOrder,
         );
     }
 
     /**
-     * Returns rows filtered by table_name and value_key.
-     *
-     * @param string $tableNameValue
-     *     Value from the table_name column.
-     *
-     * @param mixed $valueKey
-     *     Value to match against the value_key column.
-     *
-     * @param string $sortBy
-     *     Column used for sorting.
-     *
-     * @param string $sortOrder
-     *     Sort direction.
-     *
-     * @return array<int,array<string,mixed>>
+     * @return list<array<string, mixed>>
      */
     public function whereValueKey(
         string $tableNameValue,
         mixed $valueKey,
         string $sortBy = 'sort_order',
-        string $sortOrder = 'asc'
+        string|SortDirection $sortOrder = SortDirection::Ascending,
     ): array {
         return $this->where($tableNameValue, 'value_key', $valueKey, $sortBy, $sortOrder);
     }
 
     /**
-     * Returns rows filtered by a single column.
-     *
-     * @param string $tableNameValue
-     *     Value from the table_name column.
-     *
-     * @param string $columnName
-     *     Column name used for filtering.
-     *
-     * @param mixed $value
-     *     Expected value.
-     *
-     * @param string $sortBy
-     *     Column used for sorting.
-     *
-     * @param string $sortOrder
-     *     Sort direction.
-     *
-     * @return array<int,array<string,mixed>>
+     * @return list<array<string, mixed>>
      */
     public function where(
         string $tableNameValue,
         string $columnName,
         mixed $value,
         string $sortBy = 'sort_order',
-        string $sortOrder = 'asc'
+        string|SortDirection $sortOrder = SortDirection::Ascending,
     ): array {
-        return $this->search(
-            $tableNameValue,
-            [
-                $columnName => $value,
-            ],
-            $sortBy,
-            $sortOrder
-        );
+        return $this->search($tableNameValue, [$columnName => $value], $sortBy, $sortOrder);
     }
 
     /**
-     * Returns the first matching active row.
-     *
-     * @param string $tableNameValue
-     *     Value from the table_name column.
-     *
-     * @param array<string,mixed> $filters
-     *     Filter structure.
-     *
-     *     Supported formats:
-     *
-     *     [
-     *         'column_name' => 'email',
-     *         'value_key' => 'primary_email',
-     *         'sort_order' => 10,
-     *         'id' => 1
-     *     ]
-     *
-     *     Advanced format:
-     *
-     *     [
-     *         'sort_order' => [
-     *             'operator' => '>=',
-     *             'value' => 10
-     *         ],
-     *         'column_name' => [
-     *             'operator' => 'LIKE',
-     *             'value' => '%email%'
-     *         ]
-     *     ]
-     *
-     * @param string $sortBy
-     *     Column used for sorting.
-     *
-     * @param string $sortOrder
-     *     Sort direction.
-     *
-     * @return array<string,mixed>|null
+     * @param array<string, mixed> $filters
+     * @return array<string, mixed>|null
      */
     public function first(
         string $tableNameValue,
         array $filters = [],
         string $sortBy = 'sort_order',
-        string $sortOrder = 'asc'
+        string|SortDirection $sortOrder = SortDirection::Ascending,
     ): ?array {
-        $rows = $this->search($tableNameValue, $filters, $sortBy, $sortOrder);
-
+        $rows = $this->search($tableNameValue, $filters, $sortBy, $sortOrder, 1);
         return $rows[0] ?? null;
     }
 
     /**
-     * Returns the first matching row by a single column filter.
-     *
-     * @param string $tableNameValue
-     *     Value from the table_name column.
-     *
-     * @param string $columnName
-     *     Column name used for filtering.
-     *
-     * @param mixed $value
-     *     Expected value.
-     *
-     * @param string $sortBy
-     *     Column used for sorting.
-     *
-     * @param string $sortOrder
-     *     Sort direction.
-     *
-     * @return array<string,mixed>|null
+     * @return array<string, mixed>|null
      */
     public function firstWhere(
         string $tableNameValue,
         string $columnName,
         mixed $value,
         string $sortBy = 'sort_order',
-        string $sortOrder = 'asc'
+        string|SortDirection $sortOrder = SortDirection::Ascending,
     ): ?array {
         return $this->first($tableNameValue, [$columnName => $value], $sortBy, $sortOrder);
     }
 
     /**
-     * Returns the first matching row by table_name and column_name.
-     *
-     * @param string $tableNameValue
-     *     Value from the table_name column.
-     *
-     * @param string $columnName
-     *     Value from the column_name column.
-     *
-     * @param mixed $value
-     *     Expected value.
-     *
-     * @param string $sortBy
-     *     Column used for sorting.
-     *
-     * @param string $sortOrder
-     *     Sort direction.
-     *
-     * @return array<string,mixed>|null
+     * @return array<string, mixed>|null
      */
     public function firstByTableAndColumnName(
         string $tableNameValue,
         string $columnName,
         mixed $value,
         string $sortBy = 'sort_order',
-        string $sortOrder = 'asc'
+        string|SortDirection $sortOrder = SortDirection::Ascending,
     ): ?array {
         return $this->first(
             $tableNameValue,
-            [
-                'column_name' => $columnName,
-                'value_key' => $value,
-            ],
+            ['column_name' => $columnName, 'value_key' => $value],
             $sortBy,
-            $sortOrder
+            $sortOrder,
         );
     }
 
     /**
-     * Returns a single column value from the first matching row.
-     *
-     * @param string $tableNameValue
-     *     Value from the table_name column.
-     *
-     * @param string $valueKey
-     *     Column name to extract.
-     *
-     *     Example:
-     *     'column_name'
-     *     'value_key'
-     *     'sort_order'
-     *
-     * @param array<string,mixed> $filters
-     *     Search filters.
-     *
-     * @param string $sortBy
-     *     Column used for sorting.
-     *
-     * @param string $sortOrder
-     *     Sort direction.
-     *
-     * @return mixed
+     * @param array<string, mixed> $filters
      */
     public function value(
         string $tableNameValue,
         string $valueKey,
         array $filters = [],
         string $sortBy = 'sort_order',
-        string $sortOrder = 'asc'
+        string|SortDirection $sortOrder = SortDirection::Ascending,
     ): mixed {
         $row = $this->first($tableNameValue, $filters, $sortBy, $sortOrder);
-
         return $row[$valueKey] ?? null;
     }
 
     /**
-     * Returns a list of values from a selected column.
-     *
-     * @param string $tableNameValue
-     *     Value from the table_name column.
-     *
-     * @param string $columnName
-     *     Column to extract.
-     *
-     * @param array<string,mixed> $filters
-     *     Search filters.
-     *
-     * @param string $sortBy
-     *     Column used for sorting.
-     *
-     * @param string $sortOrder
-     *     Sort direction.
-     *
-     * @return array<int,mixed>
+     * @param array<string, mixed> $filters
+     * @return list<mixed>
      */
     public function values(
         string $tableNameValue,
         string $columnName,
         array $filters = [],
         string $sortBy = 'sort_order',
-        string $sortOrder = 'asc'
+        string|SortDirection $sortOrder = SortDirection::Ascending,
     ): array {
         $rows = $this->search($tableNameValue, $filters, $sortBy, $sortOrder);
-
         $out = [];
         foreach ($rows as $row) {
-            if (array_key_exists($columnName, $row)) {
+            if (\array_key_exists($columnName, $row)) {
                 $out[] = $row[$columnName];
             }
         }
@@ -500,387 +225,213 @@ final class SafetyDataStructureVariable
     }
 
     /**
-     * Returns values from a selected column with unique results.
-     *
-     * @param string $tableNameValue
-     *     Value from the table_name column.
-     *
-     * @param string $columnName
-     *     Column to extract.
-     *
-     * @param array<string,mixed> $filters
-     *     Search filters.
-     *
-     * @param string $sortBy
-     *     Column used for sorting.
-     *
-     * @param string $sortOrder
-     *     Sort direction.
-     *
-     * @return array<int,mixed>
+     * @param array<string, mixed> $filters
+     * @return list<mixed>
      */
     public function distinct(
         string $tableNameValue,
         string $columnName,
         array $filters = [],
         string $sortBy = 'sort_order',
-        string $sortOrder = 'asc'
+        string|SortDirection $sortOrder = SortDirection::Ascending,
     ): array {
-        return array_values(array_unique(
+        return \array_values(\array_unique(
             $this->values($tableNameValue, $columnName, $filters, $sortBy, $sortOrder),
-            SORT_REGULAR
+            \SORT_REGULAR,
         ));
     }
 
     /**
-     * Checks whether at least one matching active row exists.
-     *
-     * @param string $tableNameValue
-     *     Value from the table_name column.
-     *
-     * @param array<string,mixed> $filters
-     *     Search filters.
-     *
-     * @param string $sortBy
-     *     Column used for sorting.
-     *
-     * @param string $sortOrder
-     *     Sort direction.
-     *
-     * @return bool
+     * @param array<string, mixed> $filters
      */
     public function exists(
         string $tableNameValue,
         array $filters = [],
         string $sortBy = 'sort_order',
-        string $sortOrder = 'asc'
+        string|SortDirection $sortOrder = SortDirection::Ascending,
     ): bool {
         return $this->first($tableNameValue, $filters, $sortBy, $sortOrder) !== null;
     }
 
     /**
-     * Counts matching active rows.
-     *
-     * @param string $tableNameValue
-     *     Value from the table_name column.
-     *
-     * @param array<string,mixed> $filters
-     *     Search filters.
-     *
-     * @param string $sortBy
-     *     Column used for sorting.
-     *
-     * @param string $sortOrder
-     *     Sort direction.
-     *
-     * @return int
+     * @param array<string, mixed> $filters
      */
     public function count(
         string $tableNameValue,
         array $filters = [],
         string $sortBy = 'sort_order',
-        string $sortOrder = 'asc'
+        string|SortDirection $sortOrder = SortDirection::Ascending,
     ): int {
         return \count($this->search($tableNameValue, $filters, $sortBy, $sortOrder));
     }
 
     /**
-     * Searches dynamically inside one logical table group.
-     *
-     * Supported operators:
-     * - =
-     * - !=
-     * - >
-     * - >=
-     * - <
-     * - <=
-     * - LIKE
-     * - NOT LIKE
-     * - IN
-     * - NOT IN
-     * - BETWEEN
-     * - IS NULL
-     * - IS NOT NULL
-     *
-     * Filter structure examples:
-     *
-     * Simple:
-     * [
-     *     'column_name' => 'email',
-     *     'value_key' => 'primary_email'
-     * ]
-     *
-     * Advanced:
-     * [
-     *     'sort_order' => [
-     *         'operator' => '>=',
-     *         'value' => 10
-     *     ],
-     *     'column_name' => [
-     *         'operator' => 'LIKE',
-     *         'value' => '%email%'
-     *     ],
-     *     'value_key' => [
-     *         'operator' => 'IN',
-     *         'value' => ['a', 'b', 'c']
-     *     ]
-     * ]
-     *
-     * Special rule:
-     * The repository always enforces is_active = 1.
-     *
-     * @param string $tableNameValue
-     *     Value from the table_name column.
-     *
-     * @param array<string,mixed> $filters
-     *     Filtering conditions.
-     *
-     * @param string $sortBy
-     *     Column used for sorting.
-     *
-     * @param string $sortOrder
-     *     Sort direction.
-     *
-     * @param int|null $limit
-     *     Maximum number of rows returned.
-     *
-     * @param int $offset
-     *     Offset for pagination.
-     *
-     * @return array<int,array<string,mixed>>
+     * @param array<string, mixed> $filters
+     * @return list<array<string, mixed>>
      */
     public function search(
         string $tableNameValue,
         array $filters = [],
         string $sortBy = 'sort_order',
-        string $sortOrder = 'asc',
+        string|SortDirection $sortOrder = SortDirection::Ascending,
         ?int $limit = null,
-        int $offset = 0
+        int $offset = 0,
     ): array {
-        $rows = $this->getRowsByTableNameValue($tableNameValue);
-
-        $rows = array_values(array_filter($rows, function (array $row) use ($filters): bool {
-            foreach ($filters as $column => $condition) {
-                $column = (string) $column;
-
-                if ($column === 'is_active') {
-                    if ($condition !== 1 && $condition !== '1' && $condition !== true) {
-                        return false;
-                    }
-
-                    continue;
-                }
-
-                if (!array_key_exists($column, $row)) {
-                    return false;
-                }
-
-                $operator = '=';
-                $value = $condition;
-
-                if (is_array($condition) && array_key_exists('operator', $condition)) {
-                    $operator = strtoupper((string) ($condition['operator'] ?? '='));
-                    $value = $condition['value'] ?? null;
-                }
-
-                if (!$this->compare($row[$column], $operator, $value)) {
-                    return false;
-                }
-            }
-
-            return true;
-        }));
-
-        $rows = $this->sortRows($rows, $sortBy, $sortOrder);
-
-        if ($offset > 0 || $limit !== null) {
-            $rows = array_slice($rows, max(0, $offset), $limit);
-        }
-
-        return $rows;
+        return $this->filterAndPaginate(
+            $this->getRowsByTableNameValue($tableNameValue),
+            $filters,
+            $sortBy,
+            $sortOrder,
+            $limit,
+            $offset,
+        );
     }
 
     /**
-     * Searches dynamically across all loaded rows, regardless of table_name value.
-     *
-     * @param array<string,mixed> $filters
-     *     Filtering conditions in the same format as search().
-     *
-     * @param string $sortBy
-     *     Column used for sorting.
-     *
-     * @param string $sortOrder
-     *     Sort direction.
-     *
-     * @param int|null $limit
-     *     Maximum number of rows returned.
-     *
-     * @param int $offset
-     *     Offset for pagination.
-     *
-     * @return array<int,array<string,mixed>>
+     * @param array<string, mixed> $filters
+     * @return list<array<string, mixed>>
      */
     public function searchStatic(
         array $filters = [],
         string $sortBy = 'sort_order',
-        string $sortOrder = 'asc',
+        string|SortDirection $sortOrder = SortDirection::Ascending,
         ?int $limit = null,
-        int $offset = 0
+        int $offset = 0,
     ): array {
-        $rows = $this->getAllRows();
-
-        $rows = array_values(array_filter($rows, function (array $row) use ($filters): bool {
-            foreach ($filters as $column => $condition) {
-                $column = (string) $column;
-
-                if ($column === 'is_active') {
-                    if ($condition !== 1 && $condition !== '1' && $condition !== true) {
-                        return false;
-                    }
-
-                    continue;
-                }
-
-                if (!array_key_exists($column, $row)) {
-                    return false;
-                }
-
-                $operator = '=';
-                $value = $condition;
-
-                if (is_array($condition) && array_key_exists('operator', $condition)) {
-                    $operator = strtoupper((string) ($condition['operator'] ?? '='));
-                    $value = $condition['value'] ?? null;
-                }
-
-                if (!$this->compare($row[$column], $operator, $value)) {
-                    return false;
-                }
-            }
-
-            return true;
-        }));
-
-        $rows = $this->sortRows($rows, $sortBy, $sortOrder);
-
-        if ($offset > 0 || $limit !== null) {
-            $rows = array_slice($rows, max(0, $offset), $limit);
-        }
-
-        return $rows;
+        return $this->filterAndPaginate(
+            $this->getAllRows(),
+            $filters,
+            $sortBy,
+            $sortOrder,
+            $limit,
+            $offset,
+        );
     }
 
     /**
-     * Searches for a value across all columns inside one logical table group.
-     *
-     * @param string $tableNameValue
-     *     Value from the table_name column.
-     *
-     * @param mixed $needle
-     *     Value to search for.
-     *
-     * @param string $sortBy
-     *     Column used for sorting.
-     *
-     * @param string $sortOrder
-     *     Sort direction.
-     *
-     * @return array<int,array<string,mixed>>
+     * @return list<array<string, mixed>>
      */
     public function searchAcrossColumns(
         string $tableNameValue,
         mixed $needle,
         string $sortBy = 'sort_order',
-        string $sortOrder = 'asc'
+        string|SortDirection $sortOrder = SortDirection::Ascending,
     ): array {
-        $rows = $this->getRowsByTableNameValue($tableNameValue);
-
-        $rows = array_values(array_filter($rows, function (array $row) use ($needle): bool {
-            foreach ($row as $value) {
-                if ($this->compare($value, '=', $needle)) {
-                    return true;
-                }
-            }
-
-            return false;
-        }));
+        $rows = \array_values(\array_filter(
+            $this->getRowsByTableNameValue($tableNameValue),
+            fn(array $row): bool => \array_any($row, fn(mixed $val): bool => $this->compare($val, '=', $needle))
+        ));
 
         return $this->sortRows($rows, $sortBy, $sortOrder);
     }
 
     /**
-     * Returns the list of unique table_name values currently loaded in memory.
-     *
-     * @return array<int,string>
+     * @return list<string>
      */
     public function tables(): array
     {
-        $rows = $this->getAllRows();
         $tables = [];
-
-        foreach ($rows as $row) {
+        foreach ($this->getAllRows() as $row) {
             if (isset($row['table_name'])) {
                 $tables[] = (string) $row['table_name'];
             }
         }
 
-        return array_values(array_unique($tables));
+        return \array_values(\array_unique($tables));
     }
 
     /**
-     * Returns the list of available columns from the first matching table_name group.
-     *
-     * @param string $tableNameValue
-     *     Value from the table_name column.
-     *
-     * @return array<int,string>
+     * @return list<string>
      */
     public function columns(string $tableNameValue): array
     {
         $rows = $this->getRowsByTableNameValue($tableNameValue);
         $first = $rows[0] ?? [];
 
-        return array_keys($first);
+        return \array_map(\strval(...), \array_keys($first));
     }
 
     /**
-     * Returns all active rows from the database, memory store, or external cache.
-     *
-     * @return array<int,array<string,mixed>>
+     * @param list<array<string, mixed>> $rows
+     * @param array<string, mixed> $filters
+     * @return list<array<string, mixed>>
      */
-    private function getAllRows(): array
-    {
-        if (isset(self::$memoryStore[$this->connectionKey])) {
-            return self::$memoryStore[$this->connectionKey];
+    private function filterAndPaginate(
+        array $rows,
+        array $filters,
+        string $sortBy,
+        string|SortDirection $sortOrder,
+        ?int $limit,
+        int $offset,
+    ): array {
+        if ($filters !== []) {
+            $rows = \array_values(\array_filter($rows, function (array $row) use ($filters): bool {
+                foreach ($filters as $column => $condition) {
+                    $col = (string) $column;
+
+                    if ($col === 'is_active') {
+                        if ($condition !== 1 && $condition !== '1' && $condition !== true) {
+                            return false;
+                        }
+                        continue;
+                    }
+
+                    if (!\array_key_exists($col, $row)) {
+                        return false;
+                    }
+
+                    $operator = '=';
+                    $value = $condition;
+
+                    if (\is_array($condition) && \array_key_exists('operator', $condition)) {
+                        $operator = \strtoupper((string) ($condition['operator'] ?? '='));
+                        $value = $condition['value'] ?? null;
+                    }
+
+                    if (!$this->compare($row[$col], $operator, $value)) {
+                        return false;
+                    }
+                }
+
+                return true;
+            }));
         }
 
-        if ($this->cache !== null) {
-            $cached = $this->cache->get($this->cacheKey('all'));
+        $rows = $this->sortRows($rows, $sortBy, $sortOrder);
 
-            if (\is_array($cached)) {
-                self::$memoryStore[$this->connectionKey] = $cached;
-                return $cached;
-            }
-        }
-
-        $rows = $this->loadAllRowsFromDatabase();
-
-        self::$memoryStore[$this->connectionKey] = $rows;
-
-        if ($this->cache !== null) {
-            $this->cache->set($this->cacheKey('all'), $rows, $this->cacheTtl);
+        if ($offset > 0 || $limit !== null) {
+            $rows = \array_slice($rows, \max(0, $offset), $limit);
         }
 
         return $rows;
     }
 
     /**
-     * Returns rows filtered by table_name value.
-     *
-     * @param string $tableNameValue
-     *     Value from the table_name column.
-     *
-     * @return array<int,array<string,mixed>>
+     * @return list<array<string, mixed>>
+     */
+    private function getAllRows(): array
+    {
+        if (isset(self::$memoryStore[$this->connectionKey]['__all__'])) {
+            return self::$memoryStore[$this->connectionKey]['__all__'];
+        }
+
+        if ($this->cache !== null) {
+            $cached = $this->cache->get($this->cacheKey('all'));
+            if (\is_array($cached)) {
+                $this->putMemoryScope('__all__', $cached);
+                return $cached;
+            }
+        }
+
+        $rows = $this->loadAllRowsFromDatabase();
+        $this->putMemoryScope('__all__', $rows);
+        $this->cache?->set($this->cacheKey('all'), $rows, $this->cacheTtl);
+
+        return $rows;
+    }
+
+    /**
+     * @return list<array<string, mixed>>
      */
     private function getRowsByTableNameValue(string $tableNameValue): array
     {
@@ -888,115 +439,105 @@ final class SafetyDataStructureVariable
             return self::$memoryStore[$this->connectionKey][$tableNameValue];
         }
 
-        $rows = array_values(array_filter(
+        $rows = \array_values(\array_filter(
             $this->getAllRows(),
-            static fn (array $row): bool => (string) ($row['table_name'] ?? '') === $tableNameValue
+            static fn(array $row): bool => (string) ($row['table_name'] ?? '') === $tableNameValue
         ));
 
-        self::$memoryStore[$this->connectionKey][$tableNameValue] = $rows;
-
-        if ($this->cache !== null) {
-            $this->cache->set($this->cacheKey($tableNameValue), $rows, $this->cacheTtl);
-        }
+        $this->putMemoryScope($tableNameValue, $rows);
+        $this->cache?->set($this->cacheKey($tableNameValue), $rows, $this->cacheTtl);
 
         return $rows;
     }
 
     /**
-     * Loads all active rows from the database.
-     *
-     * @return array<int,array<string,mixed>>
+     * @param list<array<string, mixed>> $rows
+     */
+    private function putMemoryScope(string $scope, array $rows): void
+    {
+        if (!isset(self::$memoryStore[$this->connectionKey])) {
+            self::$memoryStore[$this->connectionKey] = [];
+        }
+
+        if (\count(self::$memoryStore[$this->connectionKey]) >= self::MAX_MEMORY_SCOPES) {
+            $oldest = \array_key_first(self::$memoryStore[$this->connectionKey]);
+            if ($oldest !== '__all__') {
+                unset(self::$memoryStore[$this->connectionKey][$oldest]);
+            }
+        }
+
+        self::$memoryStore[$this->connectionKey][$scope] = $rows;
+    }
+
+    /**
+     * @return list<array<string, mixed>>
      */
     private function loadAllRowsFromDatabase(): array
     {
-        $sql = 'SELECT * FROM `allowed_values` WHERE is_active = 1';
+        $rawPrefix = $this->database->tablePrefix;
+        $prefix = $rawPrefix !== ''
+            ? (\preg_replace('/[^a-zA-Z0-9_]/', '', $rawPrefix) ?? '')
+            : '';
+
+        $sql = "SELECT * FROM `{$prefix}allowed_values` WHERE is_active = 1";
         $stmt = $this->database->pdo->query($sql);
 
         if ($stmt === false) {
             return [];
         }
 
-        $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
+        try {
+            $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
+        } finally {
+            $stmt->closeCursor();
+        }
 
-        return \is_array($rows) ? $rows : [];
+        return $rows;
     }
 
-    /**
-     * Creates a cache key.
-     *
-     * @param string $scope
-     *     Cache scope name.
-     *
-     * @return string
-     */
     private function cacheKey(string $scope): string
     {
         return $this->cachePrefix . '_' . $this->connectionKey . '_' . $scope;
     }
 
     /**
-     * Sorts rows by a selected column and direction.
-     *
-     * @param array<int,array<string,mixed>> $rows
-     *     Rows to sort.
-     *
-     * @param string $sortBy
-     *     Column used for sorting.
-     *
-     * @param string $sortOrder
-     *     Sort direction.
-     *
-     * @return array<int,array<string,mixed>>
+     * @param list<array<string, mixed>> $rows
+     * @return list<array<string, mixed>>
      */
-    private function sortRows(array $rows, string $sortBy, string $sortOrder): array
+    private function sortRows(array $rows, string $sortBy, string|SortDirection $sortOrder): array
     {
         if ($rows === []) {
             return [];
         }
 
-        $sortOrder = $this->normalizeSortOrder($sortOrder);
+        $direction = $this->normalizeSortDirection($sortOrder);
 
-        usort($rows, function (array $a, array $b) use ($sortBy, $sortOrder): int {
+        \usort($rows, static function (array $a, array $b) use ($sortBy, $direction): int {
             $left = $a[$sortBy] ?? null;
             $right = $b[$sortBy] ?? null;
 
-            $comparison = $this->compareValues($left, $right);
+            $comparison = $left == $right ? 0 : ($left <=> $right);
 
-            return $sortOrder === 'desc' ? -$comparison : $comparison;
+            return $direction === SortDirection::Descending ? -$comparison : $comparison;
         });
 
-        return array_values($rows);
+        return $rows;
     }
 
-    /**
-     * Normalizes the sort direction.
-     *
-     * @param string $sortOrder
-     *     Sort direction.
-     *
-     * @return string
-     */
-    private function normalizeSortOrder(string $sortOrder): string
+    private function normalizeSortDirection(string|SortDirection $sortOrder): SortDirection
     {
-        $sortOrder = strtolower(trim($sortOrder));
+        if ($sortOrder instanceof SortDirection) {
+            return $sortOrder;
+        }
 
-        return $sortOrder === 'desc' ? 'desc' : 'asc';
+        return \strtolower(\trim($sortOrder)) === 'desc'
+            ? SortDirection::Descending
+            : SortDirection::Ascending;
     }
 
-    /**
-     * Compares two values using a selected operator.
-     *
-     * @param mixed $left
-     * @param string $operator
-     * @param mixed $right
-     *
-     * @return bool
-     */
     private function compare(mixed $left, string $operator, mixed $right): bool
     {
-        $operator = strtoupper(trim($operator));
-
-        return match ($operator) {
+        return match (\strtoupper(\trim($operator))) {
             '=', '==' => $left == $right,
             '!=', '<>' => $left != $right,
             '>' => $left > $right,
@@ -1005,8 +546,8 @@ final class SafetyDataStructureVariable
             '<=' => $left <= $right,
             'LIKE' => $this->likeCompare($left, $right),
             'NOT LIKE' => !$this->likeCompare($left, $right),
-            'IN' => is_array($right) ? in_array($left, $right, false) : false,
-            'NOT IN' => is_array($right) ? !in_array($left, $right, false) : true,
+            'IN' => \is_array($right) && \in_array($left, $right, false),
+            'NOT IN' => !\is_array($right) || !\in_array($left, $right, false),
             'BETWEEN' => $this->betweenCompare($left, $right),
             'IS NULL' => $left === null,
             'IS NOT NULL' => $left !== null,
@@ -1014,65 +555,26 @@ final class SafetyDataStructureVariable
         };
     }
 
-    /**
-     * Performs a loose comparison useful for sorting.
-     *
-     * @param mixed $left
-     * @param mixed $right
-     *
-     * @return int
-     */
-    private function compareValues(mixed $left, mixed $right): int
-    {
-        if ($left == $right) {
-            return 0;
-        }
-
-        return ($left <=> $right);
-    }
-
-    /**
-     * Performs a LIKE-style comparison.
-     *
-     * @param mixed $left
-     * @param mixed $right
-     *
-     * @return bool
-     */
     private function likeCompare(mixed $left, mixed $right): bool
     {
-        if (!is_scalar($left) || !is_scalar($right)) {
+        if (!\is_scalar($left) || !\is_scalar($right)) {
             return false;
         }
 
-        $left = mb_strtolower((string) $left);
-        $right = mb_strtolower((string) $right);
-        $needle = trim($right, '%');
-
+        $needle = \trim(\mb_strtolower((string) $right), '%');
         if ($needle === '') {
             return true;
         }
 
-        return str_contains($left, $needle);
+        return \str_contains(\mb_strtolower((string) $left), $needle);
     }
 
-    /**
-     * Performs a BETWEEN comparison.
-     *
-     * @param mixed $left
-     * @param mixed $right
-     *
-     * @return bool
-     */
     private function betweenCompare(mixed $left, mixed $right): bool
     {
         if (!\is_array($right) || \count($right) < 2) {
             return false;
         }
 
-        $min = $right[0];
-        $max = $right[1];
-
-        return $left >= $min && $left <= $max;
+        return $left >= $right[0] && $left <= $right[1];
     }
 }

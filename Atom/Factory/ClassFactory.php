@@ -4,61 +4,81 @@ declare(strict_types=1);
 
 namespace Atom\Factory;
 
-use \ReflectionClass;
-use \RuntimeException;
+use ReflectionClass;
+use RuntimeException;
 
 /**
- * Class ClassFactory
+ * Stateless-friendly class factory with bounded file-to-class resolution cache (PHP 8.6 `array_last`).
  */
-class ClassFactory
+final class ClassFactory
 {
-    /**
-     * @var object[]
-     */
-    private static array $instances = [];
+    private const int MAX_CACHE_SIZE = 256;
 
     /**
-     * @param string $filePath
-     * @param bool $saveInstance
-     * @param array $constructorArgs
-     * @return object
+     * @var array<string, class-string> Bounded file-path => class-name map so `require_once` works on reloads
+     */
+    private static array $resolvedClasses = [];
+
+    /**
+     * @var array<string, array{file: string, class: class-string, instance: object}>
+     */
+    private array $instances = [];
+
+    /**
+     * @param list<mixed> $constructorArgs
      */
     public function addInstanceFromFile(
         string $filePath,
         bool $saveInstance = true,
-        array $constructorArgs = []
+        array $constructorArgs = [],
     ): object {
-        if (!file_exists($filePath)) {
+        $realPath = \realpath($filePath);
+        $canonicalPath = $realPath !== false ? $realPath : $filePath;
+
+        if (!\is_file($canonicalPath)) {
             throw new RuntimeException("File not found: {$filePath}");
         }
 
-        if (self::$instances && isset(self::$instances[$filePath])) {
-            return self::$instances[$filePath]['instance'];
+        if (isset($this->instances[$canonicalPath])) {
+            return $this->instances[$canonicalPath]['instance'];
         }
 
-        $before = get_declared_classes();
+        $className = self::$resolvedClasses[$canonicalPath] ?? null;
 
-        require_once $filePath;
+        if ($className === null) {
+            $before = \get_declared_classes();
+            require_once $canonicalPath;
+            $after = \get_declared_classes();
 
-        $after = get_declared_classes();
+            $newClasses = \array_values(\array_diff($after, $before));
+            if ($newClasses === []) {
+                throw new RuntimeException("Not found class in file: {$filePath}");
+            }
 
-        $newClasses = array_diff($after, $before);
+            /** @var class-string $discovered */
+            $discovered = \array_last($newClasses);
+            $className = $discovered;
 
-        if (empty($newClasses)) {
-            throw new RuntimeException(
-                "Not found class in file. {$filePath}"
-            );
+            if (\count(self::$resolvedClasses) >= self::MAX_CACHE_SIZE) {
+                $oldest = \array_key_first(self::$resolvedClasses);
+                unset(self::$resolvedClasses[$oldest]);
+            }
+            self::$resolvedClasses[$canonicalPath] = $className;
         }
-
-        $className = end($newClasses);
 
         $reflection = new ReflectionClass($className);
-
-        $instance = $reflection->newInstanceArgs($constructorArgs);
+        $instance = $constructorArgs === []
+            ? $reflection->newInstance()
+            : $reflection->newInstanceArgs($constructorArgs);
 
         if ($saveInstance) {
-            $this->instances[$filePath] = [
-                'file' => $filePath,
+            if (\count($this->instances) >= self::MAX_CACHE_SIZE) {
+                $oldestKey = \array_key_first($this->instances);
+                unset($this->instances[$oldestKey]);
+            }
+
+            $this->instances[$canonicalPath] = [
+                'file' => $canonicalPath,
                 'class' => $className,
                 'instance' => $instance,
             ];
@@ -68,7 +88,7 @@ class ClassFactory
     }
 
     /**
-     * @return object[]
+     * @return array<string, array{file: string, class: class-string, instance: object}>
      */
     public function getInstances(): array
     {

@@ -5,24 +5,18 @@ declare(strict_types=1);
 namespace Atom\Generate\Manifest;
 
 use InvalidArgumentException;
+use JsonSerializable;
+use Override;
 use RuntimeException;
+use Stringable;
+use Throwable;
 
 /**
- * WebAppManifest
- *
- * Professional helper for building and managing a web app manifest.json (PWA).
- *
- * Usage:
- *   $m = new WebAppManifest([...]);
- *   $m->setName('My App')->addIcon(...)->saveToFile('manifest.json');
+ * Builder and atomic serializer for W3C Progressive Web App `manifest.json`.
  */
-final class WebAppManifest
+final class WebAppManifest implements JsonSerializable, Stringable
 {
-    /** @var array<string,mixed> internal manifest data */
-    private array $data = [];
-
-    /** @var array<string,mixed> default manifest skeleton */
-    private const DEFAULT = [
+    private const array DEFAULT = [
         'name' => null,
         'short_name' => null,
         'start_url' => '/',
@@ -43,22 +37,28 @@ final class WebAppManifest
         'share_target' => null,
     ];
 
+    private const array LIST_KEYS = [
+        'icons',
+        'shortcuts',
+        'related_applications',
+        'categories',
+        'screenshots',
+    ];
+
+    /** @var array<string, mixed> */
+    private array $data = [];
+
     /**
-     * Constructor accepts initial manifest array (keys as in spec).
-     *
-     * Unknown keys are preserved (useful for custom fields).
-     *
-     * @param array<string,mixed> $initial
+     * @param array<string, mixed> $initial
      */
     public function __construct(array $initial = [])
     {
-        // seed with defaults, then merge provided
         $this->data = self::DEFAULT;
         $this->merge($initial);
     }
 
     /**
-     * Factory: create from array
+     * @param array<string, mixed> $arr
      */
     public static function fromArray(array $arr): self
     {
@@ -66,58 +66,48 @@ final class WebAppManifest
     }
 
     /**
-     * Merge given values into manifest (shallow merge for top-level keys).
-     * For arrays like icons/shortcuts you probably want to use addIcon/addShortcut.
-     *
-     * @param array<string,mixed> $values
-     * @return $this
+     * @param array<string, mixed> $values
      */
     public function merge(array $values): static
     {
         foreach ($values as $k => $v) {
-            if (is_array($v) && isset($this->data[$k]) && is_array($this->data[$k]) && in_array($k, ['icons','shortcuts','related_applications','categories','screenshots'], true)) {
-                // merge arrays preserving existing elements
-                $this->data[$k] = array_values(array_merge($this->data[$k], $v));
+            if (\is_array($v) && isset($this->data[$k]) && \is_array($this->data[$k]) && \in_array($k, self::LIST_KEYS, true)) {
+                $this->data[$k] = \array_values([...$this->data[$k], ...$v]);
             } else {
                 $this->data[$k] = $v;
             }
         }
+
         return $this;
     }
 
-    // -------------------- Basic setters/getters --------------------
-
     public function setName(string $name): static { $this->data['name'] = $name; return $this; }
-    public function getName(): ?string { return $this->data['name'] ?? null; }
+    public function getName(): ?string { return isset($this->data['name']) ? (string) $this->data['name'] : null; }
     public function setShortName(string $short): static { $this->data['short_name'] = $short; return $this; }
-    public function getShortName(): ?string { return $this->data['short_name'] ?? null; }
+    public function getShortName(): ?string { return isset($this->data['short_name']) ? (string) $this->data['short_name'] : null; }
     public function setStartUrl(string $url): static { $this->data['start_url'] = $url; return $this; }
-    public function getStartUrl(): string { return $this->data['start_url'] ?? '/'; }
+    public function getStartUrl(): string { return (string) ($this->data['start_url'] ?? '/'); }
     public function setScope(string $scope): static { $this->data['scope'] = $scope; return $this; }
-    public function getScope(): ?string { return $this->data['scope'] ?? null; }
+    public function getScope(): ?string { return isset($this->data['scope']) ? (string) $this->data['scope'] : null; }
     public function setDisplay(string $display): static { $this->data['display'] = $display; return $this; }
-    public function getDisplay(): ?string { return $this->data['display'] ?? null; }
+    public function getDisplay(): ?string { return isset($this->data['display']) ? (string) $this->data['display'] : null; }
     public function setThemeColor(string $color): static { $this->data['theme_color'] = $color; return $this; }
-    public function getThemeColor(): ?string { return $this->data['theme_color'] ?? null; }
+    public function getThemeColor(): ?string { return isset($this->data['theme_color']) ? (string) $this->data['theme_color'] : null; }
     public function setBackgroundColor(string $color): static { $this->data['background_color'] = $color; return $this; }
-    public function getBackgroundColor(): ?string { return $this->data['background_color'] ?? null; }
+    public function getBackgroundColor(): ?string { return isset($this->data['background_color']) ? (string) $this->data['background_color'] : null; }
     public function setDescription(string $description): static { $this->data['description'] = $description; return $this; }
-    public function getDescription(): ?string { return $this->data['description'] ?? null; }
+    public function getDescription(): ?string { return isset($this->data['description']) ? (string) $this->data['description'] : null; }
     public function setLang(string $lang): static { $this->data['lang'] = $lang; return $this; }
-    public function getLang(): ?string { return $this->data['lang'] ?? null; }
+    public function getLang(): ?string { return isset($this->data['lang']) ? (string) $this->data['lang'] : null; }
     public function setDir(string $dir): static { $this->data['dir'] = $dir; return $this; }
-    public function getDir(): ?string { return $this->data['dir'] ?? null; }
-
-    // -------------------- Categories --------------------
+    public function getDir(): ?string { return isset($this->data['dir']) ? (string) $this->data['dir'] : null; }
 
     /**
-     * Replace categories list
-     *
-     * @param string[] $categories
+     * @param array<array-key, string|\Stringable> $categories
      */
     public function setCategories(array $categories): static
     {
-        $this->data['categories'] = array_values(array_map('strval', $categories));
+        $this->data['categories'] = \array_values(\array_map(\strval(...), $categories));
         return $this;
     }
 
@@ -126,49 +116,41 @@ final class WebAppManifest
         if (!\in_array($category, $this->data['categories'], true)) {
             $this->data['categories'][] = $category;
         }
+
         return $this;
     }
 
+    /**
+     * @return list<string>
+     */
     public function getCategories(): array
     {
         return $this->data['categories'] ?? [];
     }
 
-    // -------------------- Icons --------------------
-
     /**
-     * Add icon entry.
-     * Example:
-     *   addIcon('/icons/icon-192x192.png', '192x192', 'image/png', ['purpose'=>'any'])
-     *
-     * @param string $src
-     * @param string|null $sizes
-     * @param string|null $type
-     * @param array<string,string> $attrs additional fields (e.g. purpose)
-     * @return $this
+     * @param array<string, string> $attrs
      */
     public function addIcon(string $src, ?string $sizes = null, ?string $type = null, array $attrs = []): static
     {
-        $icon = array_filter([
-            'src' => $src,
-            'sizes' => $sizes,
-            'type' => $type,
-        ], fn($v) => $v !== null && $v !== '');
+        $icon = \array_filter(
+            ['src' => $src, 'sizes' => $sizes, 'type' => $type],
+            static fn(?string $v): bool => $v !== null && $v !== ''
+        );
 
-        // merge additional attributes
         foreach ($attrs as $k => $v) {
-            if ($v == null) {
-                continue;
+            if ($v !== '') {
+                $icon[$k] = $v;
             }
-            $icon[$k] = $v;
         }
 
-        // keep unique by src
         foreach ($this->data['icons'] as $existing) {
-            if (isset($existing['src']) && $existing['src'] === $src) {
-                // replace existing
-                $existing = array_merge($existing, $icon);
-                $this->data['icons'] = array_map(fn($i) => ($i['src'] === $src ? $existing : $i), $this->data['icons']);
+            if (\is_array($existing) && ($existing['src'] ?? null) === $src) {
+                $merged = [...$existing, ...$icon];
+                $this->data['icons'] = \array_map(
+                    static fn(array $i): array => ($i['src'] ?? null) === $src ? $merged : $i,
+                    $this->data['icons']
+                );
                 return $this;
             }
         }
@@ -177,11 +159,6 @@ final class WebAppManifest
         return $this;
     }
 
-    /**
-     * Remove icon entries by src (exact match) or by predicate.
-     *
-     * @param string|callable|null $srcOrCallable exact src or predicate fn(array):bool
-     */
     public function removeIcon(string|callable|null $srcOrCallable = null): static
     {
         if ($srcOrCallable === null) {
@@ -190,34 +167,30 @@ final class WebAppManifest
         }
 
         if (\is_string($srcOrCallable)) {
-            $this->data['icons'] = array_values(array_filter($this->data['icons'], fn($i) => !isset($i['src']) || $i['src'] !== $srcOrCallable));
+            $this->data['icons'] = \array_values(\array_filter(
+                $this->data['icons'],
+                static fn(array $i): bool => ($i['src'] ?? null) !== $srcOrCallable
+            ));
             return $this;
         }
 
-        $pred = $srcOrCallable;
-        $this->data['icons'] = array_values(array_filter($this->data['icons'], fn($i) => !$pred($i)));
+        $this->data['icons'] = \array_values(\array_filter(
+            $this->data['icons'],
+            static fn(array $i): bool => !$srcOrCallable($i)
+        ));
         return $this;
     }
 
+    /**
+     * @return list<array<string, mixed>>
+     */
     public function getIcons(): array
     {
         return $this->data['icons'] ?? [];
     }
 
-    // -------------------- Shortcuts --------------------
-
     /**
-     * Add shortcut definition (PWA shortcuts).
-     *
-     * Shortcut example:
-     *  [
-     *    'name' => 'Open search',
-     *    'short_name' => 'Search',
-     *    'url' => '/search',
-     *    'icons' => [ [ 'src'=>..., 'sizes'=>..., 'type'=>... ] ]
-     *  ]
-     *
-     * @param array<string,mixed> $shortcut
+     * @param array<string, mixed> $shortcut
      */
     public function addShortcut(array $shortcut): static
     {
@@ -225,65 +198,56 @@ final class WebAppManifest
         return $this;
     }
 
+    /**
+     * @return list<array<string, mixed>>
+     */
     public function getShortcuts(): array
     {
         return $this->data['shortcuts'] ?? [];
     }
 
-    // -------------------- Related applications --------------------
-
     /**
-     * Add related application
-     *
-     * @param string $platform e.g. "play", "itunes"
-     * @param string $id id or url
-     * @param array<string,mixed> $attrs
+     * @param array<string, mixed> $attrs
      */
     public function addRelatedApplication(string $platform, string $id, array $attrs = []): static
     {
-        $entry = array_merge(['platform' => $platform, 'id' => $id], $attrs);
-        $this->data['related_applications'][] = $entry;
+        $this->data['related_applications'][] = ['platform' => $platform, 'id' => $id, ...$attrs];
         return $this;
     }
 
     public function setPreferRelatedApplications(bool $flag): static
     {
-        $this->data['prefer_related_applications'] = (bool)$flag;
+        $this->data['prefer_related_applications'] = $flag;
         return $this;
     }
 
+    /**
+     * @return list<array<string, mixed>>
+     */
     public function getRelatedApplications(): array
     {
         return $this->data['related_applications'] ?? [];
     }
 
-    // -------------------- Screenshots --------------------
-
     public function addScreenshot(string $src, ?string $sizes = null, ?string $type = null): static
     {
-        $s = array_filter(['src' => $src, 'sizes' => $sizes, 'type' => $type], fn($v) => $v !== null && $v !== '');
-        $this->data['screenshots'][] = $s;
+        $this->data['screenshots'][] = \array_filter(
+            ['src' => $src, 'sizes' => $sizes, 'type' => $type],
+            static fn(?string $v): bool => $v !== null && $v !== ''
+        );
         return $this;
     }
 
+    /**
+     * @return list<array<string, mixed>>
+     */
     public function getScreenshots(): array
     {
         return $this->data['screenshots'] ?? [];
     }
 
-    // -------------------- Share target --------------------
-
     /**
-     * Set share_target as per spec.
-     *
-     * Example:
-     *  setShareTarget([
-     *    'action' => '/share',
-     *    'method' => 'GET',
-     *    'params' => ['title'=>'title','text'=>'text','url'=>'url']
-     *  ])
-     *
-     * @param array<string,mixed>|null $config
+     * @param array<string, mixed>|null $config
      */
     public function setShareTarget(?array $config): static
     {
@@ -291,148 +255,126 @@ final class WebAppManifest
         return $this;
     }
 
+    /**
+     * @return array<string, mixed>|null
+     */
     public function getShareTarget(): ?array
     {
         return $this->data['share_target'] ?? null;
     }
 
-    // -------------------- Low-level get / toArray / toJson --------------------
-
     /**
-     * Return manifest as array (removes null values).
-     *
-     * @return array<string,mixed>
+     * @return array<string, mixed>
      */
     public function toArray(): array
     {
-        // deep filter null values for top-level entries only (spec allows custom fields)
         $out = [];
         foreach ($this->data as $k => $v) {
-            if ($v === null) continue;
-            if (\is_array($v)) {
-                // remove empty arrays
-                if ($v === [] || $v === ['']) continue;
+            if ($v === null) {
+                continue;
+            }
+            if (\is_array($v) && ($v === [] || $v === [''])) {
+                continue;
             }
             $out[$k] = $v;
         }
+
         return $out;
     }
 
-    /**
-     * Serialize manifest to JSON.
-     *
-     * @param bool $pretty
-     * @return string
-     */
     public function toJson(bool $pretty = false): string
     {
-        $flags = JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE;
-        if ($pretty) $flags |= JSON_PRETTY_PRINT;
-        $json = json_encode($this->toArray(), $flags);
+        $flags = \JSON_UNESCAPED_SLASHES | \JSON_UNESCAPED_UNICODE | ($pretty ? \JSON_PRETTY_PRINT : 0);
+        $json = \json_encode($this->toArray(), $flags);
         if ($json === false) {
-            throw new RuntimeException('Failed to json_encode manifest: ' . json_last_error_msg());
+            throw new RuntimeException('Failed to json_encode manifest: ' . \json_last_error_msg());
         }
+
         return $json;
     }
 
-    /**
-     * Save manifest to file (atomically write to temporary file then rename).
-     *
-     * @param string $path
-     * @param bool $pretty
-     * @throws RuntimeException
-     */
     public function saveToFile(string $path, bool $pretty = true): void
     {
         $json = $this->toJson($pretty);
-        $dir = dirname($path);
-        if (!is_dir($dir)) {
-            if (!mkdir($dir, 0755, true)) {
-                throw new RuntimeException('Unable to create directory: ' . $dir);
-            }
+        $dir = \dirname($path);
+        if (!\is_dir($dir) && !\mkdir($dir, 0755, true) && !\is_dir($dir)) {
+            throw new RuntimeException('Unable to create directory: ' . $dir);
         }
 
-        $tmp = tempnam($dir, 'manifest_');
+        $tmp = \tempnam($dir, 'manifest_');
         if ($tmp === false) {
             throw new RuntimeException('Unable to create temp file in: ' . $dir);
         }
 
-        $written = file_put_contents($tmp, $json);
-        if ($written === false) {
-            @unlink($tmp);
+        if (\file_put_contents($tmp, $json, \LOCK_EX) === false) {
+            if (\is_file($tmp)) {
+                \unlink($tmp);
+            }
             throw new RuntimeException('Unable to write manifest to temp file: ' . $tmp);
         }
 
-        if (!rename($tmp, $path)) {
-            @unlink($tmp);
+        if (!\rename($tmp, $path)) {
+            if (\is_file($tmp)) {
+                \unlink($tmp);
+            }
             throw new RuntimeException('Unable to move temp manifest to destination: ' . $path);
         }
     }
 
-    // -------------------- Validation --------------------
-
     /**
-     * Validate manifest against minimal rules.
-     * Returns array of errors (empty if valid).
-     *
-     * @return string[] errors
+     * @return list<string>
      */
     public function validate(): array
     {
         $errors = [];
 
-        // name recommended
         if (empty($this->data['name']) && empty($this->data['short_name'])) {
             $errors[] = 'Either "name" or "short_name" should be provided.';
         }
 
-        // start_url should be set
         if (empty($this->data['start_url'])) {
             $errors[] = '"start_url" is required.';
         }
 
-        // icons: ensure each icon has src and valid sizes (optional)
         foreach ($this->data['icons'] as $i => $icon) {
-            if (!is_array($icon) || !isset($icon['src'])) {
+            if (!\is_array($icon) || !isset($icon['src'])) {
                 $errors[] = "Icon at index {$i} must contain 'src'.";
                 continue;
             }
-            // sizes basic format: 'WxH' or 'any'
-            if (isset($icon['sizes']) && $icon['sizes'] !== 'any') {
-                if (!preg_match('/^\d+x\d+$/', (string)$icon['sizes'])) {
-                    $errors[] = "Icon sizes for {$icon['src']} must be 'WxH' or 'any'.";
-                }
+            if (isset($icon['sizes']) && $icon['sizes'] !== 'any' && \preg_match('/^\d+x\d+$/', (string) $icon['sizes']) !== 1) {
+                $errors[] = "Icon sizes for {$icon['src']} must be 'WxH' or 'any'.";
             }
         }
 
-        // display allowed values
         if (isset($this->data['display'])) {
-            $allowed = ['fullscreen','standalone','minimal-ui','browser'];
-            if (!in_array($this->data['display'], $allowed, true)) {
-                $errors[] = '"display" must be one of: ' . implode(', ', $allowed) . '.';
+            $allowed = ['fullscreen', 'standalone', 'minimal-ui', 'browser'];
+            if (!\in_array($this->data['display'], $allowed, true)) {
+                $errors[] = '"display" must be one of: ' . \implode(', ', $allowed) . '.';
             }
         }
 
         return $errors;
     }
 
-    /**
-     * Validate and throw on error.
-     *
-     * @throws InvalidArgumentException
-     */
     public function validateOrFail(): void
     {
         $errors = $this->validate();
-        if (!empty($errors)) {
-            throw new InvalidArgumentException('Manifest validation failed: ' . implode('; ', $errors));
+        if ($errors !== []) {
+            throw new InvalidArgumentException('Manifest validation failed: ' . \implode('; ', $errors));
         }
     }
 
-    // -------------------- Helpful utilities --------------------
+    /**
+     * @return array<string, mixed>
+     */
+    #[Override]
+    public function jsonSerialize(): array
+    {
+        return $this->toArray();
+    }
 
     /**
-     * Quick iterator-friendly representation (array)
+     * @return array<string, mixed>
      */
     public function jsonSerializable(): array
     {
@@ -440,83 +382,67 @@ final class WebAppManifest
     }
 
     /**
-     * Convenience: set multiple common fields via fluent API
-     *
-     * @param array<string,mixed> $data
-     * @return $this
+     * @param array<string, mixed> $data
      */
     public function setCommon(array $data): static
     {
-        $allowed = ['name','short_name','start_url','scope','display','theme_color','background_color','description','lang','dir'];
         foreach ($data as $k => $v) {
-            if (in_array($k, $allowed, true)) {
-                $this->data[$k] = $v;
-            } else {
-                $this->data[$k] = $v; // keep other custom keys as well
-            }
+            $this->data[$k] = $v;
         }
+
         return $this;
     }
 
     /**
-     * Best-effort icon generator using Imagick (optional).
-     * If Imagick extension not loaded or generation failed -> throws RuntimeException.
-     *
-     * Function will generate resized images from a source file into destination directory and add icons entries.
-     *
-     * @param string $sourcePath absolute path to source image (should be square and large enough)
-     * @param string $destDir destination directory (web-accessible) - will be created if missing
-     * @param array<int,int[]> $sizes array of sizes to generate, e.g. [192, 512]
-     * @param string $format png|webp
-     * @return $this
-     * @throws RuntimeException
+     * @param list<int> $sizes
      */
-    public function generateIconsFromSource(string $sourcePath, string $destDir, array $sizes = [192,512], string $format = 'png'): static
-    {
-        if (!extension_loaded('imagick')) {
+    public function generateIconsFromSource(
+        string $sourcePath,
+        string $destDir,
+        array $sizes = [192, 512],
+        string $format = 'png',
+    ): static {
+        if (!\extension_loaded('imagick')) {
             throw new RuntimeException('Imagick extension is required for icon generation.');
         }
-        if (!is_readable($sourcePath)) {
+        if (!\is_readable($sourcePath)) {
             throw new RuntimeException('Source image not readable: ' . $sourcePath);
         }
-        if (!is_dir($destDir) && !mkdir($destDir, 0755, true)) {
+        if (!\is_dir($destDir) && !\mkdir($destDir, 0755, true) && !\is_dir($destDir)) {
             throw new RuntimeException('Unable to create destination directory: ' . $destDir);
         }
 
         $im = new \Imagick($sourcePath);
-        foreach ($sizes as $size) {
-            $size = (int)$size;
-            $clone = clone $im;
-            $clone->setImageBackgroundColor('transparent');
-            $clone->thumbnailImage($size, $size, true, true);
-            $filename = sprintf('icon-%dx%d.%s', $size, $size, $format);
-            $outPath = rtrim($destDir, DIRECTORY_SEPARATOR) . DIRECTORY_SEPARATOR . $filename;
-            if ($format === 'png') {
-                $clone->setImageFormat('png');
-            } elseif ($format === 'webp') {
-                $clone->setImageFormat('webp');
-            } else {
-                $clone->setImageFormat($format);
+        try {
+            foreach ($sizes as $size) {
+                $safeSize = \clamp((int) $size, 16, 2048);
+                $clone = clone $im;
+                try {
+                    $clone->setImageBackgroundColor('transparent');
+                    $clone->thumbnailImage($safeSize, $safeSize, true, true);
+                    $filename = \sprintf('icon-%dx%d.%s', $safeSize, $safeSize, $format);
+                    $outPath = \rtrim($destDir, \DIRECTORY_SEPARATOR) . \DIRECTORY_SEPARATOR . $filename;
+                    $clone->setImageFormat($format);
+                    if (!$clone->writeImage($outPath)) {
+                        throw new RuntimeException('Failed to write icon: ' . $outPath);
+                    }
+                    $this->addIcon($outPath, "{$safeSize}x{$safeSize}", $this->mimeTypeForExtension($format));
+                } finally {
+                    $clone->clear();
+                    $clone->destroy();
+                }
             }
-            if (!$clone->writeImage($outPath)) {
-                throw new RuntimeException('Failed to write icon: ' . $outPath);
-            }
-            $this->addIcon($outPath, "{$size}x{$size}", $this->mimeTypeForExtension($format));
-            $clone->clear();
-            $clone->destroy();
+        } finally {
+            $im->clear();
+            $im->destroy();
         }
-        $im->clear();
-        $im->destroy();
+
         return $this;
     }
 
-    /**
-     * Utility: guess mime type for an extension
-     */
     private function mimeTypeForExtension(string $ext): string
     {
-        $ext = strtolower(ltrim($ext, '.'));
-        return match ($ext) {
+        return match (\strtolower(\ltrim($ext, '.'))) {
             'png' => 'image/png',
             'jpg', 'jpeg' => 'image/jpeg',
             'webp' => 'image/webp',
@@ -525,16 +451,12 @@ final class WebAppManifest
         };
     }
 
-    // -------------------- Magic / utils --------------------
-
-    /**
-     * Return JSON string on cast
-     */
+    #[Override]
     public function __toString(): string
     {
         try {
             return $this->toJson(true);
-        } catch (\Throwable) {
+        } catch (Throwable) {
             return '';
         }
     }

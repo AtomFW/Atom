@@ -6,24 +6,15 @@ namespace Atom\Exception\IO\Generative;
 
 use Atom\Exception\Interface\Generative\GenerativeExceptionInterface;
 use Atom\Exception\Trait\Generative\GenerativeExceptionTrait;
+use Exception;
 
-/**
- * AbsolutePathGenerativeException
- *
- * @package Atom\Exception\IO\Generative
- */
-class AbsolutePathGenerativeException extends \Exception implements
-    GenerativeExceptionInterface,
-    \Stringable,
-    \Throwable
+final class AbsolutePathGenerativeException extends Exception implements GenerativeExceptionInterface
 {
     use GenerativeExceptionTrait;
 
-    protected $message = 'A I/O absolute path error occurred.';
-    protected $code = 620;
+    /** @var string */
+    protected $message = 'An I/O absolute path error occurred.';
 
-    public function __construct(string $format, ...$params)
-    {
-        $this->message = \sprintf($format, ...$params);
-    }
+    /** @var int */
+    protected $code = 620;
 }

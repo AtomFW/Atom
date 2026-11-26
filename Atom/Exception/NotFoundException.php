@@ -4,14 +4,16 @@ declare(strict_types=1);
 
 namespace Atom\Exception;
 
+use Exception;
+
 /**
- * Exception thrown when a requested resource is not found.
- *
- * This exception is thrown when a resource (such as a file, database record,
- * or API endpoint) cannot be located or accessed.
+ * Exception thrown when a requested resource or route is not found (HTTP 404).
  */
-class NotFoundException extends \Exception
+final class NotFoundException extends Exception
 {
+    /** @var string */
     protected $message = 'Page not found';
+
+    /** @var int */
     protected $code = 404;
 }

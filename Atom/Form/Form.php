@@ -2,99 +2,89 @@
 
 declare(strict_types=1);
 
-namespace Atom\form;
+namespace Atom\Form;
 
+use Atom\Filter\InputFilter;
+use Atom\Filter\TypeCaster;
 use Atom\Model;
 
+/**
+ * HTML Form builder with XSS-safe attribute rendering and automatic type-inferred field creation.
+ */
 class Form
 {
-
     /**
-     * Begins a new HTML form element.
+     * Begins an HTML `<form>` element and returns a Form builder instance.
      *
-     * @param string $action The action attribute value for the form
-     * @param string $method The method attribute value for the form
-     * @param array $options Additional HTML attributes for the form
-     * @return Form Returns an instance of the Form class
+     * @param array<string, scalar> $options
      */
-    public static function begin(string $action, string $method, array $options = []): Form
+    public static function begin(string $action, string $method, array $options = []): self
     {
         $attributes = [];
         foreach ($options as $key => $value) {
-            $attributes[] = "$key=\"$value\"";
+            $safeKey = \preg_replace('/[^a-zA-Z0-9\-_:]/', '', (string) $key) ?? '';
+            if ($safeKey === '') {
+                continue;
+            }
+            $safeVal = InputFilter::escapeHtml($value);
+            $attributes[] = "{$safeKey}=\"{$safeVal}\"";
         }
-        echo \sprintf('<form action="%s" method="%s" %s>', $action, $method, implode(" ", $attributes));
-        return new Form();
+
+        echo \sprintf(
+            '<form action="%s" method="%s" %s>',
+            InputFilter::escapeHtml($action),
+            InputFilter::escapeHtml($method),
+            \implode(' ', $attributes),
+        );
+
+        return new self();
     }
 
-    /**
-     * Ends the HTML form element.
-     *
-     * This function outputs the closing `</form>` tag to properly close
-     * the HTML form that was started with the begin method. It should be called
-     * exactly once for every call to begin to ensure valid HTML structure.
-     *
-     * @return void
-     */
     public static function end(): void
     {
         echo '</form>';
     }
 
-    /**
-     * Creates a form field for the given model and attribute.
-     *
-     * @param Model $model The model instance to create the field for
-     * @param string $attribute The name of the attribute to create the field for
-     * @return Field Returns a new Field instance
-     */
-    public function field(Model $model, $attribute): Field
+    public function field(Model $model, string $attribute): Field
     {
         return new Field($model, $attribute);
     }
 
     /**
-     * Creates a textarea form field for the given model and attribute.
-     *
-     * @param Model $model The model instance to create the field for
-     * @param string $attribute The name of the attribute to create the field for
-     * @return TextareaField Returns a new TextareaField instance
+     * Automatically selects the optimal HTML5 field/widget (`SelectField`, `TextareaField`, or typed `Field`)
+     * based on the model's PHP 8.6 property type, `#[Cast]` metadata, validation rules, and select options.
      */
-    public function textareaField(Model $model, $attribute): TextareaField
+    public function autoField(Model $model, string $attribute): BaseField
+    {
+        $selectOptions = $model->getOptionSelects($attribute);
+        if (\is_array($selectOptions) && $selectOptions !== []) {
+            return new SelectField($model, $attribute);
+        }
+
+        $inferredType = TypeCaster::inferHtmlInputType($model, $attribute);
+        if ($inferredType === TextareaField::TYPE_TEXTAREA) {
+            return new TextareaField($model, $attribute);
+        }
+
+        return (new Field($model, $attribute))->setType($inferredType);
+    }
+
+    public function textareaField(Model $model, string $attribute): TextareaField
     {
         return new TextareaField($model, $attribute);
     }
 
-    /**
-     * Creates a select form field for the given model and attribute.
-     *
-     * @param Model $model The model instance to create the field for
-     * @param string $attribute The name of the attribute to create the field for
-     * @return SelectField Returns a new SelectField instance
-     */
-    public function selectField(Model $model, $attribute): SelectField
+    public function selectField(Model $model, string $attribute): SelectField
     {
         return new SelectField($model, $attribute);
     }
 
-    /**
-     * Creates a progress form field for the given model and attribute.
-     *
-     * @param Model $model The model instance to create the field for
-     * @param string $attribute The name of the attribute to create the field for
-     * @return ProgressField Returns a new ProgressField instance
-     */
-    public function progressField(Model $model, $attribute): ProgressField
+    public function progressField(Model $model, string $attribute): ProgressField
     {
         return new ProgressField($model, $attribute);
     }
-    
-    /**
-     * @param Model $model
-     * @param mixed $attribute
-     * @return MeterField
-     */
-    public function meterField(Model $model, $attribute): MeterField
+
+    public function meterField(Model $model, string $attribute): MeterField
     {
         return new MeterField($model, $attribute);
     }

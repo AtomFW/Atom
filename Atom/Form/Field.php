@@ -2,305 +2,200 @@
 
 declare(strict_types=1);
 
-namespace Atom\form;
+namespace Atom\Form;
 
+use Atom\Filter\InputFilter;
+use Atom\Filter\TypeCaster;
 use Atom\Model;
+use Override;
 
 /**
- * The Field class extends BaseField and handles form fields.
- * It contains methods for creating different types of form fields.
+ * Standard `<input>` form field supporting all HTML5 input types and automatic PHP 8.6 type inference.
  */
 class Field extends BaseField
 {
-    public const TYPE_TEXT = 'text';
-    public const TYPE_PASSWORD = 'password';
-    public const TYPE_FILE = 'file';
-    public const TYPE_HIDDEN = 'hidden';
+    public const string TYPE_TEXT = 'text';
+    public const string TYPE_PASSWORD = 'password';
+    public const string TYPE_FILE = 'file';
+    public const string TYPE_HIDDEN = 'hidden';
     public const TYPE_CHECKBOX = 'checkbox';
-    public const TYPE_RADIO = 'radio';
-    public const TYPE_DATE = 'date';
-    public const TYPE_TIME = 'time';
-    public const TYPE_EMAIL = 'email';
-    public const TYPE_URL = 'url';
-    public const TYPE_NUMBER = 'number';
-    public const TYPE_RANGE = 'range';
-    public const TYPE_SEARCH = 'search';
-    public const TYPE_COLOR = 'color';
-    public const TYPE_TEL = 'tel';
-    public const TYPE_MONTH = 'month';
-    public const TYPE_WEEK = 'week';
-    public const TYPE_DATETIME_LOCAL = 'datetime-local';
-    public const TYPE_SUBMIT = 'submit';
-    public const TYPE_RESET = 'reset';
-    public const TYPE_BUTTON = 'button';
-    public const TYPE_IMAGE = 'image';
-        
+    public const string TYPE_RADIO = 'radio';
+    public const string TYPE_DATE = 'date';
+    public const string TYPE_TIME = 'time';
+    public const string TYPE_EMAIL = 'email';
+    public const string TYPE_URL = 'url';
+    public const string TYPE_NUMBER = 'number';
+    public const string TYPE_RANGE = 'range';
+    public const string TYPE_SEARCH = 'search';
+    public const string TYPE_COLOR = 'color';
+    public const string TYPE_TEL = 'tel';
+    public const string TYPE_MONTH = 'month';
+    public const string TYPE_WEEK = 'week';
+    public const string TYPE_DATETIME_LOCAL = 'datetime-local';
+    public const string TYPE_SUBMIT = 'submit';
+    public const string TYPE_RESET = 'reset';
+    public const string TYPE_BUTTON = 'button';
+    public const string TYPE_IMAGE = 'image';
 
-    /**
-     * Field constructor.
-     *
-     * @param \Atom\Model $model
-     * @param string          $attribute
-     */
     public function __construct(Model $model, string $attribute)
     {
         $this->type = self::TYPE_TEXT;
         parent::__construct($model, $attribute);
     }
 
-    /**
-     * Renders the HTML for the form field.
-     *
-     * @return string The HTML code for the form field
-     */
-    public function renderInput(): string
+    public function setType(string $type): self
     {
-        $classAttrubute = $this->model->getProperty($this->attribute, 'class');
-        $valueAttrubute = $this->model->getProperty($this->attribute, 'value');
-
-        $inputClass = $this->model->hasError($this->attribute) ? ' is-invalid' : '';
-        if ($classAttrubute) $inputClass .= ' ' . $classAttrubute;
-
-        $inputValue = $this->model->{$this->attribute};
-        if ($valueAttrubute && empty($inputValue)) $inputValue = $valueAttrubute;
-
-        return \sprintf('<input type="%s" name="%s" value="%s" class="form-control%s" %s>',
-            $this->type,
-            $this->attribute,
-            $inputValue,
-            $inputClass,
-            $this->model->property($this->attribute),
-        );
+        $this->type = $type;
+        return $this;
     }
 
     /**
-     * Sets the field type to password.
-     *
-     * @return Field
+     * Automatically infers the HTML5 `<input type="...">` from the model property type, `#[Cast]`, and rules.
      */
-    public function passwordField(): Field
+    public function autoType(): self
+    {
+        $this->type = TypeCaster::inferHtmlInputType($this->model, $this->attribute);
+        return $this;
+    }
+
+    #[Override]
+    public function renderInput(): string
+    {
+        $inputClass = $this->resolveInputClass();
+        $inputValue = $this->resolveInputValue();
+        $extraProps = $this->model->property($this->attribute);
+
+        return \sprintf(
+            '<input type="%s" name="%s" value="%s" class="form-control%s" %s>',
+            InputFilter::escapeHtml($this->type),
+            InputFilter::escapeHtml($this->attribute),
+            $inputValue,
+            $inputClass,
+            $extraProps,
+        );
+    }
+
+    public function passwordField(): self
     {
         $this->type = self::TYPE_PASSWORD;
         return $this;
     }
 
-    /**
-     * Sets the field type to file.
-     *
-     * @return Field
-     */
-    public function fileField(): Field
+    public function fileField(): self
     {
         $this->type = self::TYPE_FILE;
         return $this;
     }
 
-    /**
-     * Sets the field type to email.
-     *
-     * @return Field
-     */
-    public function emailField(): Field
+    public function emailField(): self
     {
         $this->type = self::TYPE_EMAIL;
         return $this;
     }
 
-    /**
-     * Sets the field type to hidden.
-     *
-     * @return Field
-     */
-    public function hiddenField(): Field
+    public function hiddenField(): self
     {
         $this->type = self::TYPE_HIDDEN;
         return $this;
     }
 
-    /**
-     * Sets the field type to checkbox.
-     *
-     * @return Field
-     */
-    public function checkboxField(): Field
+    public function checkboxField(): self
     {
         $this->type = self::TYPE_CHECKBOX;
         return $this;
     }
 
-    /**
-     * Sets the field type to radio button.
-     *
-     * @return Field
-     */
-
-    public function radioField(): Field
+    public function radioField(): self
     {
         $this->type = self::TYPE_RADIO;
         return $this;
     }
 
-    /**
-     * Sets the field type to date.
-     *
-     * @return Field
-     */
-    public function dateField(): Field
+    public function dateField(): self
     {
         $this->type = self::TYPE_DATE;
         return $this;
     }
 
-    /**
-     * Sets the field type to time.
-     *
-     * @return Field
-     */
-    public function timeField(): Field
+    public function timeField(): self
     {
         $this->type = self::TYPE_TIME;
         return $this;
     }
 
-    /**
-     * Sets the field type to URL.
-     *
-     * @return Field
-     */
-    public function urlField(): Field
+    public function urlField(): self
     {
         $this->type = self::TYPE_URL;
         return $this;
     }
 
-    /**
-     * Sets the field type to number.
-     *
-     * @return Field
-     */
-    public function numberField(): Field
+    public function numberField(): self
     {
         $this->type = self::TYPE_NUMBER;
         return $this;
     }
 
-    /**
-     * Sets the field type to range.
-     *
-     * @return Field
-     */
-    public function rangeField(): Field
+    public function rangeField(): self
     {
         $this->type = self::TYPE_RANGE;
         return $this;
     }
 
-    /**
-     * Sets the field type to search.
-     *
-     * @return Field
-     */
-    public function searchField(): Field
+    public function searchField(): self
     {
         $this->type = self::TYPE_SEARCH;
         return $this;
     }
 
-    /**
-     * Sets the field type to color.
-     *
-     * @return Field
-     */
-    public function colorField(): Field
+    public function colorField(): self
     {
         $this->type = self::TYPE_COLOR;
         return $this;
     }
 
-    /**
-     * Sets the field type to telephone.
-     *
-     * @return Field
-     */
-    public function telField(): Field
+    public function telField(): self
     {
         $this->type = self::TYPE_TEL;
         return $this;
     }
 
-    /**
-     * Sets the field type to month.
-     *
-     * @return Field
-     */
-
-    public function monthField(): Field
+    public function monthField(): self
     {
         $this->type = self::TYPE_MONTH;
         return $this;
     }
 
-    /**
-     * Sets the field type to week.
-     *
-     * @return Field
-     */
-    public function weekField(): Field
+    public function weekField(): self
     {
         $this->type = self::TYPE_WEEK;
         return $this;
     }
 
-    /**
-     * Sets the field type to datetime-local.
-     *
-     * @return Field
-     */
-    public function datetimeLocalField(): Field
+    public function datetimeLocalField(): self
     {
         $this->type = self::TYPE_DATETIME_LOCAL;
         return $this;
     }
 
-    /**
-     * Sets the field type to submit.
-     *
-     * @return Field
-     */
-    public function submitField(): Field
+    public function submitField(): self
     {
         $this->type = self::TYPE_SUBMIT;
         return $this;
     }
 
-    /**
-     * Sets the field type to reset.
-     *
-     * @return Field
-     */
-    public function resetField(): Field
+    public function resetField(): self
     {
         $this->type = self::TYPE_RESET;
         return $this;
     }
 
-    /**
-     * Sets the field type to button.
-     *
-     * @return Field
-     */
-    public function buttonField(): Field
+    public function buttonField(): self
     {
         $this->type = self::TYPE_BUTTON;
         return $this;
     }
 
-    /**
-     * Sets the field type to image.
-     *
-     * @return Field
-     */
-    public function imageField(): Field
+    public function imageField(): self
     {
         $this->type = self::TYPE_IMAGE;
         return $this;

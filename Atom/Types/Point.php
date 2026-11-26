@@ -4,60 +4,147 @@ declare(strict_types=1);
 
 namespace Atom\Types;
 
+use Atom\Filter\TypeConvertibleInterface;
+use InvalidArgumentException;
+use Stringable;
+
+use function clamp;
+use function explode;
+use function is_array;
+use function is_string;
+use function preg_replace;
+use function sprintf;
+use function sscanf;
+use function str_contains;
+use function stripos;
+use function trim;
+
 /**
- * Point represents a point in 2D space with X and Y coordinates.
- * This is an immutable class that can be used to represent positions,
- * vectors, or any other 2D data points.
+ * Immutable 2D geographic/cartesian coordinate value object.
  *
- * Example usage:
- * $point = new Point(52.2297, 21.0122);
- * echo $point->toString(); // Output: "52.2297,21.0122"
- * echo $point->toFormat("Lat: %F, Lng: %F"); // Output: "Lat: 52.229700, Lng: 21.012200"
+ * Implements TypeConvertibleInterface so DbModel and Form/Model::loadData()
+ * automatically hydrate and serialize coordinates without manual boilerplate.
  */
-readonly class Point 
+final readonly class Point implements TypeConvertibleInterface, Stringable
 {
-    /**
-     * @param float $latitude  Latitude coordinate
-     * @param float $longitude Longitude coordinate
-     */
     public function __construct(
         public float $latitude,
-        public float $longitude
+        public float $longitude,
     ) {}
 
     /**
-     * Converts the point to a string representation
-     *
-     * @return string The string representation in "lat,lng" format
+     * Creates a geographic Point with latitude clamped to [-90, 90] and longitude to [-180, 180].
      */
-    public function toString(): string 
+    public static function fromGps(float $latitude, float $longitude): self
+    {
+        return new self(
+            clamp($latitude, -90.0, 90.0),
+            clamp($longitude, -180.0, 180.0),
+        );
+    }
+
+    #[\Override]
+    public static function fromDatabase(mixed $value): static
+    {
+        return self::parse($value);
+    }
+
+    #[\Override]
+    public static function fromForm(mixed $value): static
+    {
+        return self::parse($value);
+    }
+
+    #[\Override]
+    public function toDatabase(): string
+    {
+        return $this->toSql();
+    }
+
+    /**
+     * Converts the point to a "lat,lng" string representation.
+     */
+    public function toString(): string
     {
         return "{$this->latitude},{$this->longitude}";
     }
 
-    /**
-     * Format the point coordinates according to the provided format string.
-     *
-     * @param string $format The format to use for formatting the coordinates.
-     *                       Should contain two %f or %F placeholders for latitude and longitude respectively.
-     * @return string The formatted string with coordinates.
-     */
-    public function toFormat (string $format): string
+    #[\Override]
+    public function __toString(): string
     {
-        return \sprintf($format, $this->latitude, $this->longitude);
+        return $this->toString();
     }
 
     /**
-     * Returns the point in Well-Known Text (WKT) format for SQL databases
-     * @return string SQL POINT representation in format: POINT(lat long)
+     * Formats the point coordinates according to the provided printf format string.
+     */
+    public function toFormat(string $format): string
+    {
+        return sprintf($format, $this->latitude, $this->longitude);
+    }
+
+    /**
+     * Returns the SQL POINT representation: POINT(lat, lng).
      */
     public function toSql(): string
     {
         return "POINT({$this->latitude}, {$this->longitude})";
     }
 
+    /**
+     * Returns standard OGC Well-Known Text (WKT) representation: POINT(lng lat).
+     */
+    public function toWkt(): string
+    {
+        return "POINT({$this->longitude} {$this->latitude})";
+    }
+
+    /**
+     * Builds a parameterized SQL POINT(:x, :y) expression with strict identifier sanitization.
+     */
     public function toPrepareSql(string $xName, string $yName): string
     {
-        return "POINT(:{$xName}, :{$yName})";
+        $safeX = preg_replace('/[^a-zA-Z0-9_]/', '', $xName) ?? '';
+        $safeY = preg_replace('/[^a-zA-Z0-9_]/', '', $yName) ?? '';
+
+        if ($safeX === '' || $safeY === '') {
+            throw new InvalidArgumentException('SQL placeholder names for Point must be non-empty alphanumeric identifiers.');
+        }
+
+        return "POINT(:{$safeX}, :{$safeY})";
+    }
+
+    private static function parse(mixed $value): self
+    {
+        if ($value instanceof self) {
+            return $value;
+        }
+
+        if (is_array($value)) {
+            $lat = (float) ($value['latitude'] ?? $value['lat'] ?? $value[0] ?? 0.0);
+            $lng = (float) ($value['longitude'] ?? $value['lng'] ?? $value['lon'] ?? $value[1] ?? 0.0);
+            return new self($lat, $lng);
+        }
+
+        if (is_string($value)) {
+            $trimmed = trim($value);
+            if (stripos($trimmed, 'POINT') === 0) {
+                $first = 0.0;
+                $second = 0.0;
+                if (str_contains($trimmed, ',')) {
+                    sscanf($trimmed, 'POINT(%f, %f)', $first, $second);
+                } else {
+                    sscanf($trimmed, 'POINT(%f %f)', $first, $second);
+                }
+                return new self((float) $first, (float) $second);
+            }
+
+            if (str_contains($trimmed, ',')) {
+                [$lat, $lng] = array_map(trim(...), explode(',', $trimmed, 2));
+                return new self((float) $lat, (float) $lng);
+            }
+        }
+
+        return new self(0.0, 0.0);
     }
 }

@@ -5,219 +5,189 @@ declare(strict_types=1);
 namespace Atom\DataBase;
 
 use Atom\Atom;
-use Atom\DataBase\Database;
 use Atom\DateTime\DateTime;
+use PDO;
+use PDOStatement;
+use RuntimeException;
+
+use function array_diff;
+use function array_values;
+use function basename;
+use function date;
+use function gethostname;
+use function hash_file;
+use function is_dir;
+use function natsort;
+use function pathinfo;
+use function php_uname;
+use function preg_replace;
+use function scandir;
+use function str_ends_with;
+use function str_replace;
 
 /**
- * Class Migrations
- * 
- * The Migrations class is responsible for handling database migration operations.
- * It provides functionality to adapt SQL migration queries by replacing placeholders
- * with actual values and manages the underlying database configuration and datetime
- * operations required for migration processes.
- * 
- * This class serves as a utility for database schema evolution, allowing developers
- * to version control database changes and apply them systematically across different
- * environments through placeholder replacement and configuration management.
- * 
- * @package Atom\DataBase\Migrations
+ * Database schema migration runner with SHA-512/256 integrity hashing and parameterized persistence.
  */
 final class Migrations
 {
+    /** @var array<string, mixed> */
     public array $config;
 
-    /**
-     * Class constructor
-     * 
-     * Initializes a new instance of the class and stores references to the database and datetime objects.
-     * This constructor accepts two dependencies through the parameters and assigns them to
-     * their respective class properties, ensuring that the class has access to database
-     * configuration and datetime functionality.
-     * 
-     * @param Database $database The database instance used for database operations
-     * @param DateTime $datetime The datetime instance used for date/time operations
-     * @return void
-     */
-    public function __construct(public Database $database, public DateTime $datetime) {
+    public function __construct(
+        public readonly Database $database,
+        public readonly DateTime $datetime,
+    ) {
         $this->config = $this->database->getConfig();
     }
 
     /**
-     * Applies all migrations that haven't been applied yet.
-     *
-     * This method checks which migrations have been applied and then
-     * applies all migrations that haven't been applied yet.
-     *
-     * @return void
+     * Applies all pending migrations from the `/migrations` directory.
      */
-    public function applyMigrations()
+    public function applyMigrations(): void
     {
         $this->createMigrationsTable();
-        
-        $appliedMigrations = $this->getAppliedMigrations();
 
-        $newMigrations = [];
-        $files = scandir(Atom::$ROOT_DIR . '/migrations');
+        $appliedMigrations = $this->getAppliedMigrations();
+        $migrationsDir = Atom::$ROOT_DIR . '/migrations';
+
+        if (!is_dir($migrationsDir)) {
+            throw new RuntimeException("Migrations directory does not exist: {$migrationsDir}");
+        }
+
+        $files = scandir($migrationsDir);
+        if ($files === false) {
+            throw new RuntimeException("Unable to read migrations directory: {$migrationsDir}");
+        }
+
         $toApplyMigrations = array_diff($files, $appliedMigrations);
-        
         natsort($toApplyMigrations);
         $toApplyMigrations = array_values($toApplyMigrations);
-        
+
+        $newMigrations = [];
+
         foreach ($toApplyMigrations as $migration) {
-            if ($migration === '.' || $migration === '..') {
+            $safeFile = basename($migration);
+            if ($safeFile === '.' || $safeFile === '..' || !str_ends_with($safeFile, '.php')) {
                 continue;
             }
 
-            require_once Atom::$ROOT_DIR . '/migrations/' . $migration;
-            $className = pathinfo($migration, PATHINFO_FILENAME);
+            $fullPath = $migrationsDir . \DIRECTORY_SEPARATOR . $safeFile;
+            require_once $fullPath;
+
+            $className = pathinfo($safeFile, \PATHINFO_FILENAME);
             $instance = new $className();
             $instance->db = $this;
-            $this->log("Applying migration $migration");
+
+            $this->log("Applying migration {$safeFile}");
             $instance->up();
-            $this->log("Applied migration $migration");
+            $this->log("Applied migration {$safeFile}");
+
+            $hash = hash_file('sha512/256', $fullPath);
             $newMigrations[] = [
-                "name" => $migration,
-                "hash" => hash_file('sha512', Atom::$ROOT_DIR . '/migrations/' . $migration, false, ['length' => 256])
+                'name' => $safeFile,
+                'hash' => $hash !== false ? $hash : '',
             ];
         }
 
-        if (!empty($newMigrations)) {
+        if ($newMigrations !== []) {
             $this->saveMigrations($newMigrations);
         } else {
-            $this->log("There are no migrations to apply");
+            $this->log('There are no migrations to apply');
         }
     }
 
-    /**
-     * Creates the migrations table in the database.
-     *
-     * This method creates the migrations table in the database if it
-     * doesn't already exist. The table is used to keep track of which
-     * migrations have been applied.
-     *
-     * @return void
-     */
-    protected function createMigrationsTable()
+    protected function createMigrationsTable(): void
     {
+        $table = $this->migrationsTableName();
+
         $this->database->pdo->exec("
-            CREATE TABLE IF NOT EXISTS `{$this->database->getConfig()['prefix']}migrations` (
+            CREATE TABLE IF NOT EXISTS `{$table}` (
                 `id` int NOT NULL AUTO_INCREMENT PRIMARY KEY,
                 `migration` varchar(255) CHARACTER SET ascii COLLATE ascii_bin NOT NULL COMMENT 'migration name file',
                 `migration_hash_file` varchar(128) CHARACTER SET ascii COLLATE ascii_bin NOT NULL COMMENT 'to verify existing migrations',
-                `withdrawn` tinyint(1) NOT NULL DEFAULT '0' COMMENT '0 = used, 1 = with out | migration is withdrawn from used',
+                `withdrawn` tinyint(1) NOT NULL DEFAULT '0' COMMENT '0 = used, 1 = withdrawn',
                 `server_id` mediumint UNSIGNED NOT NULL COMMENT 'from which server it was added | id from servers table',
                 `updated_at` datetime(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3) COMMENT 'time when the data was updated',
-                `created_at` datetime(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) COMMENT 'time when add migration was added'
-            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_bin COMMENT='control of all migrations in the instance';"
-        );
+                `created_at` datetime(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) COMMENT 'time when migration was added'
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_bin COMMENT='control of all migrations in the instance';
+        ");
 
-        // check if the constraint exists
-        $exists = $this->database->pdo->query("
-            SELECT COUNT(*) 
-            FROM information_schema.STATISTICS 
+        $stmt = $this->database->pdo->prepare('
+            SELECT COUNT(*)
+            FROM information_schema.STATISTICS
             WHERE TABLE_SCHEMA = DATABASE()
-            AND TABLE_NAME = '{$this->database->getConfig()['prefix']}migrations' 
-            AND INDEX_NAME = 'server_id'
-        ")->fetchColumn();
+              AND TABLE_NAME = :table
+              AND INDEX_NAME = :idx
+        ');
+        $stmt->execute(['table' => $table, 'idx' => 'server_id']);
+        $exists = (int) $stmt->fetchColumn() > 0;
 
-        if ($exists) {
-            return;
+        if (!$exists) {
+            $this->database->pdo->exec("ALTER TABLE `{$table}` ADD KEY `server_id` (`server_id`);");
         }
-
-        $this->database->pdo->exec("
-            ALTER TABLE `{$this->database->getConfig()['prefix']}migrations`
-            ADD KEY `server_id` (`server_id`);"
-        );
     }
 
     /**
-     * Returns an array of all applied migrations.
-     *
-     * This method returns an array of all applied migrations. The
-     * array contains the names of the migrations that have been
-     * applied.
-     *
-     * @return array An array of all applied migrations.
+     * @return list<string>
      */
     protected function getAppliedMigrations(): array
     {
-        $statement = $this->database->pdo->prepare("SELECT `migration` FROM `{$this->database->getConfig()['prefix']}migrations`");
+        $table = $this->migrationsTableName();
+        $statement = $this->database->pdo->prepare("SELECT `migration` FROM `{$table}`");
         $statement->execute();
 
-        return $statement->fetchAll(\PDO::FETCH_COLUMN);
+        /** @var list<string> */
+        return $statement->fetchAll(PDO::FETCH_COLUMN);
     }
 
     /**
-     * Saves the new migrations to the database.
-     *
-     * This method saves the new migrations to the database. It takes an
-     * array of new migrations as an argument.
-     *
-     * @param array $newMigrations An array of new migrations to save to the database.
-     *
-     * @return void
+     * @param list<array{name: string, hash: string}> $newMigrations
      */
     protected function saveMigrations(array $newMigrations): void
-    {   
+    {
+        $table = $this->migrationsTableName();
         $datetimeSQL = $this->datetime->utc()->now()->format('Y-m-d H:i:s.u');
-        $str = implode(',', array_map(fn($m) => "('{$m["name"]}','{$m["hash"]}','0','1','{$datetimeSQL}','{$datetimeSQL}')", $newMigrations));
 
-        $statement = $this->database->pdo->prepare("INSERT INTO `{$this->database->getConfig()['prefix']}migrations` (`migration`, `migration_hash_file`, `withdrawn`, `server_id`, `updated_at`, `created_at`) VALUES 
-            $str
-        ");
+        $statement = $this->database->pdo->prepare(
+            "INSERT INTO `{$table}` (`migration`, `migration_hash_file`, `withdrawn`, `server_id`, `updated_at`, `created_at`)
+             VALUES (:name, :hash, 0, 1, :updated_at, :created_at)"
+        );
 
-        $statement->execute();
+        foreach ($newMigrations as $migration) {
+            $statement->execute([
+                'name' => $migration['name'],
+                'hash' => $migration['hash'],
+                'updated_at' => $datetimeSQL,
+                'created_at' => $datetimeSQL,
+            ]);
+        }
 
-        // check if the constraint exists
-        $exists = $this->database->pdo->query("
-            SELECT COUNT(*) 
-            FROM information_schema.TABLE_CONSTRAINTS 
-            WHERE CONSTRAINT_SCHEMA = DATABASE() 
-            AND CONSTRAINT_NAME = 'migrations' 
-            AND TABLE_NAME = 'migrations_ibfk_1'
-        ")->fetchColumn();
+        $constraintCheck = $this->database->pdo->prepare('
+            SELECT COUNT(*)
+            FROM information_schema.TABLE_CONSTRAINTS
+            WHERE CONSTRAINT_SCHEMA = DATABASE()
+              AND TABLE_NAME = :table
+              AND CONSTRAINT_NAME = :constraint
+        ');
+        $constraintCheck->execute([
+            'table' => $table,
+            'constraint' => 'migrations_ibfk_1',
+        ]);
 
-        if (!$exists) {
-            $this->database->pdo->exec("ALTER TABLE `{$this->database->getConfig()['prefix']}migrations`
-                ADD CONSTRAINT `migrations_ibfk_1` FOREIGN KEY (`server_id`) REFERENCES `servers` (`id`);"
+        if ((int) $constraintCheck->fetchColumn() === 0) {
+            $serversTable = $this->safePrefix() . 'servers';
+            $this->database->pdo->exec(
+                "ALTER TABLE `{$table}` ADD CONSTRAINT `migrations_ibfk_1` FOREIGN KEY (`server_id`) REFERENCES `{$serversTable}` (`id`);"
             );
         }
     }
 
-    /**
-     * Prepares a SQL statement via the application's PDO connection.
-     *
-     * This method takes a raw SQL string and binds it as a named parameter
-     * via the application's PDO connection.
-     *
-     * @param string $sql Raw SQL with named placeholders.
-     * @return \PDOStatement Prepared statement.
-     */
-    public function prepare($sql): \PDOStatement
+    public function prepare(string $sql): PDOStatement
     {
         return $this->database->pdo->prepare($sql);
     }
 
-    /**
-     * Adapts SQL migration queries by replacing placeholders with actual values
-     * 
-     * This public method takes an SQL statement as a string and replaces various
-     * placeholders with actual database and system information. It's commonly used
-     * in database migration scripts to make them dynamic and environment-specific.
-     * 
-     * Placeholders replaced:
-     * - {{prefix}} - Database table prefix from configuration
-     * - {{hostname}} - Hostname of the server
-     * - {{osname}} - Operating system name
-     * - {{osversion}} - Operating system version
-     * - {{osip}} - Server IP address
-     * - {{datetimeutcsql}} - Current UTC datetime in SQL format
-     * - {{domain}} - Database URI from configuration
-     * 
-     * @param string $sql The SQL statement containing placeholders to be replaced
-     * @return string The SQL statement with all placeholders replaced with actual values
-     */
-    public function adaptMigration (string $sql): string
+    public function adaptMigration(string $sql): string
     {
         return str_replace(
             [
@@ -230,30 +200,33 @@ final class Migrations
                 '{{domain}}',
             ],
             [
-                $this->database->getConfig()['prefix'],
-                gethostname(),
+                $this->safePrefix(),
+                (string) (gethostname() ?: 'localhost'),
                 php_uname('s'),
                 php_uname('r'),
-                $_SERVER['SERVER_ADDR'],
+                (string) ($this->config['server_addr'] ?? '127.0.0.1'),
                 $this->datetime->utc()->now()->format('Y-m-d H:i:s.u'),
-                $this->database->getConfig()['uri'],
-            ]
-        , $sql);
+                (string) ($this->config['uri'] ?? 'http://localhost'),
+            ],
+            $sql,
+        );
     }
 
-    /**
-     * Logs a message with a timestamp to the console
-     * 
-     * This private method takes a message as input and outputs it with a timestamp
-     * in the format [YYYY-MM-DD HH:MM:SS] followed by a new line character.
-     * The method uses PHP's built-in date() function to generate the current timestamp
-     * and outputs the formatted message using echo.
-     * 
-     * @param string $message The message to be logged with timestamp
-     * @return void
-     */
-    private function log($message)
+    private function safePrefix(): string
     {
-        echo "[" . date("Y-m-d H:i:s") . "] - " . $message . PHP_EOL;
+        $raw = (string) ($this->config['prefix'] ?? '');
+        return preg_replace('/[^a-zA-Z0-9_]/', '', $raw) ?? '';
+    }
+
+    private function migrationsTableName(): string
+    {
+        return $this->safePrefix() . 'migrations';
+    }
+
+    private function log(string $message): void
+    {
+        if (\PHP_SAPI === 'cli') {
+            \fwrite(\STDOUT, '[' . date('Y-m-d H:i:s') . '] - ' . $message . \PHP_EOL);
+        }
     }
 }

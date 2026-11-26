@@ -2,17 +2,13 @@
 
 declare(strict_types=1);
 
-namespace Atom\Mail;
+namespace Atom\Component\Mail\Interface;
 
-/*
- * MailerProxy
- *
- * - Wrapper that exposes a PHPMailer-like API while delegating actual sending to a driver.
- * - Supported drivers: "phpmailer" (PHPMailer\PHPMailer\PHPMailer), "symfony" (Symfony Mailer).
- * - You can swap driver at runtime via setBackend('phpmailer'|'symfony') or pass desired backend into constructor.
+use SensitiveParameter;
+
+/**
+ * Unified mail transport driver contract.
  */
-
-// --- driver interface
 interface MailerDriverInterface
 {
     public function setCharSet(string $charset): void;
@@ -31,8 +27,21 @@ interface MailerDriverInterface
     public function addCustomHeader(string $name, string $value): void;
     public function setPriority(int $priority): void;
     public function setReturnPath(string $address): void;
-    public function setDKIM(array $options): void;
-    public function setMailerOptions(array $options): void;
+
+    /**
+     * @param array<string, mixed> $options
+     */
+    public function setDKIM(#[SensitiveParameter] array $options): void;
+
+    /**
+     * @param array<string, mixed> $options
+     */
+    public function setMailerOptions(#[SensitiveParameter] array $options): void;
+
     public function send(): bool;
     public function getErrorInfo(): ?string;
+}
+
+if (!\interface_exists('Atom\\Mail\\MailerDriverInterface', false)) {
+    \class_alias(MailerDriverInterface::class, 'Atom\\Mail\\MailerDriverInterface');
 }

@@ -8,68 +8,65 @@ use Atom\Atom;
 use Atom\UserModel;
 
 /**
- * Account class
- *
- * This class is a helper for managing user sessions.
- *
- * @package Atom\Account
+ * Stateless helper for managing user authentication state across session/request context.
  */
 final class Account
 {
     /**
-     * Checks if the user is a guest.
-     *
-     * @return bool true if the user is a guest, false otherwise
+     * Checks if the current request user is a guest.
      */
     public static function isGuest(): bool
     {
-        return !Atom::$app->user;
+        return !isset(Atom::$app) || Atom::$app->user === null;
     }
 
     /**
-     * Logs a user in.
-     *
-     * @param UserModel $user The user to log in.
-     *
-     * @return bool true if the user was successfully logged in, false otherwise.
+     * Authenticates a user and regenerates the session ID when configured to prevent session fixation.
      */
     public function login(UserModel $user): bool
     {
         Atom::$app->user = $user;
-        $className = \get_class($user);
+        $className = $user::class;
         $primaryKey = $className::primaryKey();
         $value = $user->{$primaryKey};
+
+        if (isset(Atom::$app->config)) {
+            $sessionCfg = Atom::$app->config->get('session');
+            if (!empty($sessionCfg['newSessionWhenLogin'])) {
+                Atom::$app->session->newSession();
+            }
+        }
+
         Atom::$app->session->set('user', $value);
 
         return true;
     }
 
     /**
-     * Logs the user out.
-     *
-     * This method will remove the user's session, effectively logging them out.
+     * Logs the user out and clears user state from the session.
      */
     public function logout(): void
     {
         Atom::$app->user = null;
-        Atom::$app->session->remove('user');
+        if (isset(Atom::$app->session)) {
+            Atom::$app->session->remove('user');
+        }
     }
 
     /**
-     * Magic getter method to provide a shortcut for getting account status.
-     *
-     * @param string $name The name of the property to get.
-     *
-     * @return bool|null The value of the property if found, null otherwise.
-     *
-     * @throws InvalidArgumentException If the property does not exist.
+     * Magic getter shortcut for account status (`isGuest`, `logout`).
      */
     public function __get(string $name): ?bool
     {
-        return match ($name) {
-            "isGuest" => Account::isGuest(),
-            "logout" => self::logout(),
-            default => null
-        };
+        if ($name === 'isGuest') {
+            return self::isGuest();
+        }
+
+        if ($name === 'logout') {
+            $this->logout();
+            return true;
+        }
+
+        return null;
     }
 }

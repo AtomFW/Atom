@@ -1,14 +1,15 @@
 parameters:
-    level: 5 # Poziom rygoru (0-9)
+    level: 5
+    tmpDir: runtime/cache/phpstan
     paths:
         - Atom
         - app
     excludePaths:
-        - vendor/*
-        - logs/*
-        - Atom/Lib
-        - Atom/Lib/SimpleHtmlDom
-        analyse:
+        analyseAndScan:
             - vendor/*
+            - runtime/*
+            - logs/*
+        analyse:
+            - Atom/Lib/*
     parallel:
-        maximumNumberOfProcesses: 32
+        maximumNumberOfProcesses: 1

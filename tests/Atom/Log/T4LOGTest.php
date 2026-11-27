@@ -18,7 +18,7 @@ class T4LOGTest extends TestCase
     protected function setUp(): void
     {
         // Setup test environment
-        $this->logDir = __DIR__ . '/runtime/test_log/';
+        $this->logDir = dirname(__DIR__, 3) . '/runtime/temp/t4log_test_' . uniqid() . '/';
         $this->testLogFile = $this->logDir . date('d_m_Y') . '_' . phpversion() . '.log';
         
         // Create directory if it doesn't exist
@@ -29,9 +29,19 @@ class T4LOGTest extends TestCase
 
     protected function tearDown(): void
     {
-        // Clean up log file after each test
-        if (file_exists($this->testLogFile)) {
-            unlink($this->testLogFile);
+        // Clean up temporary log directory after each test
+        if (is_dir($this->logDir)) {
+            $files = new \RecursiveIteratorIterator(
+                new \RecursiveDirectoryIterator($this->logDir, \RecursiveDirectoryIterator::SKIP_DOTS),
+                \RecursiveIteratorIterator::CHILD_FIRST
+            );
+            foreach ($files as $file) {
+                $path = $file->getRealPath();
+                if ($path !== false) {
+                    is_dir($path) ? rmdir($path) : unlink($path);
+                }
+            }
+            rmdir($this->logDir);
         }
     }
 

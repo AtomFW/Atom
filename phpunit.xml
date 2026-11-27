@@ -10,6 +10,9 @@
         <testsuite name="App Test Suite">
             <directory>tests/App</directory>
         </testsuite>
+        <testsuite name="Modules Test Suite">
+            <directory suffix="Test.php">Atom/Modules</directory>
+        </testsuite>
     </testsuites>
     <php>
         <env name="APP_ENV" value="test"/>

@@ -13,8 +13,18 @@ use InvalidArgumentException;
 use RuntimeException;
 use Throwable;
 
+use function array_any;
+use function array_combine;
+use function array_keys;
+use function is_array;
+use function json_encode;
+use function str_contains;
+use function strtolower;
+use function trim;
+
 /**
- * Audit & system event logger persisting structured events into `system_events` with deterministic cleanup.
+ * Audit & system event logger persisting structured events into `system_events` when DB is active,
+ * or writing redacted structured entries directly to `T4LOG` in `noDB` / `microservice` mode.
  */
 final readonly class LogEvent
 {
@@ -46,16 +56,22 @@ final readonly class LogEvent
     }
 
     public function __construct(
-        private Database $database,
+        private ?Database $database,
         private T4LOG $log,
         private DateTime $datetime,
-        protected SafetyDataStructureVariable $cache,
-        private bool $account,
-        private int $idUser,
-        private int $connectionIpId,
-        private int $serverId,
+        protected ?SafetyDataStructureVariable $cache = null,
+        private bool $account = true,
+        private int $idUser = 1,
+        private int $connectionIpId = 0,
+        private int $serverId = 0,
         private string $tableName = 'system_events',
+        private bool $noDb = false,
     ) {}
+
+    public function isNoDb(): bool
+    {
+        return $this->noDb || $this->database === null;
+    }
 
     /**
      * @param array<string, mixed>|null $newValues
@@ -87,6 +103,23 @@ final readonly class LogEvent
             $metadata,
         );
 
+        if ($this->noDb || $this->database === null) {
+            $this->writeEventToLogger(
+                $entityType,
+                $eventTypeId,
+                $severityId,
+                $actorTypeId,
+                $description,
+                $actorName,
+                $entityId,
+                $newValues,
+                $oldValues,
+                $metadata,
+            );
+
+            return 0;
+        }
+
         try {
             $normalizeData = $this->dataStructure(
                 $entityType,
@@ -101,8 +134,8 @@ final readonly class LogEvent
                 $metadata,
             );
 
-            $keys = \array_keys($normalizeData);
-            $mapKeysToValues = \array_combine($keys, $keys);
+            $keys = array_keys($normalizeData);
+            $mapKeysToValues = array_combine($keys, $keys);
             $attributesToBindsProperty = $this->database->attributesToBindsProperty($mapKeysToValues);
 
             $types = self::attributesTypes();
@@ -147,6 +180,49 @@ final readonly class LogEvent
     }
 
     /**
+     * Writes the event directly into standard `T4LOG` files without any database interaction.
+     *
+     * @param array<string, mixed>|null $newValues
+     * @param array<string, mixed>|null $oldValues
+     * @param array<string, mixed>|null $metadata
+     */
+    private function writeEventToLogger(
+        string $entityType,
+        int $eventTypeId,
+        int $severityId,
+        int $actorTypeId,
+        string $description,
+        ?string $actorName,
+        ?int $entityId,
+        ?array $newValues,
+        ?array $oldValues,
+        ?array $metadata,
+    ): void {
+        $context = [
+            'mode' => 'noDB',
+            'event_time' => $this->datetime->now()->toSQL(),
+            'event_type_id' => $eventTypeId,
+            'severity_id' => $severityId,
+            'entity_type' => $entityType,
+            'entity_id' => $entityId,
+            'actor_type_id' => $actorTypeId,
+            'actor_id' => $this->account ? 1 : $this->idUser,
+            'actor_name' => $actorName,
+            'description' => $description,
+            'old_values' => self::redactArray($oldValues),
+            'new_values' => self::redactArray($newValues),
+            'metadata' => self::redactArray($metadata),
+        ];
+
+        match ($severityId) {
+            35 => $this->log->warning($description, $context),
+            36 => $this->log->error($description, $context),
+            37 => $this->log->critical($description, $context),
+            default => $this->log->info($description, $context),
+        };
+    }
+
+    /**
      * @param array<string, mixed>|null $payload
      * @return array<string, mixed>|null
      */
@@ -158,12 +234,12 @@ final readonly class LogEvent
 
         $clean = [];
         foreach ($payload as $key => $val) {
-            $lowKey = \strtolower((string) $key);
-            $isSensitive = \array_any(
+            $lowKey = strtolower((string) $key);
+            $isSensitive = array_any(
                 self::SENSITIVE_KEYS,
-                static fn(string $token): bool => \str_contains($lowKey, $token)
+                static fn(string $token): bool => str_contains($lowKey, $token)
             );
-            $clean[$key] = $isSensitive ? '[REDACTED]' : (\is_array($val) ? self::redactArray($val) : $val);
+            $clean[$key] = $isSensitive ? '[REDACTED]' : (is_array($val) ? self::redactArray($val) : $val);
         }
 
         return $clean;
@@ -176,7 +252,7 @@ final readonly class LogEvent
 
     private function assertName(?string $name, string $eventType): void
     {
-        if ($name !== null && \trim($name) === '') {
+        if ($name !== null && trim($name) === '') {
             throw new InvalidArgumentException("Name of event ({$eventType}) must not be empty.");
         }
     }
@@ -212,7 +288,7 @@ final readonly class LogEvent
             return null;
         }
 
-        return \json_encode($context, \JSON_THROW_ON_ERROR | \JSON_UNESCAPED_UNICODE);
+        return json_encode($context, \JSON_THROW_ON_ERROR | \JSON_UNESCAPED_UNICODE);
     }
 
     /**

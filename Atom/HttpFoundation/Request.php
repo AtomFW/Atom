@@ -206,6 +206,97 @@ class Request
     }
 
     /**
+     * Reads an HTTP request header in a case-insensitive, Swoole/CLI/FPM-compatible manner.
+     */
+    public function getHeader(string $name, ?string $default = null): ?string
+    {
+        $normalized = \strtoupper(\str_replace('-', '_', \trim($name)));
+        if ($normalized === '') {
+            return $default;
+        }
+
+        $server = $this->server ?? $_SERVER;
+        $candidates = [
+            'HTTP_' . $normalized,
+            $normalized,
+        ];
+
+        foreach ($candidates as $key) {
+            if (isset($server[$key]) && \is_scalar($server[$key])) {
+                return (string) $server[$key];
+            }
+        }
+
+        return $default;
+    }
+
+    /**
+     * Returns all HTTP headers normalized to Title-Case keys from isolated request server context.
+     *
+     * @return array<string, string>
+     */
+    public function getHeaders(): array
+    {
+        $server = $this->server ?? $_SERVER;
+        $headers = [];
+
+        foreach ($server as $key => $value) {
+            if (!\is_string($key) || !\is_scalar($value)) {
+                continue;
+            }
+
+            if (\str_starts_with($key, 'HTTP_')) {
+                $headerName = \substr($key, 5)
+                    |> \strtolower(...)
+                    |> \str_replace('_', ' ', ?)
+                    |> \ucwords(...)
+                    |> \str_replace(' ', '-', ?);
+                $headers[$headerName] = (string) $value;
+            } elseif (\in_array($key, ['CONTENT_TYPE', 'CONTENT_LENGTH'], true)) {
+                $headerName = $key
+                    |> \strtolower(...)
+                    |> \str_replace('_', ' ', ?)
+                    |> \ucwords(...)
+                    |> \str_replace(' ', '-', ?);
+                $headers[$headerName] = (string) $value;
+            }
+        }
+
+        return $headers;
+    }
+
+    /**
+     * Returns isolated server metadata (`REQUEST_URI`, `SERVER_PROTOCOL`, `HTTPS`, `REMOTE_ADDR`, etc.).
+     *
+     * @return array<string, mixed>
+     */
+    public function getServerParams(): array
+    {
+        return $this->server ?? $_SERVER;
+    }
+
+    /**
+     * Returns isolated cookie map.
+     *
+     * @return array<string, mixed>
+     */
+    public function getCookies(): array
+    {
+        return $this->cookies ?? $_COOKIE;
+    }
+
+    /**
+     * Returns the client IP address from isolated request context.
+     */
+    public function getClientIp(string $default = '127.0.0.1'): string
+    {
+        $server = $this->server ?? $_SERVER;
+        $remote = $server['REMOTE_ADDR'] ?? null;
+
+        return \is_string($remote) && $remote !== '' ? $remote : $default;
+    }
+
+    /**
      * @param array<string, mixed> $params
      */
     public function setRouteParams(array $params): self

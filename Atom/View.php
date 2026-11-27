@@ -4,12 +4,68 @@ declare(strict_types=1);
 
 namespace Atom;
 
+use Atom\Support\DataRegistry;
+use Atom\Support\TemplateInterpolator;
 use InvalidArgumentException;
 use RuntimeException;
 
 class View
 {
     public string $title = '';
+
+    private DataRegistry $viewData;
+    private bool $autoInterpolate = true;
+    private bool $escapeInterpolatedHtml = true;
+
+    public function __construct(?DataRegistry $viewData = null, bool $autoInterpolate = true, bool $escapeInterpolatedHtml = true)
+    {
+        $this->viewData = $viewData ?? new DataRegistry();
+        $this->autoInterpolate = $autoInterpolate;
+        $this->escapeInterpolatedHtml = $escapeInterpolatedHtml;
+    }
+
+    /**
+     * Returns the view-scoped dot-notation `DataRegistry`.
+     */
+    public function data(): DataRegistry
+    {
+        return $this->viewData;
+    }
+
+    /**
+     * Assigns one dot-path (`'jakaśAplikacjia.core.version'`, `'1.0.0'`) or an array of dot-paths
+     * so `{{jakaśAplikacjia.core.version}}` is automatically replaced in HTML templates.
+     *
+     * @param string|array<string, mixed> $keyOrMap
+     */
+    public function assign(string|array $keyOrMap, mixed $value = null): self
+    {
+        if (\is_array($keyOrMap)) {
+            $this->viewData->merge($keyOrMap);
+            return $this;
+        }
+
+        $this->viewData->set($keyOrMap, $value);
+        return $this;
+    }
+
+    /**
+     * Interpolates `{{dot.key}}` and `{!! dot.key !!}` placeholders inside an arbitrary HTML fragment.
+     *
+     * @param array<string, mixed> $params
+     */
+    public function interpolateHtml(string $html, array $params = [], ?bool $escapeHtml = null): string
+    {
+        $appRegistry = isset(Atom::$app) && isset(Atom::$app->data) ? Atom::$app->data : null;
+
+        return TemplateInterpolator::interpolate(
+            html: $html,
+            viewParams: $params,
+            primaryRegistry: $this->viewData,
+            fallbackRegistry: $appRegistry,
+            escapeByDefault: $escapeHtml ?? $this->escapeInterpolatedHtml,
+        );
+    }
 
     /**
      * @param array<string, mixed> $params
@@ -22,9 +78,27 @@ class View
         $viewContent = $this->renderViewOnly($view, $params);
 
         $layoutFile = \rtrim(Atom::$ROOT_DIR, '/\\') . '/resources/Views/Layouts/' . $safeLayout . '.php';
-        $layoutContent = $this->includeIsolated($layoutFile, []);
+        $probe = isset(Atom::$app) ? Atom::$app->probe : null;
+        $layoutSpan = '';
 
-        return \str_replace('{{content}}', $viewContent, $layoutContent);
+        if ($probe !== null) {
+            $probe->recordTraversedFile($layoutFile, 'layout', 1);
+            $layoutSpan = $probe->startSpan('view.layout:' . $safeLayout, 'view', $layoutFile, 1);
+        }
+
+        try {
+            $layoutContent = $this->includeIsolated($layoutFile, []);
+        } finally {
+            if ($probe !== null && $layoutSpan !== '') {
+                $probe->endSpan($layoutSpan);
+            }
+        }
+
+        $assembled = \str_replace('{{content}}', $viewContent, $layoutContent);
+
+        return $this->shouldInterpolate()
+            ? $this->interpolateHtml($assembled, $params)
+            : $assembled;
     }
 
     /**
@@ -34,8 +108,41 @@ class View
     {
         $safeView = $this->sanitizeViewName($view);
         $viewFile = \rtrim(Atom::$ROOT_DIR, '/\\') . '/resources/Views/' . $safeView . '.php';
+        $probe = isset(Atom::$app) ? Atom::$app->probe : null;
+        $viewSpan = '';
 
-        return $this->includeIsolated($viewFile, $params);
+        if ($probe !== null) {
+            $probe->recordTraversedFile($viewFile, 'view', 1);
+            $viewSpan = $probe->startSpan('view.template:' . $safeView, 'view', $viewFile, 1);
+        }
+
+        try {
+            $rendered = $this->includeIsolated($viewFile, $params);
+        } finally {
+            if ($probe !== null && $viewSpan !== '') {
+                $probe->endSpan($viewSpan);
+            }
+        }
+
+        return $this->shouldInterpolate()
+            ? $this->interpolateHtml($rendered, $params)
+            : $rendered;
+    }
+
+    private function shouldInterpolate(): bool
+    {
+        if (!$this->autoInterpolate) {
+            return false;
+        }
+
+        if (isset(Atom::$app) && isset(Atom::$app->config) && Config\Config::isLoaded('app')) {
+            $appCfg = Atom::$app->config->get('app');
+            if (\is_array($appCfg) && isset($appCfg['templateData']['on'])) {
+                return (bool) $appCfg['templateData']['on'];
+            }
+        }
+
+        return true;
     }
 
     /**

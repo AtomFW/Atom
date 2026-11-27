@@ -1,0 +1,14 @@
+ALTER TABLE `{{prefix}}connections`
+    DROP KEY `idx_server_datetime`,
+    DROP KEY `idx_datetime`,
+    DROP KEY `idx_country`,
+    DROP KEY `idx_country_city`,
+    DROP KEY `idx_country_datetime`,
+    DROP KEY `idx_ip`,
+    DROP KEY `idx_unique_id`,
+    DROP KEY `idx_browser_sec`,
+    DROP KEY `idx_user_agent`,
+    DROP KEY `idx_isp`,
+    DROP KEY `idx_lang`,
+    DROP KEY `idx_coordinates`,
+    DROP KEY `idx_region`;

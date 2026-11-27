@@ -108,16 +108,38 @@ class Router
         $res = $response ?? $this->response;
         $method = $req->getMethod();
         $url = $req->getUrl();
+        $probe = isset(Atom::$app) ? Atom::$app->probe : null;
 
+        if ($probe !== null) {
+            $probe->recordTraversedFile(__FILE__, 'router', __LINE__);
+        }
+
+        $routeSpan = $probe !== null
+            ? $probe->startSpan('router.match', 'core', __FILE__, __LINE__, ['method' => $method, 'url' => $url])
+            : '';
+
+        $matchedPattern = $url;
         $callback = $this->routeMap[$method][$url] ?? false;
         if ($callback === false) {
             $callback = $this->getCallback($req);
             if ($callback === false) {
+                if ($probe !== null && $routeSpan !== '') {
+                    $probe->endSpan($routeSpan, ['matched' => false]);
+                }
                 throw new NotFoundException();
             }
+            $matchedPattern = 'dynamic:' . $url;
+        }
+
+        if ($probe !== null && $routeSpan !== '') {
+            $probe->endSpan($routeSpan, ['matched' => true, 'pattern' => $matchedPattern]);
         }
 
         if (\is_string($callback)) {
+            if ($probe !== null) {
+                $probe->onRouteMatched($method, $url, $matchedPattern, 'view:' . $callback, __FILE__, __LINE__, $req->getRouteParams());
+                $probe->onResponseStatusChanged($res->getStatusCode(), "Matched direct view route '{$callback}'", __FILE__, __LINE__, __METHOD__);
+            }
             return $this->renderView($callback);
         }
 
@@ -128,11 +150,110 @@ class Router
             $controller->action = (string) $callback[1];
             Atom::$app->controller = $controller;
 
+            $controllerClass = $controller::class;
+            $actionName = $controller->action;
+            $ctrlFile = null;
+            $ctrlLine = null;
+
+            if ($probe !== null) {
+                $refCtrl = new \ReflectionClass($controller);
+                $ctrlFile = $refCtrl->getFileName() ?: null;
+                if ($refCtrl->hasMethod($actionName)) {
+                    $refAct = $refCtrl->getMethod($actionName);
+                    $ctrlFile = $refAct->getFileName() ?: $ctrlFile;
+                    $ctrlLine = $refAct->getStartLine() ?: null;
+                }
+                if ($ctrlFile !== null) {
+                    $probe->recordTraversedFile($ctrlFile, 'controller', $ctrlLine);
+                }
+                $probe->onRouteMatched(
+                    $method,
+                    $url,
+                    $matchedPattern,
+                    $controllerClass . '::' . $actionName,
+                    $ctrlFile,
+                    $ctrlLine,
+                    $req->getRouteParams(),
+                );
+            }
+
             foreach ($controller->getMiddlewares() as $middleware) {
-                $middleware->execute();
+                if ($probe === null) {
+                    $middleware->execute();
+                    continue;
+                }
+
+                $mwRef = new \ReflectionClass($middleware);
+                $mwFile = $mwRef->getFileName() ?: null;
+                $mwLine = $mwRef->hasMethod('execute') ? ($mwRef->getMethod('execute')->getStartLine() ?: null) : null;
+                if ($mwFile !== null) {
+                    $probe->recordTraversedFile($mwFile, 'middleware', $mwLine);
+                }
+                $mwCat = \str_starts_with($middleware::class, 'Atom\\') ? 'core' : 'client_app';
+                $mwSpan = $probe->startSpan('middleware:' . $middleware::class, $mwCat, $mwFile, $mwLine);
+                $mwErr = null;
+                try {
+                    $middleware->execute();
+                } catch (\Throwable $e) {
+                    $mwErr = $e;
+                    throw $e;
+                } finally {
+                    $probe->endSpan($mwSpan, [], $mwErr);
+                }
             }
 
             $callback[0] = $controller;
+
+            if ($probe !== null) {
+                $cat = \str_starts_with($controllerClass, 'Atom\\') ? 'core' : 'client_app';
+                $actSpan = $probe->startSpan('controller:' . $controllerClass . '::' . $actionName, $cat, $ctrlFile, $ctrlLine);
+                $actErr = null;
+                try {
+                    $result = $controller->{$actionName}($req, $res);
+                    if ($res->getStatusReason() === 'Default 200 OK') {
+                        $probe->onResponseStatusChanged(
+                            $res->getStatusCode(),
+                            "Returned from {$controllerClass}::{$actionName}()",
+                            $ctrlFile,
+                            $ctrlLine,
+                            $controllerClass . '::' . $actionName,
+                        );
+                    }
+                    return $result;
+                } catch (\Throwable $e) {
+                    $actErr = $e;
+                    throw $e;
+                } finally {
+                    $probe->endSpan($actSpan, [], $actErr);
+                }
+            }
+        }
+
+        if ($probe !== null && $callback instanceof \Closure) {
+            $refFn = new \ReflectionFunction($callback);
+            $fnFile = $refFn->getFileName() ?: null;
+            $fnLine = $refFn->getStartLine() ?: null;
+            if ($fnFile !== null) {
+                $probe->recordTraversedFile($fnFile, 'route_closure', $fnLine);
+            }
+            $ns = $refFn->getNamespaceName();
+            $cat = \str_starts_with($ns, 'Atom') ? 'core' : 'client_app';
+            $probe->onRouteMatched($method, $url, $matchedPattern, 'Closure@' . ($fnFile ?? 'runtime') . ':' . ($fnLine ?? 0), $fnFile, $fnLine, $req->getRouteParams());
+
+            $clSpan = $probe->startSpan('route.closure', $cat, $fnFile, $fnLine);
+            $clErr = null;
+            try {
+                $resBody = $callback($req, $res);
+                if ($res->getStatusReason() === 'Default 200 OK') {
+                    $probe->onResponseStatusChanged($res->getStatusCode(), 'Returned from route closure', $fnFile, $fnLine, 'Closure');
+                }
+                return $resBody;
+            } catch (\Throwable $e) {
+                $clErr = $e;
+                throw $e;
+            } finally {
+                $probe->endSpan($clSpan, [], $clErr);
+            }
         }
 
         /** @var callable $callback */

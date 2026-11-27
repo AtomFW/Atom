@@ -49,7 +49,7 @@
             </section>
             <section class="col-ms30 tsr-width-50-2 tsr-height-40px-3 tsr-float-right-3">
                 <?php
-                if (Atom::$app->account->isGuest) : ?>
+                if (Atom::$app->account === null || Atom::$app->account->isGuest) : ?>
                     <ol class="menu">
                          <li class="nav-item active">
                             <a class="nav-link" href="<?php echo Atom::$ROOT_URI ?>/public/login">Login</a>

@@ -10,23 +10,37 @@ use PDO;
 use PDOStatement;
 use RuntimeException;
 
-use function array_diff;
-use function array_values;
-use function basename;
+use function array_keys;
+use function array_slice;
+use function clamp;
+use function count;
 use function date;
+use function file_get_contents;
 use function gethostname;
+use function hash;
 use function hash_file;
+use function is_array;
 use function is_dir;
-use function natsort;
+use function is_file;
+use function ksort;
 use function pathinfo;
 use function php_uname;
+use function preg_match;
 use function preg_replace;
+use function preg_split;
+use function rtrim;
 use function scandir;
 use function str_ends_with;
 use function str_replace;
+use function strlen;
+use function strtolower;
+use function substr;
+use function trim;
 
 /**
- * Database schema migration runner with SHA-512/256 integrity hashing and parameterized persistence.
+ * Database schema migration runner supporting SQL (`.up.sql` / `.down.sql` / `.sql`)
+ * and PHP migrations across Atom's internal `Atom/DataBase/migrations` directory
+ * and the application's `/migrations` directory, with SHA-512/256 integrity hashing.
  */
 final class Migrations
 {
@@ -40,65 +54,331 @@ final class Migrations
         $this->config = $this->database->getConfig();
     }
 
-    /**
-     * Applies all pending migrations from the `/migrations` directory.
-     */
-    public function applyMigrations(): void
+    public function coreMigrationsDir(): string
     {
+        return __DIR__ . \DIRECTORY_SEPARATOR . 'migrations';
+    }
+
+    public function appMigrationsDir(): string
+    {
+        $root = Atom::$ROOT_DIR !== '' ? rtrim(Atom::$ROOT_DIR, '/\\') : \dirname(__DIR__, 2);
+
+        return $root . \DIRECTORY_SEPARATOR . 'migrations';
+    }
+
+    /**
+     * Applies pending Atom core SQL migrations (`Atom/DataBase/migrations`) and/or
+     * application migrations (`/migrations`).
+     *
+     * @return list<string> Applied migration identifiers
+     */
+    public function applyMigrations(
+        bool $includeCore = true,
+        bool $includeApp = true,
+        ?string $coreDir = null,
+        ?string $appDir = null,
+    ): array {
+        $this->assertDatabaseAllowed();
         $this->createMigrationsTable();
 
-        $appliedMigrations = $this->getAppliedMigrations();
-        $migrationsDir = Atom::$ROOT_DIR . '/migrations';
+        $applied = [];
 
-        if (!is_dir($migrationsDir)) {
-            throw new RuntimeException("Migrations directory does not exist: {$migrationsDir}");
+        if ($includeCore) {
+            $applied = [...$applied, ...$this->applyDirectoryMigrations($coreDir ?? $this->coreMigrationsDir(), requiredDir: false)];
         }
 
-        $files = scandir($migrationsDir);
-        if ($files === false) {
-            throw new RuntimeException("Unable to read migrations directory: {$migrationsDir}");
+        if ($includeApp) {
+            $applied = [...$applied, ...$this->applyDirectoryMigrations($appDir ?? $this->appMigrationsDir(), requiredDir: false)];
         }
 
-        $toApplyMigrations = array_diff($files, $appliedMigrations);
-        natsort($toApplyMigrations);
-        $toApplyMigrations = array_values($toApplyMigrations);
+        if ($applied === []) {
+            $this->log('There are no migrations to apply');
+        }
 
-        $newMigrations = [];
+        return $applied;
+    }
 
-        foreach ($toApplyMigrations as $migration) {
-            $safeFile = basename($migration);
-            if ($safeFile === '.' || $safeFile === '..' || !str_ends_with($safeFile, '.php')) {
+    /**
+     * Applies only Atom's internal SQL migrations located in `Atom/DataBase/migrations`.
+     *
+     * @return list<string>
+     */
+    public function applyCoreMigrations(?string $coreDir = null): array
+    {
+        return $this->applyMigrations(includeCore: true, includeApp: false, coreDir: $coreDir);
+    }
+
+    /**
+     * Applies only application-level migrations located in `/migrations`.
+     *
+     * @return list<string>
+     */
+    public function applyAppMigrations(?string $appDir = null): array
+    {
+        return $this->applyMigrations(includeCore: false, includeApp: true, appDir: $appDir);
+    }
+
+    /**
+     * Rolls back applied migrations (`down`) in reverse chronological order.
+     *
+     * @return list<string>
+     */
+    public function rollbackMigrations(
+        int $steps = 1,
+        ?string $coreDir = null,
+        ?string $appDir = null,
+    ): array {
+        $this->assertDatabaseAllowed();
+        $this->createMigrationsTable();
+
+        $safeSteps = clamp($steps, 1, 100_000);
+        $historyDesc = $this->fetchAppliedDesc();
+        $toRollback = array_slice($historyDesc, 0, $safeSteps);
+
+        if ($toRollback === []) {
+            return [];
+        }
+
+        $catalog = [
+            ...$this->discoverMigrationsInDirectory($coreDir ?? $this->coreMigrationsDir()),
+            ...$this->discoverMigrationsInDirectory($appDir ?? $this->appMigrationsDir()),
+        ];
+
+        $rolledBack = [];
+        foreach ($toRollback as $name) {
+            if (!isset($catalog[$name])) {
+                throw new RuntimeException("Cannot downgrade missing migration '{$name}'.");
+            }
+
+            $this->executeDown($name, $catalog[$name]);
+            $this->deleteMigrationRecord($name);
+            $rolledBack[] = $name;
+        }
+
+        return $rolledBack;
+    }
+
+    /**
+     * Discovers SQL and PHP migrations inside a directory sorted naturally by base identifier.
+     *
+     * @return array<string, array{upSql: ?string, downSql: ?string, phpFile: ?string, hash: string}>
+     */
+    public function discoverMigrationsInDirectory(string $directory): array
+    {
+        if (!is_dir($directory)) {
+            return [];
+        }
+
+        $entries = scandir($directory);
+        if ($entries === false) {
+            return [];
+        }
+
+        /** @var array<string, array{upSql: ?string, downSql: ?string, phpFile: ?string, hash: string}> $discovered */
+        $discovered = [];
+
+        foreach ($entries as $entry) {
+            if ($entry === '.' || $entry === '..' || $entry === '.gitkeep') {
                 continue;
             }
 
-            $fullPath = $migrationsDir . \DIRECTORY_SEPARATOR . $safeFile;
-            require_once $fullPath;
+            $fullPath = $directory . \DIRECTORY_SEPARATOR . $entry;
+            if (!is_file($fullPath)) {
+                continue;
+            }
 
-            $className = pathinfo($safeFile, \PATHINFO_FILENAME);
+            if (str_ends_with($entry, '.up.sql')) {
+                $baseName = substr($entry, 0, -7);
+                $sql = $this->readFileStrict($fullPath);
+                $existing = $discovered[$baseName] ?? ['upSql' => null, 'downSql' => null, 'phpFile' => null, 'hash' => ''];
+                $existing['upSql'] = $sql;
+                $existing['hash'] = hash('sha512/256', $sql . '|' . ($existing['downSql'] ?? ''));
+                $discovered[$baseName] = $existing;
+                continue;
+            }
+
+            if (str_ends_with($entry, '.down.sql')) {
+                $baseName = substr($entry, 0, -9);
+                $sql = $this->readFileStrict($fullPath);
+                $existing = $discovered[$baseName] ?? ['upSql' => null, 'downSql' => null, 'phpFile' => null, 'hash' => ''];
+                $existing['downSql'] = $sql;
+                $existing['hash'] = hash('sha512/256', ($existing['upSql'] ?? '') . '|' . $sql);
+                $discovered[$baseName] = $existing;
+                continue;
+            }
+
+            if (str_ends_with($entry, '.sql')) {
+                $baseName = pathinfo($entry, \PATHINFO_FILENAME);
+                $rawSql = $this->readFileStrict($fullPath);
+                [$upSql, $downSql] = $this->parseCombinedSql($rawSql);
+                $discovered[$baseName] = [
+                    'upSql' => $upSql,
+                    'downSql' => $downSql,
+                    'phpFile' => null,
+                    'hash' => hash('sha512/256', $rawSql),
+                ];
+                continue;
+            }
+
+            if (str_ends_with($entry, '.php')) {
+                $fileHash = hash_file('sha512/256', $fullPath);
+                $discovered[$entry] = [
+                    'upSql' => null,
+                    'downSql' => null,
+                    'phpFile' => $fullPath,
+                    'hash' => $fileHash !== false ? $fileHash : '',
+                ];
+            }
+        }
+
+        ksort($discovered, \SORT_NATURAL);
+
+        return $discovered;
+    }
+
+    /**
+     * @return list<string>
+     */
+    private function applyDirectoryMigrations(string $migrationsDir, bool $requiredDir): array
+    {
+        if (!is_dir($migrationsDir)) {
+            if ($requiredDir) {
+                throw new RuntimeException("Migrations directory does not exist: {$migrationsDir}");
+            }
+
+            return [];
+        }
+
+        $available = $this->discoverMigrationsInDirectory($migrationsDir);
+        if ($available === []) {
+            return [];
+        }
+
+        $appliedSet = [];
+        foreach ($this->getAppliedMigrations() as $name) {
+            $appliedSet[$name] = true;
+        }
+
+        $newRecords = [];
+        $appliedNames = [];
+
+        foreach ($available as $name => $spec) {
+            if (isset($appliedSet[$name])) {
+                continue;
+            }
+
+            $this->log("Applying migration {$name}");
+            $this->executeUp($name, $spec);
+            $this->log("Applied migration {$name}");
+
+            $newRecords[] = [
+                'name' => $name,
+                'hash' => $spec['hash'],
+            ];
+            $appliedNames[] = $name;
+        }
+
+        if ($newRecords !== []) {
+            $this->saveMigrations($newRecords);
+        }
+
+        return $appliedNames;
+    }
+
+    /**
+     * @param array{upSql: ?string, downSql: ?string, phpFile: ?string, hash: string} $spec
+     */
+    private function executeUp(string $name, array $spec): void
+    {
+        if ($spec['phpFile'] !== null) {
+            require_once $spec['phpFile'];
+            $className = pathinfo($spec['phpFile'], \PATHINFO_FILENAME);
             $instance = new $className();
             $instance->db = $this;
-
-            $this->log("Applying migration {$safeFile}");
             $instance->up();
-            $this->log("Applied migration {$safeFile}");
-
-            $hash = hash_file('sha512/256', $fullPath);
-            $newMigrations[] = [
-                'name' => $safeFile,
-                'hash' => $hash !== false ? $hash : '',
-            ];
+            return;
         }
 
-        if ($newMigrations !== []) {
-            $this->saveMigrations($newMigrations);
-        } else {
-            $this->log('There are no migrations to apply');
+        if ($spec['upSql'] === null || trim($spec['upSql']) === '') {
+            throw new RuntimeException("Migration '{$name}' does not define UP SQL statements.");
         }
+
+        $this->executeSqlBatch($this->adaptMigration($spec['upSql']));
+    }
+
+    /**
+     * @param array{upSql: ?string, downSql: ?string, phpFile: ?string, hash: string} $spec
+     */
+    private function executeDown(string $name, array $spec): void
+    {
+        if ($spec['phpFile'] !== null) {
+            require_once $spec['phpFile'];
+            $className = pathinfo($spec['phpFile'], \PATHINFO_FILENAME);
+            $instance = new $className();
+            $instance->db = $this;
+            if (!\method_exists($instance, 'down')) {
+                throw new RuntimeException("PHP migration '{$name}' does not define a down() method.");
+            }
+            $instance->down();
+            return;
+        }
+
+        if ($spec['downSql'] === null || trim($spec['downSql']) === '') {
+            throw new RuntimeException("SQL migration '{$name}' does not define DOWN SQL statements.");
+        }
+
+        $this->executeSqlBatch($this->adaptMigration($spec['downSql']));
+    }
+
+    private function executeSqlBatch(string $sqlBatch): void
+    {
+        $statements = preg_split('/;\s*(?:\r?\n|$)/', trim($sqlBatch)) ?: [];
+        foreach ($statements as $statement) {
+            $trimmed = trim($statement);
+            if ($trimmed === '') {
+                continue;
+            }
+            $this->database->pdo->exec($trimmed);
+        }
+    }
+
+    /**
+     * @return array{0: string, 1: ?string}
+     */
+    private function parseCombinedSql(string $rawSql): array
+    {
+        if (preg_match('/^\s*--\s*@down\b/im', $rawSql, $downMatch, \PREG_OFFSET_CAPTURE) === 1) {
+            $downOffset = $downMatch[0][1];
+            $upPart = substr($rawSql, 0, $downOffset);
+            $downPart = substr($rawSql, $downOffset + strlen($downMatch[0][0]));
+            $upClean = preg_replace('/^\s*--\s*@up\b[^\r\n]*\r?\n?/im', '', $upPart) ?? $upPart;
+
+            return [trim($upClean), trim($downPart)];
+        }
+
+        $upOnly = preg_replace('/^\s*--\s*@up\b[^\r\n]*\r?\n?/im', '', $rawSql) ?? $rawSql;
+
+        return [trim($upOnly), null];
     }
 
     protected function createMigrationsTable(): void
     {
         $table = $this->migrationsTableName();
+
+        if ($this->isSqlite()) {
+            $this->database->pdo->exec("
+                CREATE TABLE IF NOT EXISTS \"{$table}\" (
+                    \"id\" INTEGER PRIMARY KEY AUTOINCREMENT,
+                    \"migration\" TEXT NOT NULL UNIQUE,
+                    \"migration_hash_file\" TEXT NOT NULL,
+                    \"withdrawn\" INTEGER NOT NULL DEFAULT 0,
+                    \"server_id\" INTEGER NOT NULL DEFAULT 1,
+                    \"updated_at\" TEXT NOT NULL,
+                    \"created_at\" TEXT NOT NULL
+                )
+            ");
+            return;
+        }
 
         $this->database->pdo->exec("
             CREATE TABLE IF NOT EXISTS `{$table}` (
@@ -120,7 +400,11 @@ final class Migrations
               AND INDEX_NAME = :idx
         ');
         $stmt->execute(['table' => $table, 'idx' => 'server_id']);
-        $exists = (int) $stmt->fetchColumn() > 0;
+        try {
+            $exists = (int) $stmt->fetchColumn() > 0;
+        } finally {
+            $stmt->closeCursor();
+        }
 
         if (!$exists) {
             $this->database->pdo->exec("ALTER TABLE `{$table}` ADD KEY `server_id` (`server_id`);");
@@ -133,11 +417,48 @@ final class Migrations
     protected function getAppliedMigrations(): array
     {
         $table = $this->migrationsTableName();
-        $statement = $this->database->pdo->prepare("SELECT `migration` FROM `{$table}`");
+        $sql = $this->isSqlite()
+            ? "SELECT \"migration\" FROM \"{$table}\" WHERE \"withdrawn\" = 0 ORDER BY \"id\" ASC"
+            : "SELECT `migration` FROM `{$table}` WHERE `withdrawn` = 0 ORDER BY `id` ASC";
+
+        $statement = $this->database->pdo->prepare($sql);
         $statement->execute();
 
-        /** @var list<string> */
-        return $statement->fetchAll(PDO::FETCH_COLUMN);
+        $items = [];
+        try {
+            while (($col = $statement->fetchColumn()) !== false) {
+                $items[] = (string) $col;
+            }
+        } finally {
+            $statement->closeCursor();
+        }
+
+        return $items;
+    }
+
+    /**
+     * @return list<string>
+     */
+    private function fetchAppliedDesc(): array
+    {
+        $table = $this->migrationsTableName();
+        $sql = $this->isSqlite()
+            ? "SELECT \"migration\" FROM \"{$table}\" WHERE \"withdrawn\" = 0 ORDER BY \"id\" DESC"
+            : "SELECT `migration` FROM `{$table}` WHERE `withdrawn` = 0 ORDER BY `id` DESC";
+
+        $statement = $this->database->pdo->prepare($sql);
+        $statement->execute();
+
+        $items = [];
+        try {
+            while (($col = $statement->fetchColumn()) !== false) {
+                $items[] = (string) $col;
+            }
+        } finally {
+            $statement->closeCursor();
+        }
+
+        return $items;
     }
 
     /**
@@ -148,10 +469,13 @@ final class Migrations
         $table = $this->migrationsTableName();
         $datetimeSQL = $this->datetime->utc()->now()->format('Y-m-d H:i:s.u');
 
-        $statement = $this->database->pdo->prepare(
-            "INSERT INTO `{$table}` (`migration`, `migration_hash_file`, `withdrawn`, `server_id`, `updated_at`, `created_at`)
-             VALUES (:name, :hash, 0, 1, :updated_at, :created_at)"
-        );
+        $insertSql = $this->isSqlite()
+            ? "INSERT INTO \"{$table}\" (\"migration\", \"migration_hash_file\", \"withdrawn\", \"server_id\", \"updated_at\", \"created_at\")
+               VALUES (:name, :hash, 0, 1, :updated_at, :created_at)"
+            : "INSERT INTO `{$table}` (`migration`, `migration_hash_file`, `withdrawn`, `server_id`, `updated_at`, `created_at`)
+               VALUES (:name, :hash, 0, 1, :updated_at, :created_at)";
+
+        $statement = $this->database->pdo->prepare($insertSql);
 
         foreach ($newMigrations as $migration) {
             $statement->execute([
@@ -160,6 +484,28 @@ final class Migrations
                 'updated_at' => $datetimeSQL,
                 'created_at' => $datetimeSQL,
             ]);
+        }
+
+        if ($this->isSqlite()) {
+            return;
+        }
+
+        $serversTable = $this->safePrefix() . 'servers';
+        $serversTableCheck = $this->database->pdo->prepare('
+            SELECT COUNT(*)
+            FROM information_schema.TABLES
+            WHERE TABLE_SCHEMA = DATABASE()
+              AND TABLE_NAME = :servers_table
+        ');
+        $serversTableCheck->execute(['servers_table' => $serversTable]);
+        try {
+            $hasServersTable = (int) $serversTableCheck->fetchColumn() > 0;
+        } finally {
+            $serversTableCheck->closeCursor();
+        }
+
+        if (!$hasServersTable) {
+            return;
         }
 
         $constraintCheck = $this->database->pdo->prepare('
@@ -173,13 +519,28 @@ final class Migrations
             'table' => $table,
             'constraint' => 'migrations_ibfk_1',
         ]);
+        try {
+            $hasConstraint = (int) $constraintCheck->fetchColumn() > 0;
+        } finally {
+            $constraintCheck->closeCursor();
+        }
 
-        if ((int) $constraintCheck->fetchColumn() === 0) {
-            $serversTable = $this->safePrefix() . 'servers';
+        if (!$hasConstraint) {
             $this->database->pdo->exec(
                 "ALTER TABLE `{$table}` ADD CONSTRAINT `migrations_ibfk_1` FOREIGN KEY (`server_id`) REFERENCES `{$serversTable}` (`id`);"
             );
         }
+    }
+
+    private function deleteMigrationRecord(string $migrationName): void
+    {
+        $table = $this->migrationsTableName();
+        $sql = $this->isSqlite()
+            ? "DELETE FROM \"{$table}\" WHERE \"migration\" = :name"
+            : "DELETE FROM `{$table}` WHERE `migration` = :name";
+
+        $stmt = $this->database->pdo->prepare($sql);
+        $stmt->execute(['name' => $migrationName]);
     }
 
     public function prepare(string $sql): PDOStatement
@@ -212,6 +573,28 @@ final class Migrations
         );
     }
 
+    private function assertDatabaseAllowed(): void
+    {
+        if (isset(Atom::$app) && Atom::$app->isNoDbMode()) {
+            throw new RuntimeException('Database SQL migrations cannot run while Atom is in noDB or microservice mode.');
+        }
+    }
+
+    private function isSqlite(): bool
+    {
+        return strtolower((string) $this->database->pdo->getAttribute(PDO::ATTR_DRIVER_NAME)) === 'sqlite';
+    }
+
+    private function readFileStrict(string $path): string
+    {
+        $contents = file_get_contents($path);
+        if ($contents === false) {
+            throw new RuntimeException("Failed to read migration file: {$path}");
+        }
+
+        return $contents;
+    }
+
     private function safePrefix(): string
     {
         $raw = (string) ($this->config['prefix'] ?? '');
@@ -225,7 +608,7 @@ final class Migrations
 
     private function log(string $message): void
     {
-        if (\PHP_SAPI === 'cli') {
+        if (\PHP_SAPI === 'cli' && !\defined('PHPUNIT_COMPOSER_INSTALL')) {
             \fwrite(\STDOUT, '[' . date('Y-m-d H:i:s') . '] - ' . $message . \PHP_EOL);
         }
     }

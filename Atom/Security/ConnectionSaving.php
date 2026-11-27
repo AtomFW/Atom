@@ -4,18 +4,29 @@ declare(strict_types=1);
 
 namespace Atom\Security;
 
+use Atom\Atom;
 use Atom\DataBase\AutoMapped;
 use Atom\DataBase\Database;
 use Atom\DateTime\DateTime;
+use Atom\Log\T4LOG;
 use RuntimeException;
 
+use function array_map;
+use function date;
+use function filter_var;
+use function is_string;
+use function str_contains;
+use function str_replace;
+use function time;
+
 /**
- * Persists client connection metadata into the `connections` table with deterministic statement cleanup.
+ * Persists client connection metadata into the `connections` table when DB is enabled,
+ * or writes structured connection entries directly to `T4LOG` in `noDB` / `microservice` mode.
  */
 final class ConnectionSaving
 {
-    private static Database $database;
-    private static DateTime $datetime;
+    private static ?Database $database = null;
+    private static ?DateTime $datetime = null;
     private static int $serverId = 0;
 
     /**
@@ -55,16 +66,16 @@ final class ConnectionSaving
     }
 
     public function __construct(
-        Database $database,
+        ?Database $database,
         DateTime $datetime,
-        int $serverId,
+        int $serverId = 0,
     ) {
         self::$database = $database;
         self::$datetime = $datetime;
         self::$serverId = $serverId;
     }
 
-    public static function changeDatabase(Database $database): void
+    public static function changeDatabase(?Database $database): void
     {
         self::$database = $database;
     }
@@ -80,6 +91,33 @@ final class ConnectionSaving
     }
 
     /**
+     * Records connection metadata to standard `T4LOG` files without any database access (`noDB` / `microservice` mode).
+     *
+     * @param array<string, mixed> $browserDetector
+     * @param array<string, mixed> $connectionInformation
+     * @param array<string, mixed> $botDetector
+     * @return array<string, mixed>
+     */
+    public static function logOnly(
+        T4LOG $logger,
+        array $browserDetector,
+        array $connectionInformation,
+        array $botDetector,
+        ?DateTime $datetime = null,
+    ): array {
+        if ($datetime !== null) {
+            self::$datetime = $datetime;
+        }
+
+        $payload = self::dataStructure($browserDetector, $connectionInformation, $botDetector);
+        $payload['mode'] = 'noDB';
+
+        $logger->info('Client connection recorded (noDB/stateless mode).', $payload);
+
+        return $payload;
+    }
+
+    /**
      * @param array<string, mixed> $browserDetector
      * @param array<string, mixed> $connectionInformation
      * @param array<string, mixed> $botDetector
@@ -89,11 +127,23 @@ final class ConnectionSaving
         array $connectionInformation,
         array $botDetector,
     ): int {
+        if (isset(Atom::$app) && Atom::$app->isNoDbMode()) {
+            if (isset(Atom::$app->log)) {
+                self::logOnly(Atom::$app->log, $browserDetector, $connectionInformation, $botDetector);
+            }
+
+            return 0;
+        }
+
+        if (self::$database === null) {
+            throw new RuntimeException('Connection saving requires an active Database instance.');
+        }
+
         $normalizeData = self::dataStructure($browserDetector, $connectionInformation, $botDetector);
 
         $mapKeysToValues = [];
         foreach ($normalizeData as $key => $value) {
-            if (\is_string($value) && \str_contains($value, 'POINT')) {
+            if (is_string($value) && str_contains($value, 'POINT')) {
                 $mapKeysToValues[$value] = $key;
                 continue;
             }
@@ -103,8 +153,8 @@ final class ConnectionSaving
         $attributesToBindsProperty = self::$database->attributesToBindsProperty($mapKeysToValues);
         unset($attributesToBindsProperty['x'], $attributesToBindsProperty['y']);
 
-        $replacePointPrefix = \str_replace(':POINT', 'POINT', ?);
-        $attributesToBindsProperty = \array_map($replacePointPrefix, $attributesToBindsProperty);
+        $replacePointPrefix = str_replace(':POINT', 'POINT', ?);
+        $attributesToBindsProperty = array_map($replacePointPrefix, $attributesToBindsProperty);
 
         $types = self::attributesTypes();
         foreach ($normalizeData as $key => $value) {
@@ -142,7 +192,7 @@ final class ConnectionSaving
         array $botDetector,
     ): array {
         $remoteIp = (string) ($_SERVER['REMOTE_ADDR'] ?? '127.0.0.1');
-        if (\filter_var($remoteIp, \FILTER_VALIDATE_IP) === false) {
+        if (filter_var($remoteIp, \FILTER_VALIDATE_IP) === false) {
             $remoteIp = '127.0.0.1';
         }
 
@@ -151,6 +201,10 @@ final class ConnectionSaving
             'connection' => $connectionInformation,
             'bot' => $botDetector,
         ];
+
+        $timestampSql = self::$datetime !== null
+            ? self::$datetime->now()->toSQL()
+            : date('Y-m-d H:i:s');
 
         return [
             'ip' => $remoteIp,
@@ -164,9 +218,9 @@ final class ConnectionSaving
             'area_code' => $_SERVER['GEOIP_AREA_CODE'] ?? $_SERVER['GEOIP_SUBDIVISION_GEONAME_ID'] ?? null,
             'dma_code' => $_SERVER['GEOIP_DMA_CODE'] ?? $_SERVER['GEOIP_CONTINENT_GEONAME_ID'] ?? null,
             'region' => $_SERVER['GEOIP_REGION'] ?? $_SERVER['GEOIP_REGISTERED_COUNTRY_GEONAME_ID'] ?? 0,
-            'unique_id' => $_SERVER['GEOIP_UNIQUE_ID'] ?? $_SERVER['UNIQUE_ID'] ?? ($_SERVER['REQUEST_TIME'] ?? \time()),
+            'unique_id' => $_SERVER['GEOIP_UNIQUE_ID'] ?? $_SERVER['UNIQUE_ID'] ?? ($_SERVER['REQUEST_TIME'] ?? time()),
             'server_id' => self::getIdServerByIp(),
-            'datetime' => self::$datetime->now()->toSQL(),
+            'datetime' => $timestampSql,
             'raw_details' => $rawDetails,
             'x' => (float) ($_SERVER['GEOIP_LOCATION_LATITUDE'] ?? $_SERVER['GEOIP_LATITUDE'] ?? 0.0),
             'y' => (float) ($_SERVER['GEOIP_LOCATION_LONGITUDE'] ?? $_SERVER['GEOIP_LONGITUDE'] ?? 0.0),

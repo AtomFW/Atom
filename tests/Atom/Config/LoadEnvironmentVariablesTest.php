@@ -26,8 +26,8 @@ class LoadEnvironmentVariablesTest extends TestCase
      */
     public function test_checkEnvironmentFileExistsReturnsFalseWhenFileIsNotReadable()
     {
-        $tempDir = __DIR__ . '/not-a-file.env';
-        mkdir($tempDir);
+        $tempDir = dirname(__DIR__, 3) . '/runtime/temp/load_env_not_a_file_' . uniqid() . '.env';
+        mkdir($tempDir, 0777, true);
         $result = $this->invokeMethod('checkEnvironmentFileExists', [$tempDir]);
         rmdir($tempDir);
         $this->assertFalse($result);
@@ -38,7 +38,10 @@ class LoadEnvironmentVariablesTest extends TestCase
      */
     public function test_checkEnvironmentFileExistsReturnsTrueWhenFileExistsAndIsReadable()
     {
-        $tempFile = __DIR__ . '/test_file.env';
+        $tempFile = dirname(__DIR__, 3) . '/runtime/temp/load_env_test_' . uniqid() . '.env';
+        if (!is_dir(dirname($tempFile))) {
+            mkdir(dirname($tempFile), 0777, true);
+        }
         file_put_contents($tempFile, 'TEST=test');
         
         $result = $this->invokeMethod('checkEnvironmentFileExists', [$tempFile]);

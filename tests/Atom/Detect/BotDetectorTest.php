@@ -29,7 +29,7 @@ final class BotDetectorTest extends TestCase
     
     protected function tearDown(): void
     {
-        T4LOG::$LOG_ROOT_DIR = __DIR__ . "/../../runtime/log/";
+        T4LOG::$LOG_ROOT_DIR = dirname(__DIR__, 3) . "/runtime/log/";
         T4LOG::$LOG_ROOT_DEV_DIR = "dev/";
     }
     

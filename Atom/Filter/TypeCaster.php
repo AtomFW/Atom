@@ -343,16 +343,37 @@ final class TypeCaster
             'int' => self::toInt($value, $allowsNull),
             'float' => self::toFloat($value, $allowsNull),
             'bool' => self::toBool($value, $allowsNull),
+            'bool_str' => self::toBool($value, $allowsNull),
             'string' => is_scalar($value) || $value instanceof \Stringable ? (string) $value : '',
-            'array', 'json' => self::toArray($value),
+            'trimmed' => is_scalar($value) || $value instanceof \Stringable ? trim((string) $value) : '',
+            'lower' => is_scalar($value) || $value instanceof \Stringable ? \mb_strtolower(trim((string) $value)) : '',
+            'upper' => is_scalar($value) || $value instanceof \Stringable ? \mb_strtoupper(trim((string) $value)) : '',
+            'email' => self::normalizeEmail($value),
+            'slug' => self::toSlug($value),
+            'phone' => self::normalizePhone($value),
+            'mac' => self::normalizeMac($value),
+            'color', 'hex_color' => self::normalizeHexColor($value),
+            'semver' => self::normalizeSemVer($value),
+            'ip', 'ip_bin', 'ipv4', 'ipv4_int' => self::normalizeIp($value),
+            'uri' => self::toRfc3986Uri($value, $allowsNull),
+            'url' => self::toWhatWgUrl($value, $allowsNull),
+            'array', 'json', 'json_pretty', 'gzjson' => self::toArray($value),
+            'json_list' => \array_values(self::toArray($value)),
+            'csv', 'list' => self::toCsvList($value),
+            'set' => \array_values(\array_unique(self::toCsvList($value))),
+            'int_list', 'csv_int' => self::toIntList($value),
+            'float_list', 'csv_float' => self::toFloatList($value),
+            'base64' => is_string($value) ? (\base64_decode($value, true) !== false ? \base64_decode($value, true) : $value) : '',
+            'hex' => is_string($value) && \ctype_xdigit($value) && (strlen($value) % 2 === 0) ? (hex2bin($value) ?: $value) : (string) $value,
+            'money', 'cents' => self::toFloat($value, $allowsNull),
+            'percent', 'percentage' => ($pct = self::toFloat($value, $allowsNull)) !== null ? clamp($pct, 0.0, 100.0) : null,
             'point', 'location', 'gps' => self::toPoint($value),
             'uuid_object' => $value instanceof Uuid ? $value : (is_string($value) && $value !== '' ? new Uuid($value) : null),
-            'ulid_object' => $value instanceof Ulid ? $value : (is_string($value) && $value !== '' ? new Ulid($value) : null),
+            'ulid', 'ulid_bin', 'ulid_object' => $value instanceof Ulid ? $value : (is_string($value) && $value !== '' ? new Ulid($value) : null),
             'duration' => self::toDuration($value),
             'sort_direction' => self::toSortDirection($value),
-            'datetime_immutable' => $value instanceof DateTimeImmutable
-                ? $value
-                : (is_string($value) && $value !== '' ? new DateTimeImmutable($value) : null),
+            'timestamp', 'unix_time' => self::toDateTimeImmutable($value, $allowsNull),
+            'datetime_immutable', 'date_immutable' => self::toDateTimeImmutable($value, $allowsNull),
             default => self::castCustomFromForm($value, $phpType ?? $type, $allowsNull),
         };
 
@@ -393,26 +414,55 @@ final class TypeCaster
         return match ($type) {
             'int', 'integer' => (int) $value,
             'float', 'double' => (float) $value,
-            'bool', 'boolean' => self::toBool($value, false),
+            'bool', 'boolean', 'bool_str' => self::toBool($value, false),
             'string' => (string) $value,
+            'trimmed' => trim((string) $value),
+            'lower' => \mb_strtolower(trim((string) $value)),
+            'upper' => \mb_strtoupper(trim((string) $value)),
+            'email' => self::normalizeEmail($value),
+            'slug' => self::toSlug($value),
+            'phone' => self::normalizePhone($value),
+            'mac' => self::normalizeMac($value),
+            'color', 'hex_color' => self::normalizeHexColor($value),
+            'semver' => self::normalizeSemVer($value),
             'array' => (array) $value,
             'object' => (object) $value,
             'null' => null,
-            'json' => is_string($value) ? json_decode($value, true) : (is_array($value) ? $value : []),
+            'json', 'json_pretty' => is_string($value) ? (json_decode($value, true) ?? []) : (is_array($value) ? $value : []),
+            'json_list' => \array_values(is_string($value) ? (array) (json_decode($value, true) ?? []) : (is_array($value) ? $value : [])),
+            'gzjson' => self::decodeGzJson($value),
             'stringJson' => is_string($value) ? json_decode($value, false) : (object) $value,
+            'csv', 'list' => self::toCsvList($value),
+            'set' => \array_values(\array_unique(self::toCsvList($value))),
+            'int_list', 'csv_int' => self::toIntList($value),
+            'float_list', 'csv_float' => self::toFloatList($value),
             'decimal' => number_format((float) $value, (int) $parameter, '.', ''),
-            'binary' => is_string($value) && (strlen($value) === 4 || strlen($value) === 16)
+            'money', 'cents' => \round(((float) $value) / 100.0, 2),
+            'money_decimal' => number_format(((float) $value) / 100.0, 2, '.', ''),
+            'percent', 'percentage' => clamp((float) $value, 0.0, 100.0),
+            'base64' => is_string($value) ? (\base64_decode($value, true) !== false ? \base64_decode($value, true) : $value) : (string) $value,
+            'hex' => is_string($value) && \ctype_xdigit($value) && (strlen($value) % 2 === 0) ? (hex2bin($value) ?: $value) : (string) $value,
+            'binary', 'ip', 'ip_bin' => is_string($value) && (strlen($value) === 4 || strlen($value) === 16)
                 ? (inet_ntop($value) ?: $value)
-                : $value,
+                : (string) $value,
+            'ipv4', 'ipv4_int' => is_int($value) || (is_string($value) && \ctype_digit($value))
+                ? (\long2ip((int) $value) ?: (string) $value)
+                : (string) $value,
+            'uri', \Uri\Rfc3986\Uri::class => self::toRfc3986Uri($value, false),
+            'url', \Uri\WhatWg\Url::class => self::toWhatWgUrl($value, false),
             'datetime' => self::formatAtomDateTime($value, 'datetime'),
             'date' => self::formatAtomDateTime($value, 'date'),
             'time' => self::formatAtomDateTime($value, 'time'),
             'rawdatetime' => self::formatAtomDateTime($value, 'rawdatetime'),
+            'timestamp', 'unix_time' => self::toDateTimeImmutable($value, false),
+            'datetime_immutable', 'date_immutable', DateTimeImmutable::class => self::toDateTimeImmutable($value, false),
             'point', 'location', 'gps' => self::toPoint($value),
             'uuid' => is_string($value) ? self::unpackUuid($value) : $value,
             'uuid_bin', 'bin_uuid' => is_string($value) ? self::binaryToUuid($value) : $value,
+            'ulid' => is_string($value) ? (strlen($value) === 16 ? Ulid::fromBinary($value)->toBase32() : $value) : $value,
+            'ulid_bin', 'bin_ulid' => is_string($value) && strlen($value) === 16 ? Ulid::fromBinary($value)->toBase32() : (string) $value,
             Uuid::class => $value instanceof Uuid ? $value : new Uuid(self::binaryToUuid((string) $value)),
-            Ulid::class => $value instanceof Ulid ? $value : new Ulid((string) $value),
+            Ulid::class => $value instanceof Ulid ? $value : (is_string($value) && strlen($value) === 16 ? Ulid::fromBinary($value) : new Ulid((string) $value)),
             Duration::class, 'duration' => self::toDuration($value),
             SortDirection::class, 'sort_direction' => self::toSortDirection($value),
             default => self::castCustomFromDatabase($value, $phpType ?? $type),
@@ -429,9 +479,21 @@ final class TypeCaster
         }
 
         if ($value instanceof \Symfony\Component\Uid\AbstractUid) {
-            return $type === 'uuid_bin' || $type === 'sql_uuid_to_bin'
-                ? $value->toBinary()
-                : $value->toRfc4122();
+            if ($type === 'uuid_bin' || $type === 'bin_uuid' || $type === 'sql_uuid_to_bin' || $type === 'ulid_bin' || $type === 'bin_ulid') {
+                return $value->toBinary();
+            }
+            if ($value instanceof Ulid || $type === 'ulid' || $type === Ulid::class) {
+                return $value->toBase32();
+            }
+            return $value->toRfc4122();
+        }
+
+        if ($value instanceof \Uri\Rfc3986\Uri) {
+            return $value->toString();
+        }
+
+        if ($value instanceof \Uri\WhatWg\Url) {
+            return $value->toAsciiString();
         }
 
         if ($value instanceof TypeConvertibleInterface) {
@@ -457,16 +519,52 @@ final class TypeCaster
             'int', 'integer' => (int) $value,
             'float', 'double' => (float) $value,
             'bool', 'boolean' => $value ? 1 : 0,
+            'bool_str' => self::toBool($value, false) ? 'true' : 'false',
             'string' => (string) $value,
-            'datetime', 'date', 'time' => self::formatSqlDateTime($value),
+            'trimmed' => trim((string) $value),
+            'lower' => \mb_strtolower(trim((string) $value)),
+            'upper' => \mb_strtoupper(trim((string) $value)),
+            'email' => self::normalizeEmail($value),
+            'slug' => self::toSlug($value),
+            'phone' => self::normalizePhone($value),
+            'mac' => self::normalizeMac($value),
+            'color', 'hex_color' => self::normalizeHexColor($value),
+            'semver' => self::normalizeSemVer($value),
+            'uri', \Uri\Rfc3986\Uri::class, 'url', \Uri\WhatWg\Url::class => is_object($value) && method_exists($value, 'toString')
+                ? $value->toString()
+                : trim((string) $value),
+            'datetime', 'date', 'time', 'datetime_immutable', DateTimeImmutable::class => self::formatSqlDateTime($value),
+            'date_immutable' => $value instanceof DateTimeInterface
+                ? $value->format('Y-m-d')
+                : (($dt = self::toDateTimeImmutable($value, true)) !== null ? $dt->format('Y-m-d') : (string) $value),
+            'timestamp', 'unix_time' => $value instanceof DateTimeInterface
+                ? $value->getTimestamp()
+                : (is_numeric($value) ? (int) $value : (($dt = self::toDateTimeImmutable($value, true)) !== null ? $dt->getTimestamp() : 0)),
             'json' => json_encode($value, \JSON_UNESCAPED_UNICODE | \JSON_UNESCAPED_SLASHES),
-            'binary' => is_string($value) && filter_var($value, \FILTER_VALIDATE_IP) !== false
+            'json_list' => json_encode(\array_values(self::toArray($value)), \JSON_UNESCAPED_UNICODE | \JSON_UNESCAPED_SLASHES),
+            'json_pretty' => json_encode($value, \JSON_PRETTY_PRINT | \JSON_UNESCAPED_UNICODE | \JSON_UNESCAPED_SLASHES),
+            'gzjson' => self::encodeGzJson($value),
+            'csv', 'list' => \implode(',', self::toCsvList($value)),
+            'set' => \implode(',', \array_values(\array_unique(self::toCsvList($value)))),
+            'int_list', 'csv_int' => \implode(',', \array_map(strval(...), self::toIntList($value))),
+            'float_list', 'csv_float' => \implode(',', \array_map(strval(...), self::toFloatList($value))),
+            'money', 'cents', 'money_decimal' => (int) \round(((float) $value) * 100.0),
+            'percent', 'percentage' => clamp((float) $value, 0.0, 100.0),
+            'base64' => \base64_encode((string) $value),
+            'hex' => bin2hex((string) $value),
+            'binary', 'ip_bin' => is_string($value) && filter_var($value, \FILTER_VALIDATE_IP) !== false
                 ? (inet_pton($value) ?: $value)
                 : $value,
+            'ip' => self::normalizeIp($value),
+            'ipv4', 'ipv4_int' => is_string($value) && filter_var($value, \FILTER_VALIDATE_IP, \FILTER_FLAG_IPV4) !== false
+                ? (int) \ip2long($value)
+                : (int) $value,
             'point', 'location', 'gps' => self::toPoint($value)->toSql(),
             'raw_point', 'raw_location', 'raw_gps' => (object) $value,
             'uuid' => is_string($value) ? str_replace('-', '', pack('H8a/H4b/H4c/H4d/H12e', $value)) : $value,
             'uuid_bin', 'bin_uuid' => is_string($value) ? self::uuidToBinary($value) : $value,
+            'ulid' => is_string($value) ? (new Ulid($value))->toBase32() : $value,
+            'ulid_bin', 'bin_ulid' => is_string($value) ? (new Ulid($value))->toBinary() : $value,
             default => self::castCustomToDatabase($value, $type),
         };
     }
@@ -498,13 +596,83 @@ final class TypeCaster
         }
 
         return match ($meta['castForm'] ?? $meta['phpType']) {
-            'int', 'integer', 'float', 'double' => 'number',
-            'bool', 'boolean' => 'checkbox',
-            'date' => 'date',
+            'int', 'integer', 'float', 'double', 'money', 'cents', 'percent', 'percentage' => 'number',
+            'bool', 'boolean', 'bool_str' => 'checkbox',
+            'email' => 'email',
+            'url', 'uri', \Uri\Rfc3986\Uri::class, \Uri\WhatWg\Url::class => 'url',
+            'phone' => 'tel',
+            'color', 'hex_color' => 'color',
+            'date', 'date_immutable' => 'date',
             'time' => 'time',
-            'datetime', DateTimeImmutable::class, DateTimeInterface::class => 'datetime-local',
+            'datetime', 'datetime_immutable', DateTimeImmutable::class, DateTimeInterface::class => 'datetime-local',
             default => 'text',
         };
+    }
+
+    /**
+     * Lists all built-in auto-mapping type identifiers supported out of the box.
+     *
+     * @return list<string>
+     */
+    public static function supportedTypes(): array
+    {
+        return [
+            'int',
+            'float',
+            'bool',
+            'bool_str',
+            'string',
+            'trimmed',
+            'lower',
+            'upper',
+            'email',
+            'slug',
+            'phone',
+            'mac',
+            'color',
+            'hex_color',
+            'semver',
+            'ip',
+            'ip_bin',
+            'ipv4',
+            'ipv4_int',
+            'uri',
+            'url',
+            'array',
+            'object',
+            'json',
+            'json_list',
+            'json_pretty',
+            'gzjson',
+            'stringJson',
+            'csv',
+            'list',
+            'set',
+            'int_list',
+            'float_list',
+            'decimal',
+            'money',
+            'cents',
+            'money_decimal',
+            'percent',
+            'base64',
+            'hex',
+            'binary',
+            'datetime',
+            'date',
+            'time',
+            'rawdatetime',
+            'timestamp',
+            'datetime_immutable',
+            'date_immutable',
+            'duration',
+            'sort_direction',
+            'point',
+            'uuid',
+            'uuid_bin',
+            'ulid',
+            'ulid_bin',
+        ];
     }
 
     /**
@@ -613,8 +781,283 @@ final class TypeCaster
             Duration::class, 'duration' => 'duration',
             SortDirection::class, 'sort_direction' => 'sort_direction',
             DateTimeImmutable::class => 'datetime_immutable',
+            \Uri\Rfc3986\Uri::class => 'uri',
+            \Uri\WhatWg\Url::class => 'url',
             default => $clean,
         };
+    }
+
+    private static function normalizeEmail(mixed $value): string
+    {
+        if (!is_scalar($value) && !$value instanceof \Stringable) {
+            return '';
+        }
+
+        return (string) $value
+            |> trim(...)
+            |> strtolower(...);
+    }
+
+    private static function toSlug(mixed $value): string
+    {
+        if (!is_scalar($value) && !$value instanceof \Stringable) {
+            return '';
+        }
+
+        $ascii = \mb_strtolower(trim((string) $value));
+        $slug = \preg_replace('/[^a-z0-9]+/u', '-', $ascii) ?? $ascii;
+
+        return trim($slug, '-');
+    }
+
+    private static function normalizePhone(mixed $value): string
+    {
+        if (!is_scalar($value) && !$value instanceof \Stringable) {
+            return '';
+        }
+
+        $raw = trim((string) $value);
+        $hasPlus = str_starts_with($raw, '+');
+        $digits = \preg_replace('/\D+/', '', $raw) ?? '';
+
+        return $digits === '' ? '' : ($hasPlus ? '+' . $digits : $digits);
+    }
+
+    private static function normalizeMac(mixed $value): string
+    {
+        if (!is_scalar($value) && !$value instanceof \Stringable) {
+            return '';
+        }
+
+        $hex = strtolower(\preg_replace('/[^0-9a-fA-F]/', '', (string) $value) ?? '');
+        if (strlen($hex) !== 12) {
+            return trim((string) $value);
+        }
+
+        return \implode(':', \str_split($hex, 2));
+    }
+
+    private static function normalizeHexColor(mixed $value): string
+    {
+        if (!is_scalar($value) && !$value instanceof \Stringable) {
+            return '#000000';
+        }
+
+        $hex = strtolower(ltrim(trim((string) $value), '#'));
+        if (strlen($hex) === 3 && \ctype_xdigit($hex)) {
+            $hex = $hex[0] . $hex[0] . $hex[1] . $hex[1] . $hex[2] . $hex[2];
+        }
+
+        if ((strlen($hex) === 6 || strlen($hex) === 8) && \ctype_xdigit($hex)) {
+            return '#' . $hex;
+        }
+
+        return trim((string) $value);
+    }
+
+    private static function normalizeSemVer(mixed $value): string
+    {
+        if (!is_scalar($value) && !$value instanceof \Stringable) {
+            return '0.0.0';
+        }
+
+        $raw = ltrim(trim((string) $value), 'vV');
+        if (preg_match('/^(\d+)(?:\.(\d+))?(?:\.(\d+))?(?:[-+].*)?$/', $raw, $m) === 1) {
+            $major = $m[1];
+            $minor = $m[2] ?? '0';
+            $patch = $m[3] ?? '0';
+            $suffix = substr($raw, strlen($m[1]) + (isset($m[2]) ? 1 + strlen($m[2]) : 0) + (isset($m[3]) ? 1 + strlen($m[3]) : 0));
+            return "{$major}.{$minor}.{$patch}{$suffix}";
+        }
+
+        return $raw;
+    }
+
+    private static function normalizeIp(mixed $value): string
+    {
+        if (is_int($value)) {
+            return \long2ip($value) ?: '';
+        }
+
+        if (!is_string($value)) {
+            return '';
+        }
+
+        if ((strlen($value) === 4 || strlen($value) === 16) && filter_var($value, \FILTER_VALIDATE_IP) === false) {
+            $unpacked = inet_ntop($value);
+            if ($unpacked !== false) {
+                return $unpacked;
+            }
+        }
+
+        $trimmed = trim($value);
+        return filter_var($trimmed, \FILTER_VALIDATE_IP) !== false ? $trimmed : $trimmed;
+    }
+
+    private static function toRfc3986Uri(mixed $value, bool $allowsNull): \Uri\Rfc3986\Uri|string|null
+    {
+        if ($value instanceof \Uri\Rfc3986\Uri) {
+            return $value;
+        }
+
+        $str = is_scalar($value) || $value instanceof \Stringable ? trim((string) $value) : '';
+        if ($str === '') {
+            return $allowsNull ? null : '';
+        }
+
+        if (class_exists(\Uri\Rfc3986\Uri::class)) {
+            try {
+                return new \Uri\Rfc3986\Uri($str);
+            } catch (\Throwable) {
+                return $allowsNull ? null : $str;
+            }
+        }
+
+        return $str;
+    }
+
+    private static function toWhatWgUrl(mixed $value, bool $allowsNull): \Uri\WhatWg\Url|string|null
+    {
+        if ($value instanceof \Uri\WhatWg\Url) {
+            return $value;
+        }
+
+        $str = is_scalar($value) || $value instanceof \Stringable ? trim((string) $value) : '';
+        if ($str === '') {
+            return $allowsNull ? null : '';
+        }
+
+        if (class_exists(\Uri\WhatWg\Url::class)) {
+            try {
+                return new \Uri\WhatWg\Url($str);
+            } catch (\Throwable) {
+                return $allowsNull ? null : $str;
+            }
+        }
+
+        return $str;
+    }
+
+    /**
+     * @return list<string>
+     */
+    private static function toCsvList(mixed $value): array
+    {
+        if (is_array($value)) {
+            $out = [];
+            foreach ($value as $item) {
+                if (is_scalar($item) || $item instanceof \Stringable) {
+                    $s = trim((string) $item);
+                    if ($s !== '') {
+                        $out[] = $s;
+                    }
+                }
+            }
+            return $out;
+        }
+
+        if (!is_scalar($value) && !$value instanceof \Stringable) {
+            return [];
+        }
+
+        $trimmed = trim((string) $value);
+        if ($trimmed === '') {
+            return [];
+        }
+
+        $parts = \array_map(trim(...), explode(',', $trimmed));
+        return \array_values(\array_filter($parts, static fn(string $item): bool => $item !== ''));
+    }
+
+    /**
+     * @return list<int>
+     */
+    private static function toIntList(mixed $value): array
+    {
+        $items = self::toCsvList($value);
+        return \array_map(intval(...), $items);
+    }
+
+    /**
+     * @return list<float>
+     */
+    private static function toFloatList(mixed $value): array
+    {
+        $items = self::toCsvList($value);
+        return \array_map(floatval(...), $items);
+    }
+
+    private static function toDateTimeImmutable(mixed $value, bool $allowsNull): ?DateTimeImmutable
+    {
+        if ($value instanceof DateTimeImmutable) {
+            return $value;
+        }
+
+        if ($value instanceof DateTimeInterface) {
+            return DateTimeImmutable::createFromInterface($value);
+        }
+
+        if (is_int($value) || (is_string($value) && $value !== '' && (\ctype_digit($value) || (str_starts_with($value, '-') && \ctype_digit(substr($value, 1)))))) {
+            return (new DateTimeImmutable())->setTimestamp((int) $value);
+        }
+
+        if (is_string($value)) {
+            $trimmed = trim($value);
+            if ($trimmed === '') {
+                return $allowsNull ? null : new DateTimeImmutable('@0');
+            }
+            try {
+                return new DateTimeImmutable($trimmed);
+            } catch (\Throwable) {
+                return $allowsNull ? null : new DateTimeImmutable('@0');
+            }
+        }
+
+        return $allowsNull ? null : new DateTimeImmutable('@0');
+    }
+
+    private static function encodeGzJson(mixed $value): string
+    {
+        $json = json_encode($value, \JSON_UNESCAPED_UNICODE | \JSON_UNESCAPED_SLASHES);
+        if ($json === false) {
+            return '';
+        }
+
+        $compressed = \gzdeflate($json, 6);
+        return $compressed !== false ? $compressed : $json;
+    }
+
+    /**
+     * @return array<mixed>
+     */
+    private static function decodeGzJson(mixed $value): array
+    {
+        if (is_array($value)) {
+            return $value;
+        }
+
+        if (!is_string($value) || $value === '') {
+            return [];
+        }
+
+        if (str_starts_with($value, '{') || str_starts_with($value, '[')) {
+            $direct = json_decode($value, true);
+            return is_array($direct) ? $direct : [];
+        }
+
+        \set_error_handler(static fn(): bool => true);
+        try {
+            $inflated = \gzinflate($value);
+        } finally {
+            \restore_error_handler();
+        }
+
+        if (!is_string($inflated)) {
+            return [];
+        }
+
+        $decoded = json_decode($inflated, true);
+        return is_array($decoded) ? $decoded : [];
     }
 
     private static function toInt(mixed $value, bool $allowsNull): ?int

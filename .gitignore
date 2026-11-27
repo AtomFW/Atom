@@ -38,6 +38,9 @@ Desktop.ini
 
 # agent
 .qodo/
+.agents/
+agy.exe
+.phpunit.result.cache
 
 ### --- atom  --- ###
 autoload.php
@@ -45,3 +48,9 @@ doctum.config.php
 /runtime/docs/*
 /Atom/Report/report_function.php
 /Atom/Report/AutoReport.php
+
+### --- Testy (wykluczenie pozostałości i plików nietestowych) --- ###
+/tests/**/*
+!/tests/**/
+!/tests/**/*[Tt]est.php
+!/tests/**/UploadMocks.php

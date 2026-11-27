@@ -9,6 +9,7 @@ parameters:
             - vendor/*
             - runtime/*
             - logs/*
+            - Atom/Modules/*/tests/*
         analyse:
             - Atom/Lib/*
     parallel:

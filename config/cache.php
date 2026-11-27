@@ -54,7 +54,23 @@ return [
             'database' => (int) env('CACHE_REDIS_DATABASE', 0), // The database number of the Redis server
             'timeout' => (float) env('CACHE_REDIS_TIMEOUT', 1.5), // Connection timeout in seconds
             'readTimeout' => (float) env('CACHE_REDIS_READ_TIMEOUT', 1.5), // Read timeout in seconds
-        ]
+        ],
+
+        /**
+         * Adaptive PHP RAM cache driver (`Atom\Cache\MemoryCacheManager`).
+         *
+         * Automatically selects the fastest available backend in order:
+         * `apcu` -> `sysv` (System V shared memory + semaphores) -> `memory` (bounded PHP RAM).
+         *
+         * @var array
+         */
+        'memory' => [
+            'driver' => 'memory',
+            'backend' => env('CACHE_MEMORY_BACKEND', 'auto'),
+            'maxItems' => (int) env('CACHE_MEMORY_MAX_ITEMS', 4096),
+            'shmSize' => (int) env('CACHE_MEMORY_SHM_SIZE', 1048576),
+            'autoPruneInterval' => (int) env('CACHE_MEMORY_AUTO_PRUNE', 64),
+        ],
     ],
 
     /**

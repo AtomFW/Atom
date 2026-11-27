@@ -50,8 +50,17 @@ final class ResourcesPath implements Stringable
         $rootCssDir = (string) ($cfg['rootCssDirName'] ?? $cfg['rootCssDir'] ?? '');
         $rootJsDir = (string) ($cfg['rootJsDirName'] ?? $cfg['rootDir'] ?? '');
 
-        self::$resources = $this->path . self::$resources;
-        self::$assets = $this->path . self::$assets;
+        $baseRoot = \rtrim($this->path, '/\\');
+        self::$resources = $baseRoot . $ds . 'resources' . $ds;
+        self::$assets = $baseRoot . $ds . 'storage' . $ds . 'assets' . $ds;
+        self::$cssPath = 'css' . $ds;
+        self::$jsPath = 'js' . $ds;
+        self::$fontPath = 'font' . $ds;
+        self::$imagePath = 'image' . $ds;
+        self::$moviePath = 'movie' . $ds;
+        self::$soundPath = 'sound' . $ds;
+        self::$svgPath = 'svg' . $ds;
+        self::$webManifest = 'manifest' . $ds . 'manifest.json';
 
         self::$resourcesCssDirPath = self::$resources . self::$cssPath;
         self::$resourcesCssRootDirPath = self::$resourcesCssDirPath . $rootCssDir . $ds;

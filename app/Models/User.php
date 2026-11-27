@@ -5,8 +5,8 @@ declare(strict_types=1);
 namespace App\Models;
 
 use Atom\Atom;
+use Atom\Modules\UserAuth\UserModel;
 use Atom\Structure\Cast;
-use Atom\UserModel;
 
 final class User extends UserModel
 {

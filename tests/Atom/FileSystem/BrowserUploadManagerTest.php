@@ -15,6 +15,7 @@ use Atom\FileSytem\BrowserUploadManager;
  */
 class BrowserUploadManagerTest extends TestCase
 {
+    private string $baseTempDir;
     private string $tempDir;
     private string $uploadDir;
     private array $config;
@@ -23,8 +24,9 @@ class BrowserUploadManagerTest extends TestCase
     {
         parent::setUp();
         
-        $this->tempDir = __DIR__ . '/tmp';
-        $this->uploadDir = __DIR__ . '/uploads';
+        $this->baseTempDir = dirname(__DIR__, 3) . '/runtime/temp/browser_upload_test_' . uniqid();
+        $this->tempDir = $this->baseTempDir . '/tmp';
+        $this->uploadDir = $this->baseTempDir . '/uploads';
         
         // Create directories if they don't exist
         if (!is_dir($this->tempDir)) {
@@ -59,8 +61,8 @@ class BrowserUploadManagerTest extends TestCase
             return;
         }
         // Clean up temporary directory
-        $this->cleanDirectory($this->tempDir);
-        $this->cleanDirectory($this->uploadDir);
+        $this->cleanDirectory($this->baseTempDir);
+        if (is_dir($this->baseTempDir)) { rmdir($this->baseTempDir); }
         
         parent::tearDown();
     }
@@ -101,7 +103,7 @@ class BrowserUploadManagerTest extends TestCase
     public function test_upload_single_success(): void
     {
         // Create a temporary file for testing
-        $testFile = __DIR__ . '/test.txt';
+        $testFile = $this->baseTempDir . '/test.txt';
         file_put_contents($testFile, 'Test content');
         
         $files = [
@@ -126,8 +128,8 @@ class BrowserUploadManagerTest extends TestCase
     public function test_upload_multiple_success(): void
     {
         // Create two temporary files for testing
-        $testFile1 = __DIR__ . '/test1.txt';
-        $testFile2 = __DIR__ . '/test2.txt';
+        $testFile1 = $this->baseTempDir . '/test1.txt';
+        $testFile2 = $this->baseTempDir . '/test2.txt';
         file_put_contents($testFile1, 'Test content 1');
         file_put_contents($testFile2, 'Test content 2');
         
@@ -153,7 +155,7 @@ class BrowserUploadManagerTest extends TestCase
     public function test_upload_from_field_success(): void
     {
         // Create a temporary file for testing
-        $testFile = __DIR__ . '/test.txt';
+        $testFile = $this->baseTempDir . '/test.txt';
         file_put_contents($testFile, 'Test content');
         
         $_FILES = [
@@ -178,8 +180,8 @@ class BrowserUploadManagerTest extends TestCase
     public function test_upload_multiple_from_field_success(): void
     {
         // Create a temporary file for testing
-        $testFile1 = __DIR__ . '/test1.txt';
-        $testFile2 = __DIR__ . '/test2.txt';
+        $testFile1 = $this->baseTempDir . '/test1.txt';
+        $testFile2 = $this->baseTempDir . '/test2.txt';
         file_put_contents($testFile1, 'Test content 1');
         file_put_contents($testFile2, 'Test content 2');
         
@@ -309,7 +311,7 @@ class BrowserUploadManagerTest extends TestCase
     public function test_move_uploaded_file_success(): void
     {
         // Create a temporary file for testing
-        $testFile = __DIR__ . '/test.txt';
+        $testFile = $this->baseTempDir . '/test.txt';
         file_put_contents($testFile, 'Test content');
         
         $file = [

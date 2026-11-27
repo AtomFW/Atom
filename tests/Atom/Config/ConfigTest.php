@@ -18,7 +18,7 @@ class ConfigTest extends TestCase
 
     protected function setUp(): void
     {
-        $this->appPath = __DIR__ . '/test_fixtures_' . uniqid();
+        $this->appPath = dirname(__DIR__, 3) . '/runtime/temp/config_test_fixtures_' . uniqid();
         
         if (!is_dir($this->appPath)) {
             mkdir($this->appPath, 0777, true);
@@ -33,7 +33,7 @@ class ConfigTest extends TestCase
         if (!is_dir($configDir)) {
             mkdir($configDir, 0777, true);
         }
-        foreach (['app', 'database', 'cache', 'session', 'mail', 'auth', 'filesystem', 'modul', 'logger'] as $name) {
+        foreach (['app', 'database', 'cache', 'session', 'mail', 'auth', 'filesystem', 'modul', 'logger', 'cluster', 'oauth', 'exchange', 'mcp', 'profiler', 'inspector', 'async'] as $name) {
             $file = $configDir . '/' . $name . '.php';
             if (!file_exists($file)) {
                 file_put_contents($file, '<?php return [];' );
@@ -76,7 +76,7 @@ class ConfigTest extends TestCase
         if (!is_dir($cacheDir)) {
             mkdir($cacheDir, 0777, true);
         }
-        foreach (['app', 'database', 'cache', 'session', 'mail', 'auth', 'filesystem', 'modul', 'logger'] as $name) {
+        foreach (['app', 'database', 'cache', 'session', 'mail', 'auth', 'filesystem', 'modul', 'logger', 'cluster', 'oauth', 'exchange', 'mcp', 'profiler', 'inspector', 'async'] as $name) {
             file_put_contents($cacheDir . '/' . $name . '.php', '<?php return [];' );
         }
     }
@@ -221,7 +221,14 @@ class ConfigTest extends TestCase
             'auth',
             'filesystem',
             'modul',
-            'logger'
+            'logger',
+            'cluster',
+            'oauth',
+            'exchange',
+            'mcp',
+            'profiler',
+            'inspector',
+            'async',
         ];
         
         $this->assertEquals($expected, $result);

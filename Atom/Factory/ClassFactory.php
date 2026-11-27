@@ -4,11 +4,13 @@ declare(strict_types=1);
 
 namespace Atom\Factory;
 
+use PhpToken;
 use ReflectionClass;
 use RuntimeException;
 
 /**
- * Stateless-friendly class factory with bounded file-to-class resolution cache (PHP 8.6 `array_last`).
+ * Stateless-friendly class factory with bounded file-to-class resolution cache (PHP 8.6 `\array_last`)
+ * and token-based fallback when classes were already autoloaded by Composer / OPcache.
  */
 final class ClassFactory
 {
@@ -51,13 +53,16 @@ final class ClassFactory
             $after = \get_declared_classes();
 
             $newClasses = \array_values(\array_diff($after, $before));
-            if ($newClasses === []) {
-                throw new RuntimeException("Not found class in file: {$filePath}");
+            if ($newClasses !== []) {
+                /** @var class-string $discovered */
+                $discovered = \array_last($newClasses);
+                $className = $discovered;
+            } else {
+                $className = self::extractDeclaredClassFromFile($canonicalPath);
+                if ($className === null) {
+                    throw new RuntimeException("Not found class in file: {$filePath}");
+                }
             }
-
-            /** @var class-string $discovered */
-            $discovered = \array_last($newClasses);
-            $className = $discovered;
 
             if (\count(self::$resolvedClasses) >= self::MAX_CACHE_SIZE) {
                 $oldest = \array_key_first(self::$resolvedClasses);
@@ -85,6 +90,68 @@ final class ClassFactory
         }
 
         return $instance;
+    }
+
+    /**
+     * Resolves a class FQCN from PHP source tokens when the file was already loaded by Composer / Swoole worker.
+     *
+     * @return class-string|null
+     */
+    private static function extractDeclaredClassFromFile(string $canonicalPath): ?string
+    {
+        $source = \file_get_contents($canonicalPath);
+        if ($source === false || $source === '') {
+            return null;
+        }
+
+        $tokens = PhpToken::tokenize($source);
+        $namespace = '';
+        $lastClass = null;
+        $total = \count($tokens);
+
+        for ($i = 0; $i < $total; $i++) {
+            $tok = $tokens[$i];
+
+            if ($tok->id === \T_NAMESPACE) {
+                $nsParts = [];
+                for ($j = $i + 1; $j < $total; $j++) {
+                    $next = $tokens[$j];
+                    if ($next->id === \T_NAME_QUALIFIED || $next->id === \T_STRING) {
+                        $nsParts[] = $next->text;
+                    } elseif ($next->text === ';' || $next->text === '{') {
+                        $i = $j;
+                        break;
+                    }
+                }
+                $namespace = \implode('\\', $nsParts);
+                continue;
+            }
+
+            if ($tok->id === \T_CLASS) {
+                $prevIdx = $i - 1;
+                while ($prevIdx >= 0 && $tokens[$prevIdx]->isIgnorable()) {
+                    $prevIdx--;
+                }
+                if ($prevIdx >= 0 && ($tokens[$prevIdx]->id === \T_DOUBLE_COLON || $tokens[$prevIdx]->id === \T_NEW)) {
+                    continue;
+                }
+
+                for ($j = $i + 1; $j < $total; $j++) {
+                    if ($tokens[$j]->isIgnorable()) {
+                        continue;
+                    }
+                    if ($tokens[$j]->id === \T_STRING) {
+                        $candidate = $namespace !== '' ? $namespace . '\\' . $tokens[$j]->text : $tokens[$j]->text;
+                        if (\class_exists($candidate, false)) {
+                            $lastClass = $candidate;
+                        }
+                    }
+                    break;
+                }
+            }
+        }
+
+        return $lastClass;
     }
 
     /**

@@ -1,0 +1,12 @@
+ALTER TABLE `{{prefix}}users`
+    DROP KEY `ux_user_uuid`,
+    DROP KEY `ux_username`,
+    DROP KEY `ux_email`,
+    DROP KEY `idx_status`,
+    DROP KEY `idx_role`,
+    DROP KEY `idx_account_type`,
+    DROP KEY `idx_last_active`,
+    DROP KEY `idx_last_login`,
+    DROP KEY `idx_country`,
+    DROP KEY `idx_is_online`,
+    DROP KEY `idx_name`;

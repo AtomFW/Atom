@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace Tests\Atom\Log;
 
-use Atom\Account\Account;
+
 use Atom\Atom;
 use Atom\Component\Cache\CacheWrapper;
 use Atom\DataBase\Database;
@@ -24,7 +24,6 @@ class LogEventTest extends TestCase
     private MockObject $log;
     private DateTime|MockObject $datetime;
     private SafetyDataStructureVariable|MockObject $cache;
-    private Account $account;
     private LogEvent $logEvent;
 
     protected function setUp(): void
@@ -40,7 +39,6 @@ class LogEventTest extends TestCase
         $app->datetime = $this->datetime;
         Atom::$app = $app;
         $this->cache = new SafetyDataStructureVariable($this->database);
-        $this->account = new Account();
 
         $this->logEvent = new LogEvent(
             $this->database,
@@ -195,5 +193,26 @@ class LogEventTest extends TestCase
     {
         // This is a private method that's tested through add()
         $this->assertTrue(true);
+    }
+
+    public function testNoDbModeLogsDirectlyToT4LogWithoutDatabase(): void
+    {
+        $this->database->expects($this->never())->method('insertInto');
+        $this->log->expects($this->once())->method('info')->with('User login recorded', $this->isArray());
+
+        $statelessLogEvent = new LogEvent(
+            database: null,
+            log: $this->log,
+            datetime: $this->datetime,
+            cache: null,
+            account: false,
+            idUser: 7,
+            connectionIpId: 0,
+            serverId: 0,
+            noDb: true,
+        );
+
+        $this->assertTrue($statelessLogEvent->isNoDb());
+        $this->assertSame(0, $statelessLogEvent->add('user', 1, 34, 39, 'User login recorded'));
     }
 }

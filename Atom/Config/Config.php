@@ -33,6 +33,13 @@ final class Config extends EnvironmentVariables
         'filesystem',
         'modul',
         'logger',
+        'cluster',
+        'oauth',
+        'exchange',
+        'mcp',
+        'profiler',
+        'inspector',
+        'async',
     ];
 
     public function __construct(
@@ -147,6 +154,56 @@ final class Config extends EnvironmentVariables
         }
 
         return $var;
+    }
+
+    /**
+     * Resolves a dot-notation configuration path (e.g. `'atom.core.version'`,
+     * `'connectionInformation.extension'`, `'database.choices.mysql.host'`).
+     */
+    public static function dot(string $path, mixed $default = null, bool $useDefaultChoice = true): mixed
+    {
+        return DotConfig::get($path, $default, $useDefaultChoice);
+    }
+
+    /**
+     * Checks whether a dot-notation configuration path exists.
+     */
+    public static function hasDot(string $path, bool $useDefaultChoice = true): bool
+    {
+        return DotConfig::has($path, $useDefaultChoice);
+    }
+
+    /**
+     * Checks whether a top-level configuration file namespace is registered.
+     */
+    public static function hasNamespace(string $namespace): bool
+    {
+        return \in_array($namespace, static::$configFileName, true) || isset(static::$from[$namespace]);
+    }
+
+    /**
+     * Checks whether a configuration namespace is currently loaded in memory.
+     */
+    public static function isLoaded(string $namespace): bool
+    {
+        return isset(static::$from[$namespace]);
+    }
+
+    /**
+     * Atomically applies an in-memory configuration override (used by `ClusterSupervisor` for encrypted updates).
+     *
+     * @param array<string, mixed> $values
+     */
+    public static function applyRuntimeUpdate(string $namespace, array $values, ?string $persistCacheAppPath = null): void
+    {
+        $existing = static::$from[$namespace] ?? [];
+        /** @var array<string, mixed> $merged */
+        $merged = \array_replace_recursive($existing, $values);
+        static::$from[$namespace] = $merged;
+
+        if ($persistCacheAppPath !== null && self::isExportable(static::$from)) {
+            self::writeConfigCache($persistCacheAppPath);
+        }
     }
 
     /**

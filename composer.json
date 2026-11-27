@@ -66,6 +66,7 @@
         "symfony/stopwatch": "^8.0"
     },
     "scripts": {
+        "atom": "php atom.php",
         "test": "phpunit",
         "stan": "phpstan analyse",
         "docs": "php doctum.phar update doctum.config.php",

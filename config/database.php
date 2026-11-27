@@ -9,6 +9,15 @@ use Pdo\Mysql;
  */
 
 return [
+    /**
+     * Disable database connections when running in stateless `noDB` or `microservice` mode.
+     *
+     * Defaults to false.
+     *
+     * @var bool
+     */
+    'noDB' => (bool) env('DB_NO_DB', (bool) env('APP_NO_DB', false)),
+
     'default' => env('DB_DRIVER', 'mysql'),
 
     /**
@@ -96,27 +105,94 @@ return [
             // 'cluster'   => env('DB_CLUSTER', false),
             // 'atom_replication' => env('DB_ATOM_REPLICATION', false),
         ],
+
+        /**
+         * Unified remote Atom Cluster database driver (`DB_DRIVER=clusterRemote`).
+         *
+         * Allows all Atom nodes in a cluster pool to share a remote primary SQL database
+         * using the exact same `Atom\DataBase\Database` interface.
+         *
+         * @var array<string, mixed>
+         */
+        'clusterRemote' => [
+            'dsn' => (string) env(
+                'CLUSTER_REMOTE_DB_DSN',
+                'mysql:host=' . env('CLUSTER_REMOTE_DB_HOST', env('DB_HOST', '127.0.0.1'))
+                . ';port=' . env('CLUSTER_REMOTE_DB_PORT', env('DB_PORT', 3306))
+                . ';dbname=' . env('CLUSTER_REMOTE_DB_NAME', env('DB_DATABASE', 'Atom'))
+                . ';charset=' . env('CLUSTER_REMOTE_DB_CHARSET', 'utf8mb4')
+            ),
+            'driver' => (string) env('CLUSTER_REMOTE_DB_DRIVER', 'mysql'),
+            'host' => (string) env('CLUSTER_REMOTE_DB_HOST', env('DB_HOST', '127.0.0.1')),
+            'port' => (int) env('CLUSTER_REMOTE_DB_PORT', env('DB_PORT', 3306)),
+            'dbname' => (string) env('CLUSTER_REMOTE_DB_NAME', env('DB_DATABASE', 'Atom')),
+            'user' => (string) env('CLUSTER_REMOTE_DB_USER', env('DB_USERNAME', 'root')),
+            'password' => (string) env('CLUSTER_REMOTE_DB_PASSWORD', env('DB_PASSWORD', '')),
+            'charset' => (string) env('CLUSTER_REMOTE_DB_CHARSET', 'utf8mb4'),
+            'prefix' => (string) env('CLUSTER_REMOTE_DB_PREFIX', env('DB_PREFIX', '')),
+            'cluster' => true,
+            'atom_replication' => true,
+            'options' => [
+                PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
+                PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
+                PDO::ATTR_EMULATE_PREPARES => false,
+                PDO::ATTR_STRINGIFY_FETCHES => false,
+                PDO::ATTR_PERSISTENT => false,
+                PDO::ATTR_TIMEOUT => (int) env('CLUSTER_REMOTE_DB_TIMEOUT', 5),
+            ],
+            'pool' => [
+                'on' => (bool) env('CLUSTER_REMOTE_DB_POOL_ON', false),
+                'minConnections' => (int) env('CLUSTER_REMOTE_DB_POOL_MIN', 2),
+                'maxConnections' => (int) env('CLUSTER_REMOTE_DB_POOL_MAX', 32),
+                'waitTimeoutMs' => (int) env('CLUSTER_REMOTE_DB_POOL_WAIT_MS', 3000),
+                'maxIdleTimeSeconds' => (int) env('CLUSTER_REMOTE_DB_POOL_IDLE_SEC', 60),
+                'heartbeatIntervalSeconds' => 30,
+            ],
+        ],
     ],
 
     /**
-     * Configuration for migrations
+     * Configuration for core and application SQL migrations.
      *
      * @var array
      */
     'migrations' => [
         /**
-         * Table to store migrations
+         * Automatically execute pending SQL migrations during kernel startup.
+         *
+         * Disabled by default (`false`). Ignored when `noDB` or `microservice` mode is active.
+         *
+         * @var bool
+         */
+        'autoMigrate' => (bool) env('DB_AUTO_MIGRATE', (bool) env('APP_AUTO_MIGRATE', false)),
+
+        /**
+         * Table to store applied core and application migrations.
          *
          * @var string
          */
         'table' => 'migrations',
 
         /**
-         * Whether to update the timestamp of the migration
+         * Whether to update the timestamp of the migration.
          *
          * @var bool
          */
         'update_timestamp' => true,
+
+        /**
+         * Directory containing Atom's internal core SQL migration files (`at0001_*.sql`).
+         *
+         * @var string
+         */
+        'corePath' => __DIR__ . '/../Atom/DataBase/migrations',
+
+        /**
+         * Directory containing application-specific migration files (`/migrations`).
+         *
+         * @var string
+         */
+        'appPath' => __DIR__ . '/../migrations',
     ],
 
     /**

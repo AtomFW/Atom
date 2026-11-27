@@ -142,6 +142,19 @@ return [
     'atomRole' => env('APP_ATOM_ROLE', 'website'),
 
     /**
+     * Disable all database usage in Atom (`noDB` mode).
+     *
+     * When set to true (or when `stateless.microservice.on` is true), Atom operates in 100%
+     * database-free stateless mode: no database connection is opened, SQL migrations are skipped,
+     * and user/connection/system events are written to standard `T4LOG` files instead of DB tables.
+     *
+     * Defaults to false.
+     *
+     * @var bool
+     */
+    'noDB' => (bool) env('APP_NO_DB', false),
+
+    /**
      * Whether to use get_browser() for browser detection.
      * If get_browser is disabled in php.ini return null
      *
@@ -241,15 +254,27 @@ return [
 
     'shrink' => [
         /**
-         * Whether to enable css/js minfy.
+         * Whether to enable minified CSS/JS asset path resolution (`storage/assets`).
          *
-         * When set to true, the application will use css/js minfy.
+         * When set to true, the application resolves CSS/JS paths to minified assets.
          *
          * Defaults to true.
          *
          * @var bool
          */
-        'on' => env('APP_SHRINK', true),
+        'on' => (bool) env('APP_SHRINK', true),
+
+        /**
+         * Automatically scan and minify CSS and JS source files in the Atom kernel on startup.
+         *
+         * Disabled by default to avoid per-request filesystem scanning and CPU overhead;
+         * enable explicitly only when automatic runtime minification is desired, or use `php atom.php minify`.
+         *
+         * Defaults to false.
+         *
+         * @var bool
+         */
+        'autoMinify' => (bool) env('APP_SHRINK_AUTO_MINIFY', false),
         /**
          * if true all js and css files will be merged into one file
          * more speed one file one transfer
@@ -374,6 +399,53 @@ return [
 
     'actionEventSaving' => [
         'on' => env('APP_ACTION_EVENT_SAVING', true),
+    ],
+
+    /**
+     * Automatic SQL migration execution settings during Atom startup.
+     *
+     * Disabled by default. When enabled (and Atom is not in `noDB` or `microservice` mode),
+     * pending SQL migrations from `Atom/DataBase/migrations`, enabled modules, and `/migrations`
+     * are executed automatically.
+     *
+     * @var array
+     */
+    'autoMigrate' => [
+        /**
+         * Master switch for automatic SQL migrations on kernel boot.
+         *
+         * Defaults to false.
+         *
+         * @var bool
+         */
+        'on' => (bool) env('APP_AUTO_MIGRATE', false),
+
+        /**
+         * Automatically migrate Atom core SQL files (`Atom/DataBase/migrations`).
+         *
+         * Defaults to true (when `autoMigrate.on` is enabled).
+         *
+         * @var bool
+         */
+        'core' => (bool) env('APP_AUTO_MIGRATE_CORE', true),
+
+        /**
+         * Automatically migrate enabled Atom module SQL files (`Atom/Modules/<Module>/migration`).
+         *
+         * Defaults to true (when `autoMigrate.on` is enabled).
+         *
+         * @var bool
+         */
+        'modules' => (bool) env('APP_AUTO_MIGRATE_MODULES', true),
+
+        /**
+         * Automatically migrate application SQL/PHP files (`/migrations`).
+         *
+         * Defaults to true (when `autoMigrate.on` is enabled).
+         *
+         * @var bool
+         */
+        'app' => (bool) env('APP_AUTO_MIGRATE_APP', true),
     ],
 
     /**
@@ -650,11 +722,23 @@ return [
         ],
 
         /**
-         * Microservice communication and health-check settings.
+         * Microservice communication, health-check, and DB-free stateless mode settings.
+         *
+         * When `on` is true, Atom runs in dedicated stateless microservice mode: database usage
+         * is completely disabled and connection/event/auth logs are routed to standard log files.
          *
          * @var array
          */
         'microservice' => [
+            /**
+             * Enable dedicated stateless microservice mode (disables all database connections and queries).
+             *
+             * Defaults to false.
+             *
+             * @var bool
+             */
+            'on' => (bool) env('APP_MICROSERVICE', false),
+
             /**
              * Logical service name in distributed tracing and service mesh.
              *
@@ -697,5 +781,40 @@ return [
              */
             'correlationHeader' => env('SERVICE_CORRELATION_HEADER', 'X-Correlation-ID'),
         ],
+    ],
+
+    /**
+     * HTML view `{{dot.key}}` template data interpolation settings.
+     *
+     * @var array<string, mixed>
+     */
+    'templateData' => [
+        /**
+         * Automatically replace `{{namespace.key}}` placeholders in rendered HTML views.
+         *
+         * @var bool
+         */
+        'on' => (bool) env('APP_TEMPLATE_DATA_ON', true),
+
+        /**
+         * Escape interpolated string values with UTF-8 `htmlspecialchars` by default (XSS protection).
+         *
+         * @var bool
+         */
+        'escapeHtml' => (bool) env('APP_TEMPLATE_DATA_ESCAPE', true),
+    ],
+
+    /**
+     * Quick feature switches mirrored for cluster & MCP server awareness at the app level.
+     *
+     * @var array<string, mixed>
+     */
+    'mcpServer' => [
+        /**
+         * Enable the built-in Model Context Protocol (MCP) server (`config/mcp.php`).
+         *
+         * @var bool
+         */
+        'on' => (bool) env('MCP_SERVER_ON', false),
     ],
 ];

@@ -48,7 +48,15 @@ class EnvironmentVariables extends LoadEnvironmentVariables
      */
     protected static function ensureRequiredEnvironmentVariables(): void
     {
+        $skipDatabase = self::getEnvironmentVariable('APP_NO_DB', false) === true
+            || self::getEnvironmentVariable('DB_NO_DB', false) === true
+            || self::getEnvironmentVariable('APP_MICROSERVICE', false) === true;
+
         foreach (static::$environmentEnsuredKeys as $envKey => $envKeys) {
+            if ($envKey === 'database' && $skipDatabase) {
+                continue;
+            }
+
             foreach ($envKeys as $envKeyVariable) {
                 if (!isset($_ENV[$envKeyVariable])) {
                     throw new RuntimeException(

@@ -35,6 +35,15 @@ class Model
     public const string RULE_BOOL = 'bool';
     public const string RULE_URL = 'url';
     public const string RULE_REGEX = 'regex';
+    public const string RULE_CALLBACK = 'callback';
+    public const string RULE_IN = 'in';
+    public const string RULE_IP = 'ip';
+    public const string RULE_UUID = 'uuid';
+    public const string RULE_ULID = 'ulid';
+    public const string RULE_JSON = 'json';
+    public const string RULE_MAC = 'mac';
+    public const string RULE_HEX_COLOR = 'hex_color';
+    public const string RULE_SLUG = 'slug';
 
     /** @var array<string, list<string>> */
     public array $errors = [];
@@ -110,10 +119,23 @@ class Model
         $this->errors = [];
 
         foreach ($this->rules() as $attribute => $rules) {
-            $value = property_exists($this, $attribute) ? ($this->{$attribute} ?? null) : null;
+            $value = property_exists($this, $attribute)
+                ? ($this->{$attribute} ?? null)
+                : ($this->dynamicAttributes[$attribute] ?? null);
 
             foreach ($rules as $rule) {
+                if (\is_callable($rule) && !is_string($rule) && !is_array($rule)) {
+                    $this->runCustomValidator($attribute, $value, $rule);
+                    continue;
+                }
+
                 $ruleName = is_string($rule) ? $rule : (string) ($rule[0] ?? '');
+
+                if ($ruleName === self::RULE_CALLBACK && is_array($rule) && isset($rule['callback']) && \is_callable($rule['callback'])) {
+                    $customMsg = isset($rule['message']) ? (string) $rule['message'] : null;
+                    $this->runCustomValidator($attribute, $value, $rule['callback'], $customMsg);
+                    continue;
+                }
 
                 if ($ruleName === self::RULE_REQUIRED && ($value === null || $value === '' || $value === [])) {
                     $this->addErrorByRule($attribute, self::RULE_REQUIRED);
@@ -125,7 +147,9 @@ class Model
                     continue;
                 }
 
-                $stringVal = is_string($value) ? $value : (string) $value;
+                $stringVal = is_string($value)
+                    ? $value
+                    : (\is_scalar($value) || $value instanceof \Stringable ? (string) $value : '');
 
                 if ($ruleName === self::RULE_EMAIL && filter_var($stringVal, \FILTER_VALIDATE_EMAIL) === false) {
                     $this->addErrorByRule($attribute, self::RULE_EMAIL);
@@ -133,6 +157,38 @@ class Model
 
                 if ($ruleName === self::RULE_URL && filter_var($stringVal, \FILTER_VALIDATE_URL) === false) {
                     $this->addErrorByRule($attribute, self::RULE_URL);
+                }
+
+                if ($ruleName === self::RULE_IP && filter_var($stringVal, \FILTER_VALIDATE_IP) === false) {
+                    $this->addErrorByRule($attribute, self::RULE_IP);
+                }
+
+                if ($ruleName === self::RULE_MAC && filter_var($stringVal, \FILTER_VALIDATE_MAC) === false) {
+                    $this->addErrorByRule($attribute, self::RULE_MAC);
+                }
+
+                if ($ruleName === self::RULE_UUID && preg_match('/^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$/', $stringVal) !== 1) {
+                    $this->addErrorByRule($attribute, self::RULE_UUID);
+                }
+
+                if ($ruleName === self::RULE_ULID && preg_match('/^[0-7][0-9A-HJKMNP-TV-Z]{25}$/i', $stringVal) !== 1) {
+                    $this->addErrorByRule($attribute, self::RULE_ULID);
+                }
+
+                if ($ruleName === self::RULE_JSON && (!is_string($value) || !\json_validate($value))) {
+                    $this->addErrorByRule($attribute, self::RULE_JSON);
+                }
+
+                if ($ruleName === self::RULE_HEX_COLOR && preg_match('/^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})$/', $stringVal) !== 1) {
+                    $this->addErrorByRule($attribute, self::RULE_HEX_COLOR);
+                }
+
+                if ($ruleName === self::RULE_SLUG && preg_match('/^[a-z0-9]+(?:-[a-z0-9]+)*$/', $stringVal) !== 1) {
+                    $this->addErrorByRule($attribute, self::RULE_SLUG);
+                }
+
+                if ($ruleName === self::RULE_IN && is_array($rule) && isset($rule['values']) && is_array($rule['values']) && !in_array($value, $rule['values'], true)) {
+                    $this->addErrorByRule($attribute, self::RULE_IN);
                 }
 
                 if ($ruleName === self::RULE_INT && filter_var($value, \FILTER_VALIDATE_INT) === false) {
@@ -217,7 +273,50 @@ class Model
             self::RULE_BOOL => 'This field must be a boolean value',
             self::RULE_URL => 'This field must be a valid URL',
             self::RULE_REGEX => 'This field has an invalid format',
+            self::RULE_CALLBACK => 'This field failed custom validation',
+            self::RULE_IN => 'Selected value is not allowed',
+            self::RULE_IP => 'This field must be a valid IP address',
+            self::RULE_UUID => 'This field must be a valid UUID',
+            self::RULE_ULID => 'This field must be a valid ULID',
+            self::RULE_JSON => 'This field must be valid JSON',
+            self::RULE_MAC => 'This field must be a valid MAC address',
+            self::RULE_HEX_COLOR => 'This field must be a valid hex color',
+            self::RULE_SLUG => 'This field must be a valid lowercase URL slug',
         ];
+    }
+
+    /**
+     * Validates a single attribute on-demand with a custom callable (`fn(mixed $value, static $model): bool|string`).
+     */
+    public function validateWith(string $attribute, callable $validator, ?string $message = null): bool
+    {
+        $value = property_exists($this, $attribute)
+            ? ($this->{$attribute} ?? null)
+            : ($this->dynamicAttributes[$attribute] ?? null);
+
+        return $this->runCustomValidator($attribute, $value, $validator, $message);
+    }
+
+    private function runCustomValidator(string $attribute, mixed $value, callable $validator, ?string $fallbackMessage = null): bool
+    {
+        $outcome = $validator($value, $this);
+
+        if ($outcome === true || $outcome === null) {
+            return true;
+        }
+
+        if (is_string($outcome) && $outcome !== '') {
+            $this->addError($attribute, $outcome);
+            return false;
+        }
+
+        if ($fallbackMessage !== null && $fallbackMessage !== '') {
+            $this->addError($attribute, $fallbackMessage);
+            return false;
+        }
+
+        $this->addErrorByRule($attribute, self::RULE_CALLBACK);
+        return false;
     }
 
     public function errorMessage(string $rule): string

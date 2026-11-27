@@ -80,7 +80,8 @@
 ## 6. Maksymalna Wydajność Silnika (Runtime, ZTS, OPcache & JIT)
 
 - **Gotowość na środowiska wielowątkowe (ZTS):** PHP 8.6 zredukowało narzut Zend Thread Safety (ZTS) o ~50%. Pisz kod w 100% bezpieczny wątkowo i bezstanowy między żądaniami (unikaj mutowalnego stanu globalnego i statycznych cache'y rosnących bez limitu), aby maksymalnie wykorzystać workery **FrankenPHP**, Apache MPM Event czy wielowątkowe środowiska Windows.
-- **Wewnętrzne wywołania i root namespace:** W krytycznych ścieżkach wydajnościowych importuj funkcje i klasy przez `use function` / `use` lub poprzedzaj wywołania natywne znakiem `\`, aby kompilator mógł emitować bezpośrednie instrukcje OPcode (np. dla `strlen`, `count`, `clamp`, `in_array`, `is_int`).
+- **Wewnętrzne wywołania i root namespace:** W krytycznych ścieżkach wydajnościowych importuj funkcje i klasy przez `use function` / `use` lub poprzedzaj wywołania natywne znakiem `\`,
+- **Przedrostek `\` przed natywnymi funkcjami PHP (root namespace):** W plikach z przestrzenią nazw (`namespace`) zawsze poprzedzaj wywołania natywnych funkcji PHP znakiem `\` (np. `\strlen()`, `\count()`, `\clamp()`, `\in_array()`, `\is_int()`, `\implode()`, `\realpath()`), o ile dana funkcja to wspiera (nie stosuj `\` przed konstrukcjami językowymi takimi jak `isset`, `empty`, `unset`, `echo`, `print`, `require`, `require_once`, `include`, `include_once`, `clone`, `list`). Pozwala to kompilatorowi emitować bezpośrednie instrukcje OPcode bez narzutu przeszukiwania przestrzeni nazw.
 - **Struktury danych i alokacje:**
   - Zwracaj `Generator` (`yield`) przy przetwarzaniu dużych zbiorów danych i strumieni.
   - Używaj packed arrays (list z ciągłymi kluczami całkowitymi od `0`) — zajmują znacznie mniej pamięci w Zend Engine niż tablice asocjacyjne.
@@ -168,6 +169,7 @@ Cały kod projektu (zarówno rdzeń, jak i warstwa aplikacyjna / TSR) **musi by�
 - **Testy frameworka Atom (`tests/Atom`):** Wszystkie testy dla przestrzeni nazw `Atom\` (rdzeń i komponenty frameworka Atom) **muszą być tworzone wyłącznie w katalogu `tests/Atom`** (z przestrzenią nazw `Tests\Atom\...`, odzwierciedlającą strukturę podkatalogów z `Atom/`).
 - Nie umieszczaj testów komponentów Atom bezpośrednio w głównym katalogu `tests/` ani w `tests/App/`.
 - **Pliki tymczasowe i wygenerowane (`runtime/`):** Wszystkie pliki tymczasowe aplikacji, uploady robocze, lokalne pliki wygenerowane przez Atom, logi robocze oraz tymczasowe pliki testowe/pomocnicze **muszą być tworzone wyłącznie w katalogu `runtime/`** (np. `runtime/temp`, `runtime/tempUpload`, `runtime/cache`, `runtime/log`). Nie zaśmiecaj głównego katalogu projektu, `storage/` ani systemowego `/tmp` luźnymi plikami tymczasowymi i zawsze dbaj o ich deterministyczne sprzątanie po zakończeniu operacji.
+- **Nazewnictwo plików SQL w modułach:** Nazwy plików `.sql` (np. migracji) w modułach muszą zaczynać się od przedrostka utworzonego z inicjałów nazwy modułu (małymi literami) bezpośrednio przed numerem sekwencyjnym — np. dla modułu `ErrorDebugger` zamiast `0001_create_error_debugger_snapshots.down.sql` należy stosować `ed0001_create_error_debugger_snapshots.down.sql` (analogicznie dla `.up.sql` i pozostałych modułów).
 
 
 

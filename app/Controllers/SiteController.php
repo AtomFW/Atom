@@ -12,7 +12,7 @@ use Atom\Controller;
 use Atom\FileSytem\BrowserUploadManager;
 use Atom\HttpFoundation\Request;
 use Atom\HttpFoundation\Response;
-use Atom\Middlewares\AuthMiddleware;
+use Atom\Modules\UserAuth\Middlewares\AuthMiddleware;
 
 final class SiteController extends Controller
 {
@@ -66,7 +66,7 @@ final class SiteController extends Controller
 
     public function logout(Request $request, Response $response): string
     {
-        Atom::$app->account->logout();
+        Atom::$app->account?->logout();
         $response->redirect(Atom::$ROOT_URI);
         return '';
     }

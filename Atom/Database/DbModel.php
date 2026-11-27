@@ -8,6 +8,7 @@ use Atom\Atom;
 use Atom\Filter\TypeCaster;
 use Atom\Model;
 use PDOStatement;
+use RuntimeException;
 use SortDirection;
 
 use function array_keys;
@@ -19,6 +20,14 @@ use function clamp;
  */
 abstract class DbModel extends Model
 {
+    private static function requireDatabase(): Database
+    {
+        if (!isset(Atom::$app) || Atom::$app->db === null || Atom::$app->isNoDbMode()) {
+            throw new RuntimeException('Database operations are disabled in stateless noDB / microservice mode.');
+        }
+
+        return Atom::$app->db;
+    }
     /**
      * Name of the database table for the model.
      */
@@ -49,7 +58,7 @@ abstract class DbModel extends Model
      */
     public function save(): bool
     {
-        $db = Atom::$app->db;
+        $db = self::requireDatabase();
         $tableName = static::tableName();
         $attributes = static::attributes();
         $rawTypes = static::attributesTypes();
@@ -73,12 +82,23 @@ abstract class DbModel extends Model
         $extractedValues = TypeCaster::extractForDatabase($this, $activePropertyMap, $rawTypes);
         $bindValues = $db->bindValuesToProperty($propertyToColumnName, $extractedValues);
 
-        $result = $db->insertInto($tableName)
-            ->values($bindsMap)
-            ->setParameters($bindValues)
-            ->executeQuery();
+        $probe = isset(Atom::$app) ? Atom::$app->probe : null;
+        $dbSpan = $probe !== null
+            ? $probe->startSpan('db.insert:' . $tableName, 'database', __FILE__, __LINE__, ['table' => $tableName, 'model' => static::class])
+            : '';
 
-        $result->free();
+        try {
+            $result = $db->insertInto($tableName)
+                ->values($bindsMap)
+                ->setParameters($bindValues)
+                ->executeQuery();
+
+            $result->free();
+        } finally {
+            if ($probe !== null && $dbSpan !== '') {
+                $probe->endSpan($dbSpan);
+            }
+        }
 
         return true;
     }
@@ -88,7 +108,7 @@ abstract class DbModel extends Model
      */
     public static function prepare(string $sql): PDOStatement
     {
-        return Atom::$app->db->pdo->prepare($sql);
+        return self::requireDatabase()->pdo->prepare($sql);
     }
 
     /**
@@ -98,7 +118,7 @@ abstract class DbModel extends Model
      */
     public static function findOne(array $where): static|false
     {
-        $db = Atom::$app->db;
+        $db = self::requireDatabase();
         $tableName = static::tableName();
         $whereKeys = $db->resolveKeys(array_keys($where));
         $selectList = static::attributes();
@@ -122,11 +142,19 @@ abstract class DbModel extends Model
         $qb = $db->attributesToAutoBindsComparisonsProperty($qb, $whereColumnMap);
         $qb->setParameters($whereParams)->setMaxResults(1);
 
+        $probe = isset(Atom::$app) ? Atom::$app->probe : null;
+        $dbSpan = $probe !== null
+            ? $probe->startSpan('db.findOne:' . $tableName, 'database', __FILE__, __LINE__, ['table' => $tableName, 'model' => static::class])
+            : '';
+
         $result = $qb->executeQuery();
         try {
             $row = $result->fetchAssociative();
         } finally {
             $result->free();
+            if ($probe !== null && $dbSpan !== '') {
+                $probe->endSpan($dbSpan, ['hit' => isset($row) && $row !== false]);
+            }
         }
 
         if ($row === false) {
@@ -162,7 +190,7 @@ abstract class DbModel extends Model
         int $limit = 100,
         int $offset = 0,
     ): array {
-        $db = Atom::$app->db;
+        $db = self::requireDatabase();
         $tableName = static::tableName();
         $selectList = static::attributes();
         $rawTypes = static::attributesTypes();
@@ -196,11 +224,19 @@ abstract class DbModel extends Model
         $qb->setMaxResults(clamp($limit, 1, 10_000))
             ->setFirstResult(clamp($offset, 0, \PHP_INT_MAX));
 
+        $probe = isset(Atom::$app) ? Atom::$app->probe : null;
+        $dbSpan = $probe !== null
+            ? $probe->startSpan('db.findAll:' . $tableName, 'database', __FILE__, __LINE__, ['table' => $tableName, 'model' => static::class, 'limit' => $limit])
+            : '';
+
         $result = $qb->executeQuery();
         try {
             $rows = $result->fetchAllAssociative();
         } finally {
             $result->free();
+            if ($probe !== null && $dbSpan !== '') {
+                $probe->endSpan($dbSpan, ['rows' => isset($rows) ? \count($rows) : 0]);
+            }
         }
 
         $models = [];

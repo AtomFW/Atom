@@ -33,13 +33,38 @@ class ShrinkTest extends TestCase
     ];
     
     private Shrink $shrink;
+    private string $fixturesDir;
 
     protected function setUp(): void
     {
         parent::setUp();
-        
+
+        $this->fixturesDir = dirname(__DIR__, 3) . '/runtime/temp/shrink_test_' . uniqid();
+        if (!is_dir($this->fixturesDir)) {
+            mkdir($this->fixturesDir, 0777, true);
+        }
+
         $this->logger = $this->createMock(T4LOG::class);
         $this->shrink = new Shrink($this->logger, $this->options);
+    }
+
+    protected function tearDown(): void
+    {
+        if (isset($this->fixturesDir) && is_dir($this->fixturesDir)) {
+            $files = new \RecursiveIteratorIterator(
+                new \RecursiveDirectoryIterator($this->fixturesDir, \RecursiveDirectoryIterator::SKIP_DOTS),
+                \RecursiveIteratorIterator::CHILD_FIRST
+            );
+            foreach ($files as $file) {
+                $path = $file->getRealPath();
+                if ($path !== false) {
+                    is_dir($path) ? rmdir($path) : unlink($path);
+                }
+            }
+            rmdir($this->fixturesDir);
+        }
+
+        parent::tearDown();
     }
 
     /**
@@ -47,7 +72,7 @@ class ShrinkTest extends TestCase
      */
     public function testAddCssFileExists(): void
     {
-        $path = __DIR__ . '/Fixtures/test.css';
+        $path = $this->fixturesDir . '/test.css';
         
         // Create a temporary file for testing
         $fileContent = 'body { color: red; }';
@@ -65,7 +90,7 @@ class ShrinkTest extends TestCase
      */
     public function testAddCssFileNotFound(): void
     {
-        $path = __DIR__ . '/Fixtures/nonexistent.css';
+        $path = $this->fixturesDir . '/nonexistent.css';
         
         $this->expectException(FileNotFoundException::class);
         $this->shrink->addCss($path);
@@ -76,7 +101,7 @@ class ShrinkTest extends TestCase
      */
     public function testCssFileExists(): void
     {
-        $path = __DIR__ . '/Fixtures/test.css';
+        $path = $this->fixturesDir . '/test.css';
         $fileContent = 'body { color: red; }';
         file_put_contents($path, $fileContent);
         
@@ -94,7 +119,7 @@ class ShrinkTest extends TestCase
      */
     public function testCssFileNotFound(): void
     {
-        $path = __DIR__ . '/Fixtures/nonexistent.css';
+        $path = $this->fixturesDir . '/nonexistent.css';
         
         $this->expectException(FileNotFoundException::class);
         $this->shrink->css($path);
@@ -105,8 +130,8 @@ class ShrinkTest extends TestCase
      */
     public function testCssWithSaveFileExists(): void
     {
-        $path = __DIR__ . '/Fixtures/test.css';
-        $targetPath = __DIR__ . '/Fixtures/test.min.css';
+        $path = $this->fixturesDir . '/test.css';
+        $targetPath = $this->fixturesDir . '/test.min.css';
         
         $fileContent = 'body { color: red; }';
         file_put_contents($path, $fileContent);
@@ -134,8 +159,8 @@ class ShrinkTest extends TestCase
      */
     public function testCssWithSaveFileNotFound(): void
     {
-        $path = __DIR__ . '/Fixtures/nonexistent.css';
-        $targetPath = __DIR__ . '/Fixtures/test.min.css';
+        $path = $this->fixturesDir . '/nonexistent.css';
+        $targetPath = $this->fixturesDir . '/test.min.css';
         
         $this->expectException(FileNotFoundException::class);
         $this->shrink->cssWithSave($path, $targetPath);
@@ -146,8 +171,8 @@ class ShrinkTest extends TestCase
      */
     public function testCssWithSaveTargetDirNotFound(): void
     {
-        $path = __DIR__ . '/Fixtures/test.css';
-        $targetPath = __DIR__ . '/Fixtures/nonexistent/test.min.css';
+        $path = $this->fixturesDir . '/test.css';
+        $targetPath = $this->fixturesDir . '/nonexistent/test.min.css';
         
         $fileContent = 'body { color: red; }';
         file_put_contents($path, $fileContent);
@@ -164,7 +189,7 @@ class ShrinkTest extends TestCase
      */
     public function testAutoScanCssDir(): void
     {
-        $dirPath = __DIR__ . '/Fixtures';
+        $dirPath = $this->fixturesDir;
         
         $this->expectNotToPerformAssertions();
         $this->shrink->autoScanCssDir($dirPath);
@@ -178,7 +203,7 @@ class ShrinkTest extends TestCase
      */
     public function testAddJsFileExists(): void
     {
-        $path = __DIR__ . '/Fixtures/test.js';
+        $path = $this->fixturesDir . '/test.js';
         
         // Create a temporary file for testing
         $fileContent = 'console.log("Hello world");';
@@ -196,7 +221,7 @@ class ShrinkTest extends TestCase
      */
     public function testAddJsFileNotFound(): void
     {
-        $path = __DIR__ . '/Fixtures/nonexistent.js';
+        $path = $this->fixturesDir . '/nonexistent.js';
         
         $this->expectException(FileNotFoundException::class);
         $this->shrink->addJs($path);
@@ -207,7 +232,7 @@ class ShrinkTest extends TestCase
      */
     public function testJsFileExists(): void
     {
-        $path = __DIR__ . '/Fixtures/test.js';
+        $path = $this->fixturesDir . '/test.js';
         $fileContent = 'console.log("Hello world");';
         file_put_contents($path, $fileContent);
         
@@ -225,7 +250,7 @@ class ShrinkTest extends TestCase
      */
     public function testJsFileNotFound(): void
     {
-        $path = __DIR__ . '/Fixtures/nonexistent.js';
+        $path = $this->fixturesDir . '/nonexistent.js';
         
         $this->expectException(FileNotFoundException::class);
         $this->shrink->js($path);
@@ -236,8 +261,8 @@ class ShrinkTest extends TestCase
      */
     public function testJsWithSaveFileExists(): void
     {
-        $path = __DIR__ . '/Fixtures/test.js';
-        $targetPath = __DIR__ . '/Fixtures/test.min.js';
+        $path = $this->fixturesDir . '/test.js';
+        $targetPath = $this->fixturesDir . '/test.min.js';
         
         $fileContent = 'console.log("Hello world");';
         file_put_contents($path, $fileContent);
@@ -265,8 +290,8 @@ class ShrinkTest extends TestCase
      */
     public function testJsWithSaveFileNotFound(): void
     {
-        $path = __DIR__ . '/Fixtures/nonexistent.js';
-        $targetPath = __DIR__ . '/Fixtures/test.min.js';
+        $path = $this->fixturesDir . '/nonexistent.js';
+        $targetPath = $this->fixturesDir . '/test.min.js';
         
         $this->expectException(FileNotFoundException::class);
         $this->shrink->jsWithSave($path, $targetPath);
@@ -277,8 +302,8 @@ class ShrinkTest extends TestCase
      */
     public function testJsWithSaveTargetDirNotFound(): void
     {
-        $path = __DIR__ . '/Fixtures/test.js';
-        $targetPath = __DIR__ . '/Fixtures/nonexistent/test.min.js';
+        $path = $this->fixturesDir . '/test.js';
+        $targetPath = $this->fixturesDir . '/nonexistent/test.min.js';
         
         $fileContent = 'console.log("Hello world");';
         file_put_contents($path, $fileContent);
@@ -295,7 +320,7 @@ class ShrinkTest extends TestCase
      */
     public function testAutoScanJsDir(): void
     {
-        $dirPath = __DIR__ . '/Fixtures';
+        $dirPath = $this->fixturesDir;
         $this->expectNotToPerformAssertions();
         $this->shrink->autoScanJsDir($dirPath);
         
@@ -318,7 +343,7 @@ class ShrinkTest extends TestCase
      */
     public function testDestruct(): void
     {
-        $path = __DIR__ . '/Fixtures/test.js';
+        $path = $this->fixturesDir . '/test.js';
         $fileContent = 'console.log("Hello world");';
         file_put_contents($path, $fileContent);
         
